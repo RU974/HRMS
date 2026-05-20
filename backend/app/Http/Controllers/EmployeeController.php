@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Designation;
 use App\Models\Employee;
 use App\Models\User;
+use App\Models\Shift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -71,11 +73,23 @@ class EmployeeController extends Controller
             'first_name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
             'email' => 'required|string|email|max:255|unique:employees',
+            'username' => 'nullable|string|max:255|unique:users,username',
             'phone' => 'nullable|string|max:20',
+            'cnic' => 'nullable|string|max:25',
+            'date_of_birth' => 'nullable|date',
+            'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
+            'address' => 'nullable|string|max:1000',
             'designation' => 'nullable|string|max:255',
             'designation_id' => 'nullable|exists:designations,id',
+            'employee_number' => 'nullable|string|max:50|unique:employees,employee_number',
             'position' => 'nullable|string|max:255',
+            'joining_date' => 'nullable|date',
+            'employment_type' => 'nullable|string|max:100',
+            'shift_id' => 'nullable|exists:shifts,id',
+            'manager_id' => 'nullable|exists:employees,id',
             'salary' => 'required|numeric|min:0',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'allowances' => 'nullable|numeric|min:0',
             'department_id' => 'required|exists:departments,id',
             'status' => 'nullable|in:active,inactive',
             'create_user' => 'nullable|boolean',
@@ -96,6 +110,7 @@ class EmployeeController extends Controller
                     $linkedUser = User::create([
                         'name' => $name,
                         'email' => $validated['email'],
+                        'username' => $validated['username'] ?? explode('@', $validated['email'])[0],
                         'password' => Hash::make($validated['password'] ?? Str::password(12)),
                         'role' => $validated['role'] ?? User::ROLE_EMPLOYEE,
                     ]);
@@ -124,10 +139,24 @@ class EmployeeController extends Controller
                 'name' => $name,
                 'email' => $validated['email'],
                 'phone' => $validated['phone'] ?? null,
+                'first_name' => $validated['first_name'] ?? null,
+                'last_name' => $validated['last_name'] ?? null,
+                'cnic' => $validated['cnic'] ?? null,
+                'date_of_birth' => $validated['date_of_birth'] ?? null,
+                'gender' => $validated['gender'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'employee_number' => $validated['employee_number'] ?? null,
+                'joining_date' => $validated['joining_date'] ?? null,
+                'employment_type' => $validated['employment_type'] ?? null,
+                'shift_id' => $validated['shift_id'] ?? null,
+                'manager_id' => $validated['manager_id'] ?? null,
                 'department_id' => $validated['department_id'],
                 'designation_id' => $validated['designation_id'] ?? null,
                 'designation' => $designationLabel,
-                'salary' => $validated['salary'],
+                'basic_salary' => $validated['basic_salary'] ?? $validated['salary'],
+                'allowances' => $validated['allowances'] ?? 0,
+                'salary' => ($validated['basic_salary'] ?? $validated['salary']) + ($validated['allowances'] ?? 0),
+                'profile_image' => $request->hasFile('profile_image') ? Storage::disk('public')->putFile('employee-profiles', $request->file('profile_image')) : null,
                 'status' => $validated['status'] ?? 'active',
             ]);
         });
@@ -145,11 +174,23 @@ class EmployeeController extends Controller
             'first_name' => 'sometimes|string|max:255',
             'last_name' => 'sometimes|string|max:255',
             'email' => 'sometimes|string|email|max:255|unique:employees,email,' . $id,
+            'username' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($request->user()?->id)],
             'phone' => 'nullable|string|max:20',
+            'cnic' => 'nullable|string|max:25',
+            'date_of_birth' => 'nullable|date',
+            'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
+            'address' => 'nullable|string|max:1000',
             'designation' => 'sometimes|string|max:255',
             'designation_id' => 'sometimes|nullable|exists:designations,id',
+            'employee_number' => ['sometimes', 'nullable', 'string', 'max:50', Rule::unique('employees', 'employee_number')->ignore($id)],
             'position' => 'sometimes|string|max:255',
+            'joining_date' => 'nullable|date',
+            'employment_type' => 'nullable|string|max:100',
+            'shift_id' => 'nullable|exists:shifts,id',
+            'manager_id' => 'nullable|exists:employees,id',
             'salary' => 'sometimes|numeric|min:0',
+            'basic_salary' => 'sometimes|numeric|min:0',
+            'allowances' => 'sometimes|numeric|min:0',
             'department_id' => 'sometimes|exists:departments,id',
             'status' => 'sometimes|in:active,inactive',
         ]);
@@ -161,8 +202,16 @@ class EmployeeController extends Controller
         if (!isset($updatePayload['designation']) && isset($updatePayload['position'])) {
             $updatePayload['designation'] = $updatePayload['position'];
         }
+        if (isset($updatePayload['basic_salary']) || isset($updatePayload['allowances'])) {
+            $basic = $updatePayload['basic_salary'] ?? $employee->basic_salary ?? 0;
+            $allowances = $updatePayload['allowances'] ?? $employee->allowances ?? 0;
+            $updatePayload['salary'] = $basic + $allowances;
+        }
         if (array_key_exists('designation_id', $updatePayload) && $updatePayload['designation_id']) {
             $updatePayload['designation'] = Designation::find($updatePayload['designation_id'])?->name ?? ($updatePayload['designation'] ?? $employee->designation);
+        }
+        if ($request->hasFile('profile_image')) {
+            $updatePayload['profile_image'] = Storage::disk('public')->putFile('employee-profiles', $request->file('profile_image'));
         }
 
         unset($updatePayload['first_name'], $updatePayload['last_name'], $updatePayload['position']);

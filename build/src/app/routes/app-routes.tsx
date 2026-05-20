@@ -3,6 +3,7 @@ import { AppLayout } from "@/app/layouts/app-layout";
 import { AuthGuard } from "@/app/guards/auth-guard";
 import { DashboardPage } from "@/modules/dashboard/dashboard-page";
 import { EmployeesPage } from "@/modules/employees";
+import { EmployeeFormPage } from "@/modules/employees/employee-form-page";
 import { AttendancePage } from "@/modules/attendance";
 import { PayrollPage } from "@/modules/payroll";
 import { RecruitmentPage } from "@/modules/recruitment";
@@ -27,6 +28,7 @@ export const appRouter = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "employees", element: <EmployeesPage /> },
+      { path: "employees/new", element: <EmployeeFormPage /> },
       { path: "attendance", element: <AttendancePage /> },
       { path: "payroll", element: <PayrollPage /> },
       { path: "recruitment", element: <RecruitmentPage /> },

@@ -10,6 +10,20 @@ export interface Employee {
   department?: {
     name: string;
   } | null;
+  employee_number?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  cnic?: string | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  joining_date?: string | null;
+  employment_type?: string | null;
+  shift?: { id: number; name: string } | null;
+  manager?: { id: number; name: string } | null;
+  basic_salary?: number | null;
+  allowances?: number | null;
+  profile_image?: string | null;
 }
 
 interface PaginatedResponse<T> {
@@ -19,6 +33,40 @@ interface PaginatedResponse<T> {
   total: number;
 }
 
+export interface Department {
+  id: number;
+  name: string;
+}
+
+export interface Designation {
+  id: number;
+  name: string;
+}
+
+export interface Shift {
+  id: number;
+  name: string;
+}
+
 export function getEmployees() {
   return apiClient<PaginatedResponse<Employee>>("/employees?per_page=10");
+}
+
+export function getDepartments() {
+  return apiClient<PaginatedResponse<Department>>("/departments?per_page=100");
+}
+
+export function getDesignations() {
+  return apiClient<PaginatedResponse<Designation>>("/designations?per_page=100");
+}
+
+export function getShifts() {
+  return apiClient<PaginatedResponse<Shift>>("/shifts?per_page=100");
+}
+
+export function createEmployee(formData: FormData) {
+  return apiClient<Employee>("/employees", {
+    method: "POST",
+    body: formData,
+  });
 }

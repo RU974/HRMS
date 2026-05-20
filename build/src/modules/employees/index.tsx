@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
+import { Link } from "react-router-dom";
 import { getEmployees } from "@/services/employee-service";
 
 export function EmployeesPage() {
@@ -19,7 +20,9 @@ export function EmployeesPage() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <FormInput placeholder="Search employees..." className="max-w-sm" />
           <Button variant="outline">Export</Button>
-          <Button className="ml-auto">Add Employee</Button>
+          <Link to="/employees/new" className="ml-auto inline-flex">
+            <Button>Add Employee</Button>
+          </Link>
         </div>
         {error && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">Unable to load employees. Confirm your logged-in user has an HR manager/admin role.</p>}
         <div className="overflow-x-auto">
