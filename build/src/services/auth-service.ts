@@ -1,0 +1,36 @@
+import { apiClient } from "./api-client";
+import type { AuthUser } from "@/store/auth-store";
+
+interface AuthPayload {
+  user: AuthUser;
+  token: string;
+}
+
+export function login(email: string, password: string) {
+  return apiClient<AuthPayload>("/auth/login", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ email, password })
+  });
+}
+
+export function register(name: string, email: string, password: string, passwordConfirmation: string) {
+  return apiClient<AuthPayload>("/auth/register", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+      password_confirmation: passwordConfirmation
+    })
+  });
+}
+
+export function me() {
+  return apiClient<AuthUser>("/auth/me");
+}
+
+export function logoutRequest() {
+  return apiClient<null>("/auth/logout", { method: "POST" });
+}

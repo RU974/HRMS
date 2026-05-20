@@ -1,0 +1,42 @@
+import { Menu } from "lucide-react";
+import { useLayoutStore } from "@/store/layout-store";
+import { ThemeSwitcher } from "./theme-switcher";
+import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
+import { FormInput } from "@/components/forms/form-input";
+import { Button } from "@/components/ui/button";
+import { logoutRequest } from "@/services/auth-service";
+import { useAuthStore } from "@/store/auth-store";
+
+export function TopNavbar() {
+  const toggle = useLayoutStore((s) => s.toggleSidebar);
+  const { user, logout } = useAuthStore();
+
+  async function handleLogout() {
+    await logoutRequest().catch(() => null);
+    logout();
+    window.location.href = "/auth/login";
+  }
+
+  return (
+    <header className="sticky top-0 z-30 glass border-b border-[var(--border)] px-4 py-3 md:px-6">
+      <div className="flex items-center gap-3">
+        <button onClick={toggle} className="rounded-lg p-2 hover:bg-[var(--border)]/40" aria-label="Toggle sidebar">
+          <Menu className="h-5 w-5" />
+        </button>
+        <div className="hidden min-w-0 md:block">
+          <div className="text-sm font-semibold">Enterprise HRMS</div>
+          <div className="text-xs text-[var(--muted)]">Karachi HQ - Global workforce</div>
+        </div>
+        <FormInput placeholder="Search employees, payroll, reports..." className="ml-auto hidden max-w-md md:block" />
+        <div className="flex items-center gap-2">
+          <NotificationDropdown />
+          <ThemeSwitcher />
+          <Button variant="ghost" onClick={handleLogout}>Logout</Button>
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--primary)] text-xs font-bold text-white">{user?.name?.slice(0, 2).toUpperCase() ?? "HR"}</div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+

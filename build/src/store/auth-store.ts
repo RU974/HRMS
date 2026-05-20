@@ -1,0 +1,42 @@
+import { create } from "zustand";
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role?: string;
+}
+
+interface AuthState {
+  isAuthenticated: boolean;
+  token: string | null;
+  user: AuthUser | null;
+  setSession: (token: string, user: AuthUser) => void;
+  setUser: (user: AuthUser) => void;
+  logout: () => void;
+}
+
+const storedToken = localStorage.getItem("hrms_token");
+const storedUser = localStorage.getItem("hrms_user");
+
+export const useAuthStore = create<AuthState>((set) => ({
+  isAuthenticated: Boolean(storedToken),
+  token: storedToken,
+  user: storedUser ? JSON.parse(storedUser) as AuthUser : null,
+  setSession: (token, user) => {
+    localStorage.setItem("hrms_token", token);
+    localStorage.setItem("hrms_user", JSON.stringify(user));
+    set({ isAuthenticated: true, token, user });
+  },
+  setUser: (user) => {
+    localStorage.setItem("hrms_user", JSON.stringify(user));
+    set({ user, isAuthenticated: true });
+  },
+  logout: () => {
+    localStorage.removeItem("hrms_token");
+    localStorage.removeItem("hrms_user");
+    set({ isAuthenticated: false, token: null, user: null });
+  }
+}));
+
+
