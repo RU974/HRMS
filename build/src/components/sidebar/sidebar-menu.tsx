@@ -23,11 +23,11 @@ const menu: readonly MenuGroup[] = [
   { title: "Performance", items: [["Reviews", "/performance"], ["KPIs", "/performance"], ["Goals", "/performance"], ["Appraisals", "/performance"]] },
   { title: "Communication", items: [["Announcements", "/announcements"], ["Notifications", "/announcements"], ["Chat", "/announcements"]] },
   { title: "Reports", items: [["Attendance Reports", "/reports"], ["Employee Reports", "/reports"], ["Payroll Reports", "/reports"], ["Analytics", "/reports"]] },
-  { title: "Settings", items: [["User Management", "/settings"], ["Roles & Permissions", "/settings"], ["Company Settings", "/settings"], ["Branches", "/settings"], ["Themes", "/settings"], ["System Logs", "/settings"]] }
+  { title: "Settings", items: [["User Management", "/settings?tab=users"], ["Roles & Permissions", "/settings?tab=roles"], ["Company Settings", "/settings?tab=company"], ["Branches", "/settings?tab=branches"], ["Themes", "/settings?tab=theme"], ["System Logs", "/settings?tab=logs"]] }
 ] as const;
 
 export function SidebarMenu() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(menu.map((group) => [group.title, group.items.length > 1])) as Record<string, boolean>
   );
@@ -67,7 +67,7 @@ export function SidebarMenu() {
                     to={path}
                     className={cn(
                       "block rounded-lg px-3 py-2 text-sm capitalize transition",
-                      pathname === path ? "bg-[var(--primary)] text-white shadow-sm" : "text-[var(--text)] hover:bg-[var(--border)]/35"
+                      `${pathname}${search}` === path || pathname === path ? "bg-[var(--primary)] text-white shadow-sm" : "text-[var(--text)] hover:bg-[var(--border)]/35"
                     )}
                   >
                     {label}
@@ -85,5 +85,3 @@ export function SidebarMenu() {
     </nav>
   );
 }
-
-

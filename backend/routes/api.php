@@ -18,6 +18,14 @@ use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\UserRoleController;
+use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\CompanySettingsController;
+use App\Http\Controllers\BranchController;
+use App\Http\Controllers\ThemeSettingsController;
+use App\Http\Controllers\SystemLogController;
+use App\Http\Controllers\AnnouncementController;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,11 +56,34 @@ $registerRoutes = function (): void {
 
         // Dashboard + reports
         Route::get('dashboard/summary', [DashboardController::class, 'summary']);
+        Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
         Route::prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
             Route::get('/attendance', [ReportController::class, 'attendance']);
             Route::get('/leave', [ReportController::class, 'leave']);
             Route::get('/payroll', [ReportController::class, 'payroll']);
+        });
+        Route::apiResource('reports', ReportController::class);
+
+        Route::middleware('permission:settings:manage_roles')->group(function () {
+            Route::get('permissions', [RolePermissionController::class, 'permissions']);
+            Route::get('roles', [RolePermissionController::class, 'roles']);
+            Route::post('roles', [RolePermissionController::class, 'storeRole']);
+            Route::put('roles/{id}', [RolePermissionController::class, 'updateRole']);
+            Route::delete('roles/{id}', [RolePermissionController::class, 'deleteRole']);
+            Route::get('users/{id}/roles', [UserRoleController::class, 'getUserRoles']);
+            Route::put('users/{id}/roles', [UserRoleController::class, 'updateUserRoles']);
+        });
+
+        Route::middleware('permission:settings:general')->group(function () {
+            Route::apiResource('settings/users', UserManagementController::class);
+            Route::apiResource('settings/companies', CompanySettingsController::class);
+            Route::apiResource('settings/branches', BranchController::class);
+            Route::apiResource('settings/themes', ThemeSettingsController::class);
+            Route::get('settings/system-logs', [SystemLogController::class, 'index']);
+            Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
+            Route::delete('settings/system-logs/{id}', [SystemLogController::class, 'destroy']);
+            Route::delete('settings/system-logs', [SystemLogController::class, 'clear']);
         });
 
         // Employee routes
@@ -111,6 +142,9 @@ $registerRoutes = function (): void {
             Route::apiResource('candidates', CandidateController::class);
             Route::apiResource('interviews', InterviewController::class);
         });
+
+        // Communication routes
+        Route::apiResource('announcements', AnnouncementController::class);
     });
 };
 

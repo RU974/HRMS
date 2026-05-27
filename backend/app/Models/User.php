@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -31,6 +32,8 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
+        'company_id',
+        'branch_id',
         'name',
         'email',
         'username',
@@ -80,6 +83,16 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'company_id' => 'string',
+            'branch_id' => 'string',
         ];
+    }
+
+    public function rolesRelation(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'user_roles')
+            ->using(UserRole::class)
+            ->withPivot('scope')
+            ->withTimestamps();
     }
 }

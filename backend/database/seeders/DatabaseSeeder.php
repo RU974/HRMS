@@ -30,5 +30,10 @@ class DatabaseSeeder extends Seeder
                 'role' => User::ROLE_SUPER_ADMIN,
             ]
         );
+
+        $this->call([
+            PermissionSeeder::class,
+            RoleSeeder::class,
+        ]);
     }
 }
