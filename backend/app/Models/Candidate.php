@@ -20,10 +20,14 @@ class Candidate extends Model
         'status',
         'applied_at',
         'notes',
+        'onboarding_status',
+        'onboarding_start_date',
+        'onboarding_notes',
     ];
 
     protected $casts = [
         'applied_at' => 'date',
+        'onboarding_start_date' => 'date',
     ];
 
     public function jobOpening(): BelongsTo

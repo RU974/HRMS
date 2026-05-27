@@ -15,7 +15,17 @@ use App\Http\Controllers\InterviewController;
 use App\Http\Controllers\JobOpeningController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveTypeController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\PayrollProcessingController;
+use App\Http\Controllers\PayslipController;
+use App\Http\Controllers\BonusController;
+use App\Http\Controllers\DeductionController;
+use App\Http\Controllers\PerformanceAppraisalController;
+use App\Http\Controllers\PerformanceGoalController;
+use App\Http\Controllers\PerformanceKpiController;
+use App\Http\Controllers\PerformanceMetaController;
+use App\Http\Controllers\PerformanceReviewController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\RolePermissionController;
@@ -26,6 +36,8 @@ use App\Http\Controllers\BranchController;
 use App\Http\Controllers\ThemeSettingsController;
 use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ChatMessageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -62,6 +74,7 @@ $registerRoutes = function (): void {
             Route::get('/attendance', [ReportController::class, 'attendance']);
             Route::get('/leave', [ReportController::class, 'leave']);
             Route::get('/payroll', [ReportController::class, 'payroll']);
+            Route::get('/analytics', [ReportController::class, 'analytics']);
         });
         Route::apiResource('reports', ReportController::class);
 
@@ -124,6 +137,12 @@ $registerRoutes = function (): void {
         Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
         Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
         Route::apiResource('payroll', PayrollController::class);
+        Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
+        Route::apiResource('salary-slips', PayslipController::class);
+        Route::apiResource('payroll-processings', PayrollProcessingController::class);
+        Route::apiResource('payslips', PayslipController::class);
+        Route::apiResource('bonuses', BonusController::class);
+        Route::apiResource('deductions', DeductionController::class);
 
         // Leave routes
         Route::apiResource('leaves', LeaveController::class);
@@ -141,10 +160,21 @@ $registerRoutes = function (): void {
             Route::apiResource('job-openings', JobOpeningController::class);
             Route::apiResource('candidates', CandidateController::class);
             Route::apiResource('interviews', InterviewController::class);
+            Route::apiResource('onboarding', OnboardingController::class);
         });
 
         // Communication routes
         Route::apiResource('announcements', AnnouncementController::class);
+        Route::apiResource('notifications', NotificationController::class);
+        Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
+        Route::apiResource('chat-messages', ChatMessageController::class);
+
+        // Performance routes
+        Route::apiResource('performance-reviews', PerformanceReviewController::class);
+        Route::apiResource('performance-kpis', PerformanceKpiController::class);
+        Route::apiResource('performance-goals', PerformanceGoalController::class);
+        Route::apiResource('performance-appraisals', PerformanceAppraisalController::class);
+        Route::get('performance/meta/employees', [PerformanceMetaController::class, 'employees']);
     });
 };
 

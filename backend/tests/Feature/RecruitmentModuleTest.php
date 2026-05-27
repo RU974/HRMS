@@ -45,6 +45,22 @@ class RecruitmentModuleTest extends TestCase
             'result' => 'pending',
         ])->assertCreated();
 
+        $this->putJson("/api/candidates/{$candidateId}", [
+            'stage' => 'hired',
+        ])->assertOk();
+
+        $this->postJson('/api/onboarding', [
+            'candidate_id' => $candidateId,
+            'onboarding_status' => 'in_progress',
+            'onboarding_start_date' => '2026-05-21',
+            'onboarding_notes' => 'Offer accepted and docs pending',
+        ])->assertCreated();
+
+        $this->getJson('/api/onboarding')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.data.0.id', $candidateId);
+
         $this->getJson('/api/recruitment/pipeline-summary')
             ->assertOk()
             ->assertJsonPath('success', true);
@@ -58,5 +74,6 @@ class RecruitmentModuleTest extends TestCase
         $this->getJson('/api/job-openings')->assertForbidden();
         $this->getJson('/api/candidates')->assertForbidden();
         $this->getJson('/api/interviews')->assertForbidden();
+        $this->getJson('/api/onboarding')->assertForbidden();
     }
 }

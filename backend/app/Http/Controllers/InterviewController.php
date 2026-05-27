@@ -10,11 +10,21 @@ class InterviewController extends Controller
     public function index(Request $request)
     {
         $query = Interview::with('candidate')->orderBy('scheduled_at', 'desc');
+
         if ($request->filled('candidate_id')) {
             $query->where('candidate_id', $request->candidate_id);
         }
         if ($request->filled('result')) {
             $query->where('result', $request->result);
+        }
+        if ($request->filled('q')) {
+            $q = trim((string) $request->q);
+            $query->where(function ($subQuery) use ($q) {
+                $subQuery->where('interviewer_name', 'like', "%{$q}%")
+                    ->orWhereHas('candidate', function ($candidateQuery) use ($q) {
+                        $candidateQuery->where('full_name', 'like', "%{$q}%");
+                    });
+            });
         }
 
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));

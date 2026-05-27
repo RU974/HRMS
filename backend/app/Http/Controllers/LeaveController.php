@@ -18,7 +18,7 @@ class LeaveController extends Controller
 
     public function index(Request $request)
     {
-        $query = Leave::query();
+        $query = Leave::query()->with('employee:id,name');
         $role = $request->user()?->role;
 
         if (in_array($role, self::MANAGER_ROLES, true)) {
@@ -38,7 +38,7 @@ class LeaveController extends Controller
 
     public function show(Request $request, $id)
     {
-        $leave = Leave::findOrFail($id);
+        $leave = Leave::with('employee:id,name')->findOrFail($id);
         $this->authorizeRead($request, $leave);
 
         return $this->ok($leave);

@@ -10,11 +10,21 @@ class CandidateController extends Controller
     public function index(Request $request)
     {
         $query = Candidate::with(['jobOpening', 'interviews'])->latest();
+
         if ($request->filled('job_opening_id')) {
             $query->where('job_opening_id', $request->job_opening_id);
         }
         if ($request->filled('stage')) {
             $query->where('stage', $request->stage);
+        }
+        if ($request->filled('q')) {
+            $q = trim((string) $request->q);
+            $query->where(function ($subQuery) use ($q) {
+                $subQuery->where('full_name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%")
+                    ->orWhere('source', 'like', "%{$q}%");
+            });
         }
 
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));

@@ -38,12 +38,31 @@ export interface SaveReportPayload {
   filters?: Record<string, unknown>;
 }
 
-export function getReports(query?: { q?: string; type?: ReportType | ""; status?: ReportStatus | "" }) {
+export interface ReportCountsItem {
+  status: string;
+  count?: number;
+  total_records?: number;
+  total_net_salary?: number;
+}
+
+export interface ReportsAnalyticsSummary {
+  employees: number;
+  active_employees: number;
+  attendance_present: number;
+  attendance_late: number;
+  attendance_absent: number;
+  payroll_paid: number;
+  payroll_pending: number;
+  payroll_total_amount: number;
+}
+
+export function getReports(query?: { q?: string; type?: ReportType | ""; status?: ReportStatus | ""; module?: string }) {
   const params = new URLSearchParams();
   params.set("per_page", "50");
   if (query?.q) params.set("q", query.q);
   if (query?.type) params.set("type", query.type);
   if (query?.status) params.set("status", query.status);
+  if (query?.module) params.set("module", query.module);
   return apiClient<PaginatedResponse<Report>>(`/reports?${params.toString()}`);
 }
 
@@ -67,3 +86,18 @@ export function deleteReport(id: number) {
   });
 }
 
+export function getEmployeeReportSummary() {
+  return apiClient<ReportCountsItem[]>("/reports/employees");
+}
+
+export function getAttendanceReportSummary(month: number, year: number) {
+  return apiClient<ReportCountsItem[]>(`/reports/attendance?month=${month}&year=${year}`);
+}
+
+export function getPayrollReportSummary(month: number, year: number) {
+  return apiClient<ReportCountsItem[]>(`/reports/payroll?month=${month}&year=${year}`);
+}
+
+export function getReportsAnalytics(month: number, year: number) {
+  return apiClient<ReportsAnalyticsSummary>(`/reports/analytics?month=${month}&year=${year}`);
+}

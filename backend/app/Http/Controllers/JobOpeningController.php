@@ -10,8 +10,17 @@ class JobOpeningController extends Controller
     public function index(Request $request)
     {
         $query = JobOpening::with('department')->latest();
+
         if ($request->filled('status')) {
             $query->where('status', $request->status);
+        }
+        if ($request->filled('q')) {
+            $q = trim((string) $request->q);
+            $query->where(function ($subQuery) use ($q) {
+                $subQuery->where('title', 'like', "%{$q}%")
+                    ->orWhere('location', 'like', "%{$q}%")
+                    ->orWhere('employment_type', 'like', "%{$q}%");
+            });
         }
 
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));
@@ -58,7 +67,7 @@ class JobOpeningController extends Controller
             'status' => 'sometimes|in:open,closed,on_hold',
             'open_positions' => 'sometimes|integer|min:1|max:1000',
             'posted_at' => 'sometimes|nullable|date',
-            'closed_at' => 'sometimes|nullable|date',
+            'closed_at' => 'sometimes|nullable|date|after_or_equal:posted_at',
         ]);
         $job->update($validated);
 

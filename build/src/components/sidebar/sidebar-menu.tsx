@@ -13,7 +13,7 @@ type MenuGroup = {
 
 const menu: readonly MenuGroup[] = [
   { title: "Workspace", items: [["Dashboard", "/"]] },
-  { title: "HR Management", items: [["Employees", "/employees"], ["Departments", "/departments"], ["Designations", "/departments"], ["Attendance", "/attendance"], ["Leaves", "/leaves"], ["Shifts", "/shifts"], ["Holidays", "/holidays"]] },
+  { title: "HR Management", items: [["Employees", "/employees"], ["Departments", "/departments"], ["Designations", "/designations"], ["Attendance", "/attendance"], ["Leaves", "/leaves"], ["Shifts", "/shifts"], ["Holidays", "/holidays"]] },
   {
     title: "Payroll",
     dropdown: true,
@@ -21,8 +21,8 @@ const menu: readonly MenuGroup[] = [
   },
   { title: "Recruitment", items: [["Candidates", "/recruitment"], ["Interviews", "/recruitment"], ["Jobs", "/recruitment"], ["Onboarding", "/recruitment"]] },
   { title: "Performance", items: [["Reviews", "/performance"], ["KPIs", "/performance"], ["Goals", "/performance"], ["Appraisals", "/performance"]] },
-  { title: "Communication", items: [["Announcements", "/announcements"], ["Notifications", "/announcements"], ["Chat", "/announcements"]] },
-  { title: "Reports", items: [["Attendance Reports", "/reports"], ["Employee Reports", "/reports"], ["Payroll Reports", "/reports"], ["Analytics", "/reports"]] },
+  { title: "Communication", items: [["Announcements", "/announcements"], ["Notifications", "/notifications"], ["Chat", "/chat"]] },
+  { title: "Reports", items: [["Attendance Reports", "/reports/attendance"], ["Employee Reports", "/reports/employees"], ["Payroll Reports", "/reports/payroll"], ["Analytics", "/reports/analytics"]] },
   { title: "Settings", items: [["User Management", "/settings?tab=users"], ["Roles & Permissions", "/settings?tab=roles"], ["Company Settings", "/settings?tab=company"], ["Branches", "/settings?tab=branches"], ["Themes", "/settings?tab=theme"], ["System Logs", "/settings?tab=logs"]] }
 ] as const;
 
