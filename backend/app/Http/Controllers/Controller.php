@@ -24,18 +24,56 @@ abstract class Controller
         ], $status);
     }
 
+    protected function authorizePermission(Request $request, string $permission, string $message = 'You are not authorized to perform this action.'): void
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasPermission($permission)) {
+            abort(403, $message);
+        }
+    }
+
+    protected function authorizeAnyPermission(Request $request, array $permissions, string $message = 'You are not authorized to perform this action.'): void
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasAnyPermission($permissions)) {
+            abort(403, $message);
+        }
+    }
+
+    protected function authorizeSelfOrPermission(Request $request, ?int $userId, string $permission, string $message = 'You are not authorized to perform this action.'): void
+    {
+        $user = $request->user();
+        if ($user && $user->hasPermission($permission)) {
+            return;
+        }
+        if ($userId !== null && $request->user()?->id === $userId) {
+            return;
+        }
+
+        abort(403, $message);
+    }
+
     protected function authorizeRoles(Request $request, array $roles, string $message = 'You are not authorized to perform this action.'): void
     {
-        $role = $request->user()?->role;
-        if (!$role || !in_array($role, $roles, true)) {
+        $user = $request->user()?->loadMissing('rolesRelation');
+        if (!$user) {
+            abort(403, $message);
+        }
+
+        $userRoleNames = $user->rolesRelation->pluck('name')->all();
+        if (count(array_intersect($roles, $userRoleNames)) === 0) {
             abort(403, $message);
         }
     }
 
     protected function authorizeSelfOrRole(Request $request, ?int $userId, array $roles, string $message = 'You are not authorized to perform this action.'): void
     {
-        if (in_array($request->user()?->role, $roles, true)) {
-            return;
+        $user = $request->user()?->loadMissing('rolesRelation');
+        if ($user) {
+            $userRoleNames = $user->rolesRelation->pluck('name')->all();
+            if (count(array_intersect($roles, $userRoleNames)) > 0) {
+                return;
+            }
         }
 
         if ($userId !== null && $request->user()?->id === $userId) {

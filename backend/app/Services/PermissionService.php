@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 
 class PermissionService
 {
-    public const WILDCARD = '*:*';
+    public const WILDCARD = '*.*';
 
     public function getMergedPermissions(User $user): Collection
     {
@@ -18,7 +18,7 @@ class PermissionService
             $loaded = $user->loadMissing('rolesRelation.permissions');
 
             return $loaded->rolesRelation
-                ->flatMap(fn ($role) => $role->permissions->map(fn ($permission) => $permission->module . ':' . $permission->action))
+                ->flatMap(fn ($role) => $role->permissions->map(fn ($permission) => $permission->module . '.' . $permission->action))
                 ->unique()
                 ->values();
         });
@@ -27,8 +27,9 @@ class PermissionService
     public function hasPermission(User $user, string $requiredPermission): bool
     {
         $permissions = $this->getMergedPermissions($user);
+        $normalized = str_replace(':', '.', $requiredPermission);
 
-        return $permissions->contains(self::WILDCARD) || $permissions->contains($requiredPermission);
+        return $permissions->contains(self::WILDCARD) || $permissions->contains($normalized);
     }
 
     public function flushUserPermissionCache(User $user): void

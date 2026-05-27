@@ -30,6 +30,6 @@ class Permission extends Model
 
     public function getKeyAttribute(): string
     {
-        return $this->module . ':' . $this->action;
+        return $this->module . '.' . $this->action;
     }
 }

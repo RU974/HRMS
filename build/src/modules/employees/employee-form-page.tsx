@@ -101,6 +101,10 @@ export function EmployeeFormPage() {
         }
       });
 
+      const basicSalary = Number(form.basic_salary || 0);
+      const allowances = Number(form.allowances || 0);
+      payload.append("salary", String(basicSalary + allowances));
+
       if (profileImage) {
         payload.append("profile_image", profileImage);
       }
@@ -113,9 +117,9 @@ export function EmployeeFormPage() {
     }
   }
 
-  const departmentOptions = departmentsQuery.data?.data ?? [];
-  const designationOptions = designationsQuery.data?.data ?? [];
-  const shiftOptions = shiftsQuery.data?.data ?? [];
+  const departmentOptions = departmentsQuery.data ?? [];
+  const designationOptions = designationsQuery.data ?? [];
+  const shiftOptions = shiftsQuery.data ?? [];
   const managerOptions = managersQuery.data?.data ?? [];
 
   return (

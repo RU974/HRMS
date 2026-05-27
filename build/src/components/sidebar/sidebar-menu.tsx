@@ -17,7 +17,7 @@ const menu: readonly MenuGroup[] = [
   {
     title: "Payroll",
     dropdown: true,
-    items: [["Salary Structure", "/payroll"], ["Payroll Processing", "/payroll"], ["Payslips", "/payroll"], ["Bonuses", "/payroll"], ["Deductions", "/payroll"]]
+    items: [["Salary Structure", "/payroll?tab=salary-structure"], ["Payroll Processing", "/payroll?tab=payroll-processing"], ["Payslips", "/payroll?tab=payslips"], ["Bonuses", "/payroll?tab=bonuses"], ["Deductions", "/payroll?tab=deductions"]]
   },
   { title: "Recruitment", items: [["Candidates", "/recruitment"], ["Interviews", "/recruitment"], ["Jobs", "/recruitment"], ["Onboarding", "/recruitment"]] },
   { title: "Performance", items: [["Reviews", "/performance"], ["KPIs", "/performance"], ["Goals", "/performance"], ["Appraisals", "/performance"]] },

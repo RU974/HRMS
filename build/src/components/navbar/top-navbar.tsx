@@ -25,7 +25,6 @@ export function TopNavbar() {
         </button>
         <div className="hidden min-w-0 md:block">
           <div className="text-sm font-semibold">Enterprise HRMS</div>
-          <div className="text-xs text-[var(--muted)]">Karachi HQ - Global workforce</div>
         </div>
         <FormInput placeholder="Search employees, payroll, reports..." className="ml-auto hidden max-w-md md:block" />
         <div className="flex items-center gap-2">

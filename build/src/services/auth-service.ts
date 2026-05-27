@@ -34,3 +34,31 @@ export function me() {
 export function logoutRequest() {
   return apiClient<null>("/auth/logout", { method: "POST" });
 }
+
+export function forgotPassword(email: string) {
+  return apiClient<null>("/auth/forgot-password", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ email })
+  });
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  email: string;
+  password: string;
+  passwordConfirmation: string;
+}
+
+export function resetPassword(payload: ResetPasswordPayload) {
+  return apiClient<null>("/auth/reset-password", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({
+      token: payload.token,
+      email: payload.email,
+      password: payload.password,
+      password_confirmation: payload.passwordConfirmation
+    })
+  });
+}

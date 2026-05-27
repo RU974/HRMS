@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PayrollProcessing;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
 class PayrollProcessingController extends Controller
@@ -45,7 +46,18 @@ class PayrollProcessingController extends Controller
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        return $this->ok(PayrollProcessing::create($validated), 'Payroll processing created successfully', 201);
+        try {
+            return $this->ok(PayrollProcessing::create($validated), 'Payroll processing created successfully', 201);
+        } catch (QueryException $e) {
+            if ($this->isUniqueMonthYearError($e)) {
+                return $this->fail('A payroll processing record for this month and year already exists.', 422, [
+                    'month' => ['Duplicate month and year combination.'],
+                    'year' => ['Duplicate month and year combination.'],
+                ]);
+            }
+
+            throw $e;
+        }
     }
 
     public function show(Request $request, int $id)
@@ -59,11 +71,26 @@ class PayrollProcessingController extends Controller
         $this->authorizeRoles($request, self::MANAGER_ROLES);
         $item = PayrollProcessing::findOrFail($id);
         $validated = $request->validate([
+            'month' => 'sometimes|integer|min:1|max:12',
+            'year' => 'sometimes|integer|min:2020',
             'status' => 'sometimes|in:draft,processing,completed,cancelled',
             'processed_at' => 'nullable|date',
             'notes' => 'nullable|string|max:1000',
         ]);
-        $item->update($validated);
+
+        try {
+            $item->update($validated);
+        } catch (QueryException $e) {
+            if ($this->isUniqueMonthYearError($e)) {
+                return $this->fail('A payroll processing record for this month and year already exists.', 422, [
+                    'month' => ['Duplicate month and year combination.'],
+                    'year' => ['Duplicate month and year combination.'],
+                ]);
+            }
+
+            throw $e;
+        }
+
         return $this->ok($item, 'Payroll processing updated successfully');
     }
 
@@ -73,5 +100,10 @@ class PayrollProcessingController extends Controller
         PayrollProcessing::findOrFail($id)->delete();
         return $this->ok(null, 'Payroll processing deleted successfully');
     }
-}
 
+    private function isUniqueMonthYearError(QueryException $e): bool
+    {
+        return str_contains(strtolower($e->getMessage()), 'unique')
+            || str_contains(strtolower($e->getMessage()), 'payroll_processings_month_year_unique');
+    }
+}

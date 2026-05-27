@@ -4,7 +4,7 @@ export interface AuthUser {
   id: number;
   name: string;
   email: string;
-  role?: string;
+  rolesRelation?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
 }
 
 interface AuthState {
@@ -13,6 +13,7 @@ interface AuthState {
   user: AuthUser | null;
   setSession: (token: string, user: AuthUser) => void;
   setUser: (user: AuthUser) => void;
+  hasPermission: (permission: string) => boolean;
   logout: () => void;
 }
 
@@ -31,6 +32,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => {
     localStorage.setItem("hrms_user", JSON.stringify(user));
     set({ user, isAuthenticated: true });
+  },
+  hasPermission: (permission) => {
+    const state = useAuthStore.getState();
+    const keys = (state.user?.rolesRelation ?? []).flatMap((r) => (r.permissions ?? []).map((p) => p.key));
+    return keys.includes("*.*") || keys.includes(permission);
   },
   logout: () => {
     localStorage.removeItem("hrms_token");

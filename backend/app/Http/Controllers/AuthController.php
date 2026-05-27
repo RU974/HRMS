@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class AuthController extends Controller
 {
@@ -18,19 +22,30 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'nullable|string|in:' . implode(',', User::roles()),
+            'role_ids' => 'nullable|array',
+            'role_ids.*' => 'uuid|exists:roles,id',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role'] ?? User::ROLE_EMPLOYEE,
         ]);
+
+        $roleIds = $validated['role_ids'] ?? [];
+        if (empty($roleIds)) {
+            $employeeRoleId = Role::where('name', User::ROLE_EMPLOYEE)->whereNull('company_id')->value('id');
+            if ($employeeRoleId) {
+                $roleIds = [$employeeRoleId];
+            }
+        }
+        if (!empty($roleIds)) {
+            $user->rolesRelation()->sync($roleIds);
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->ok(['user' => $user, 'token' => $token], 'User registered successfully', 201);
+        return $this->ok(['user' => $user->fresh('rolesRelation.permissions'), 'token' => $token], 'User registered successfully', 201);
     }
 
     /**
@@ -47,7 +62,7 @@ class AuthController extends Controller
             return $this->fail('Invalid credentials', 401);
         }
 
-        $user = Auth::user();
+        $user = Auth::user()?->loadMissing('rolesRelation.permissions');
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return $this->ok(['user' => $user, 'token' => $token], 'Login successful');
@@ -68,7 +83,7 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        return $this->ok($request->user());
+        return $this->ok($request->user()?->loadMissing('rolesRelation.permissions'));
     }
 
     /**
@@ -81,5 +96,53 @@ class AuthController extends Controller
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return $this->ok(['token' => $token], 'Token refreshed successfully');
+    }
+
+    /**
+     * Send password reset link
+     */
+    public function forgotPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|string|email',
+        ]);
+
+        $status = Password::sendResetLink([
+            'email' => $validated['email'],
+        ]);
+
+        if ($status !== Password::RESET_LINK_SENT) {
+            return $this->fail(__($status), 400);
+        }
+
+        return $this->ok(null, 'Password reset link sent successfully');
+    }
+
+    /**
+     * Reset password using token
+     */
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|string|email',
+            'password' => ['required', 'confirmed', PasswordRule::min(8)->letters()->mixedCase()->numbers()],
+        ]);
+
+        $status = Password::reset(
+            $validated,
+            function (User $user, string $password): void {
+                $user->forceFill([
+                    'password' => Hash::make($password),
+                    'remember_token' => Str::random(60),
+                ])->save();
+            }
+        );
+
+        if ($status !== Password::PASSWORD_RESET) {
+            return $this->fail(__($status), 400);
+        }
+
+        return $this->ok(null, 'Password reset successfully');
     }
 }

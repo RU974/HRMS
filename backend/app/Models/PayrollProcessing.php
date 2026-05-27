@@ -13,5 +13,10 @@ class PayrollProcessing extends Model
         'processed_at',
         'notes',
     ];
-}
 
+    protected $casts = [
+        'month' => 'integer',
+        'year' => 'integer',
+        'processed_at' => 'datetime',
+    ];
+}

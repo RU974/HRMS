@@ -53,15 +53,15 @@ export function getEmployees() {
 }
 
 export function getDepartments() {
-  return apiClient<PaginatedResponse<Department>>("/departments?per_page=100");
+  return apiClient<Department[]>("/departments");
 }
 
 export function getDesignations() {
-  return apiClient<PaginatedResponse<Designation>>("/designations?per_page=100");
+  return apiClient<Designation[]>("/designations");
 }
 
 export function getShifts() {
-  return apiClient<PaginatedResponse<Shift>>("/shifts?per_page=100");
+  return apiClient<Shift[]>("/shifts");
 }
 
 export function createEmployee(formData: FormData) {

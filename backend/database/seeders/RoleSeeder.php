@@ -11,50 +11,19 @@ class RoleSeeder extends Seeder
 {
     public function run(): void
     {
-        $all = Permission::all()->keyBy(fn (Permission $p) => $p->module . ':' . $p->action);
+        $all = Permission::all()->keyBy(fn (Permission $p) => $p->module . '.' . $p->action);
 
         $roles = [
-            'Super Admin' => ['*:*'],
-            'HR Manager' => [
-                'employees:create','employees:read','employees:update','employees:export','employees:manage_documents',
-                'attendance:view_all','attendance:edit',
-                'leave:approve','leave:reject','leave:view_all','leave:configure_policies',
-                'payroll:view_payslips','payroll:export',
-                'recruitment:create_job','recruitment:manage_candidates','recruitment:schedule_interview','recruitment:extend_offer','recruitment:view_all',
-                'performance:set_goals','performance:write_review','performance:view_all_reviews',
-                'reports:view_basic','reports:view_sensitive','reports:export',
-                'settings:manage_roles','settings:manage_permissions',
-            ],
-            'HR Executive' => [
-                'employees:create','employees:read','employees:update','employees:export',
-                'attendance:mark_others','attendance:view_all',
-                'leave:apply','leave:view_all',
-                'payroll:view_payslips',
-                'reports:view_basic',
-            ],
-            'Payroll Manager' => [
-                'payroll:view_payslips','payroll:process','payroll:manage_components','payroll:approve','payroll:export',
-                'reports:view_basic','reports:export',
-            ],
-            'Recruiter' => [
-                'recruitment:create_job','recruitment:manage_candidates','recruitment:schedule_interview','recruitment:extend_offer','recruitment:view_all',
-                'employees:read','dashboard:view',
-            ],
-            'Line Manager' => [
-                'employees:read',
-                'attendance:view_all',
-                'leave:apply','leave:approve',
-                'performance:set_goals','performance:write_review',
-                'dashboard:view',
-            ],
-            'Employee (Self)' => [
-                'employees:read','employees:update',
-                'attendance:mark_own',
-                'leave:apply',
-                'payroll:view_payslips',
-                'performance:set_goals',
-                'dashboard:view',
-            ],
+            'Super Admin' => ['*.*'],
+            'Company Admin' => ['dashboard.view', 'employee.view', 'employee.create', 'employee.edit', 'employee.delete', 'attendance.view', 'attendance.mark', 'attendance.edit', 'leave.view', 'leave.approve', 'payroll.view', 'payroll.generate', 'payroll.edit', 'recruitment.view', 'recruitment.create', 'recruitment.edit', 'recruitment.schedule', 'recruitment.offer', 'performance.view', 'performance.create', 'performance.edit', 'reports.view', 'reports.export', 'system.settings.view', 'role.manage', 'permission.manage', 'user.manage'],
+            'HR Manager' => ['dashboard.view', 'employee.view', 'employee.create', 'employee.edit', 'employee.delete', 'employee.export', 'employee.document.manage', 'attendance.view', 'attendance.mark', 'attendance.edit', 'leave.request', 'leave.approve', 'leave.view', 'performance.view', 'performance.create', 'performance.edit', 'reports.view', 'reports.export'],
+            'HR Executive' => ['dashboard.view', 'employee.view', 'employee.create', 'employee.edit', 'attendance.view', 'attendance.mark', 'leave.request', 'leave.view', 'reports.view'],
+            'Payroll Manager' => ['dashboard.view', 'payroll.view', 'payroll.generate', 'payroll.edit', 'reports.view', 'reports.export'],
+            'Attendance Manager' => ['dashboard.view', 'attendance.view', 'attendance.mark', 'attendance.edit'],
+            'Recruiter' => ['dashboard.view', 'recruitment.view', 'recruitment.create', 'recruitment.edit', 'recruitment.schedule', 'recruitment.offer'],
+            'Department Manager' => ['dashboard.view', 'employee.view', 'attendance.view', 'leave.view', 'leave.approve', 'performance.view', 'performance.edit'],
+            'IT Support' => ['dashboard.view', 'system.settings.view', 'reports.view'],
+            'Employee' => ['dashboard.view', 'profile.view', 'profile.edit', 'leave.request', 'attendance.self'],
         ];
 
         foreach ($roles as $roleName => $permissionKeys) {
@@ -72,7 +41,7 @@ class RoleSeeder extends Seeder
             $role->permissions()->sync($permissionIds);
         }
 
-        $admin = User::where('role', User::ROLE_SUPER_ADMIN)->first();
+        $admin = User::query()->orderBy('id')->first();
         if ($admin) {
             $superAdminRole = Role::where('name', 'Super Admin')->whereNull('company_id')->first();
             if ($superAdminRole) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Bonus;
 use App\Models\Employee;
+use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Http\Request;
 
@@ -48,6 +49,7 @@ class BonusController extends Controller
             'effective_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $this->assertPayrollEmployeeMatch($validated['payroll_id'] ?? null, (int) $validated['employee_id']);
 
         $bonus = Bonus::create($validated);
         return $this->ok($bonus->load(['employee', 'payroll']), 'Bonus created successfully', 201);
@@ -65,6 +67,7 @@ class BonusController extends Controller
         $this->authorizeRoles($request, self::MANAGER_ROLES);
         $bonus = Bonus::findOrFail($id);
         $validated = $request->validate([
+            'employee_id' => 'sometimes|exists:employees,id',
             'payroll_id' => 'nullable|exists:payrolls,id',
             'title' => 'sometimes|string|max:255',
             'amount' => 'sometimes|numeric|min:0',
@@ -72,7 +75,12 @@ class BonusController extends Controller
             'effective_date' => 'sometimes|date',
             'notes' => 'nullable|string|max:1000',
         ]);
-        $bonus->update($validated);
+
+        $employeeId = (int) ($validated['employee_id'] ?? $bonus->employee_id);
+        $this->assertPayrollEmployeeMatch($validated['payroll_id'] ?? $bonus->payroll_id, $employeeId);
+
+        $bonus->fill($validated);
+        $bonus->save();
         return $this->ok($bonus->load(['employee', 'payroll']), 'Bonus updated successfully');
     }
 
@@ -103,5 +111,16 @@ class BonusController extends Controller
         }
         abort(403, 'You are not authorized to access this bonus.');
     }
-}
 
+    private function assertPayrollEmployeeMatch(?int $payrollId, int $employeeId): void
+    {
+        if ($payrollId === null) {
+            return;
+        }
+
+        $payrollEmployeeId = (int) Payroll::whereKey($payrollId)->value('employee_id');
+        if ($payrollEmployeeId !== $employeeId) {
+            abort(422, 'Selected payroll does not belong to the selected employee.');
+        }
+    }
+}

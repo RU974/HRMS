@@ -10,8 +10,9 @@ class RoleMiddleware
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        $userRole = $request->user()?->role;
-        if (!$userRole || !in_array($userRole, $roles, true)) {
+        $user = $request->user()?->loadMissing('rolesRelation');
+        $userRoles = $user?->rolesRelation->pluck('name')->all() ?? [];
+        if (count(array_intersect($roles, $userRoles)) === 0) {
             abort(403, 'You are not authorized to perform this action.');
         }
 

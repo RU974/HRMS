@@ -98,7 +98,7 @@ class EmployeeController extends Controller
         ]);
 
         $name = $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
-        $employee = DB::transaction(function () use ($validated, $name) {
+        $employee = DB::transaction(function () use ($validated, $name, $request) {
             $linkedUserId = $validated['user_id'] ?? null;
             $createUser = $validated['create_user'] ?? true;
 

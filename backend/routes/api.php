@@ -55,6 +55,8 @@ $registerRoutes = function (): void {
     Route::prefix('auth')->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
     });
 
     // Protected routes - require authentication
@@ -68,6 +70,7 @@ $registerRoutes = function (): void {
 
         // Dashboard + reports
         Route::get('dashboard/summary', [DashboardController::class, 'summary']);
+        Route::get('dashboard/insights', [DashboardController::class, 'insights']);
         Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
         Route::prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
@@ -78,7 +81,7 @@ $registerRoutes = function (): void {
         });
         Route::apiResource('reports', ReportController::class);
 
-        Route::middleware('permission:settings:manage_roles')->group(function () {
+        Route::middleware('permission:role.manage')->group(function () {
             Route::get('permissions', [RolePermissionController::class, 'permissions']);
             Route::get('roles', [RolePermissionController::class, 'roles']);
             Route::post('roles', [RolePermissionController::class, 'storeRole']);
@@ -88,7 +91,7 @@ $registerRoutes = function (): void {
             Route::put('users/{id}/roles', [UserRoleController::class, 'updateUserRoles']);
         });
 
-        Route::middleware('permission:settings:general')->group(function () {
+        Route::middleware('permission:user.manage')->group(function () {
             Route::apiResource('settings/users', UserManagementController::class);
             Route::apiResource('settings/companies', CompanySettingsController::class);
             Route::apiResource('settings/branches', BranchController::class);
@@ -148,14 +151,14 @@ $registerRoutes = function (): void {
         Route::apiResource('leaves', LeaveController::class);
 
         // Attendance/Leave setup routes
-        Route::middleware('role:Super Admin,Company Admin,HR Manager,HR Executive,Attendance Manager')->group(function () {
+        Route::middleware('permission:attendance.edit')->group(function () {
             Route::apiResource('holidays', HolidayController::class);
             Route::apiResource('shifts', ShiftController::class);
             Route::apiResource('leave-types', LeaveTypeController::class);
         });
 
         // Recruitment routes
-        Route::middleware('role:Super Admin,Company Admin,HR Manager,HR Executive,Recruiter')->group(function () {
+        Route::middleware('permission:recruitment.view')->group(function () {
             Route::get('recruitment/pipeline-summary', [CandidateController::class, 'pipelineSummary']);
             Route::apiResource('job-openings', JobOpeningController::class);
             Route::apiResource('candidates', CandidateController::class);

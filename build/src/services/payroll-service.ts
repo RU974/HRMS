@@ -159,8 +159,8 @@ export function getPayrollMonthlySummary(month: number, year: number) {
   return apiClient<PayrollSummaryItem[]>(`/payroll/summary/monthly${qs({ month, year })}`);
 }
 
-export function listPayrollProcessings(month?: number, year?: number) {
-  return apiClient<PaginationMeta<PayrollProcessing>>(`/payroll-processings${qs({ month, year })}`);
+export function listPayrollProcessings(month?: number, year?: number, status?: PayrollProcessing["status"]) {
+  return apiClient<PaginationMeta<PayrollProcessing>>(`/payroll-processings${qs({ month, year, status })}`);
 }
 export function createPayrollProcessing(payload: Omit<PayrollProcessing, "id">) {
   return apiClient<PayrollProcessing>("/payroll-processings", { method: "POST", body: JSON.stringify(payload) });

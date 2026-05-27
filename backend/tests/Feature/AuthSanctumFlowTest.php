@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Password;
 use Tests\TestCase;
 
 class AuthSanctumFlowTest extends TestCase
@@ -20,23 +21,58 @@ class AuthSanctumFlowTest extends TestCase
             'role' => User::ROLE_EMPLOYEE,
         ]);
 
-        $register->assertCreated()->assertJsonStructure(['token', 'user' => ['id', 'email']]);
-        $token = $register->json('token');
+        $register->assertCreated()->assertJsonPath('success', true)->assertJsonStructure([
+            'success',
+            'message',
+            'data' => ['token', 'user' => ['id', 'email']],
+        ]);
+        $token = $register->json('data.token');
 
         $this->withHeader('Authorization', 'Bearer ' . $token)
             ->getJson('/api/auth/me')
             ->assertOk()
-            ->assertJsonPath('email', 'flow@example.com');
+            ->assertJsonPath('data.email', 'flow@example.com');
 
         $refresh = $this->withHeader('Authorization', 'Bearer ' . $token)
             ->postJson('/api/auth/refresh');
 
-        $refresh->assertOk()->assertJsonStructure(['token']);
-        $newToken = $refresh->json('token');
+        $refresh->assertOk()->assertJsonPath('success', true)->assertJsonStructure([
+            'success',
+            'message',
+            'data' => ['token'],
+        ]);
+        $newToken = $refresh->json('data.token');
         $this->assertNotSame($token, $newToken);
 
         $this->withHeader('Authorization', 'Bearer ' . $newToken)
             ->postJson('/api/auth/logout')
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('success', true);
+    }
+
+    public function test_forgot_and_reset_password_flow(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'reset-user@example.com',
+            'password' => bcrypt('oldPassword123'),
+        ]);
+
+        $this->postJson('/api/auth/forgot-password', [
+            'email' => $user->email,
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $token = Password::broker()->createToken($user);
+
+        $this->postJson('/api/auth/reset-password', [
+            'token' => $token,
+            'email' => $user->email,
+            'password' => 'NewPassword123',
+            'password_confirmation' => 'NewPassword123',
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'NewPassword123',
+        ])->assertOk()->assertJsonPath('success', true);
     }
 }

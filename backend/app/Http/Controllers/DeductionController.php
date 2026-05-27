@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Deduction;
 use App\Models\Employee;
+use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Http\Request;
 
@@ -51,6 +52,7 @@ class DeductionController extends Controller
             'effective_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $this->assertPayrollEmployeeMatch($validated['payroll_id'] ?? null, (int) $validated['employee_id']);
 
         $item = Deduction::create($validated);
         return $this->ok($item->load(['employee', 'payroll']), 'Deduction created successfully', 201);
@@ -75,6 +77,7 @@ class DeductionController extends Controller
             'effective_date' => 'sometimes|date',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $this->assertPayrollEmployeeMatch($validated['payroll_id'] ?? $item->payroll_id, (int) $item->employee_id);
         $item->update($validated);
         return $this->ok($item->load(['employee', 'payroll']), 'Deduction updated successfully');
     }
@@ -106,5 +109,16 @@ class DeductionController extends Controller
         }
         abort(403, 'You are not authorized to access this deduction.');
     }
-}
 
+    private function assertPayrollEmployeeMatch(?int $payrollId, int $employeeId): void
+    {
+        if ($payrollId === null) {
+            return;
+        }
+
+        $payrollEmployeeId = (int) Payroll::whereKey($payrollId)->value('employee_id');
+        if ($payrollEmployeeId !== $employeeId) {
+            abort(422, 'Selected payroll does not belong to the selected employee.');
+        }
+    }
+}

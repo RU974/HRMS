@@ -2,23 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use App\Services\UserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class UserManagementController extends Controller
 {
-    private const ADMIN_ROLES = [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN, User::ROLE_HR_MANAGER];
-
     public function __construct(private readonly UserManagementService $service)
     {
     }
 
     public function index(Request $request)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
-        $q = User::query()->with('rolesRelation');
+        $this->authorizePermission($request, 'user.manage');
+        $q = \App\Models\User::query()->with('rolesRelation');
         if ($request->filled('search')) {
             $search = (string) $request->input('search');
             $q->where(function ($w) use ($search) {
@@ -30,46 +27,66 @@ class UserManagementController extends Controller
 
     public function show(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
-        return $this->ok(User::with('rolesRelation')->findOrFail($id));
+        $this->authorizePermission($request, 'user.manage');
+        return $this->ok(\App\Models\User::with('rolesRelation')->findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
+        $this->authorizePermission($request, 'user.manage');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email',
             'password' => 'required|string|min:8',
-            'role' => ['required', 'string', Rule::in(User::roles())],
+            'role_ids' => 'required|array|min:1',
+            'role_ids.*' => [
+                'required',
+                'uuid',
+                Rule::exists('roles', 'id')->where(function ($query) use ($request) {
+                    $query->whereNull('company_id');
+                    if ($request->user()?->company_id) {
+                        $query->orWhere('company_id', $request->user()?->company_id);
+                    }
+                }),
+            ],
             'company_id' => 'nullable|uuid|exists:companies,id',
             'branch_id' => 'nullable|uuid|exists:branches,id',
         ]);
 
-        $user = $this->service->create($validated);
+        $user = $this->service->create($validated, $request->user());
         return $this->ok($user, 'User created successfully', 201);
     }
 
     public function update(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
-        $user = User::findOrFail($id);
+        $this->authorizePermission($request, 'user.manage');
+        $user = \App\Models\User::findOrFail($id);
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => 'nullable|string|min:8',
-            'role' => ['sometimes', 'required', 'string', Rule::in(User::roles())],
+            'role_ids' => 'sometimes|required|array|min:1',
+            'role_ids.*' => [
+                'required',
+                'uuid',
+                Rule::exists('roles', 'id')->where(function ($query) use ($request) {
+                    $query->whereNull('company_id');
+                    if ($request->user()?->company_id) {
+                        $query->orWhere('company_id', $request->user()?->company_id);
+                    }
+                }),
+            ],
             'company_id' => 'nullable|uuid|exists:companies,id',
             'branch_id' => 'nullable|uuid|exists:branches,id',
         ]);
 
-        return $this->ok($this->service->update($user, $validated), 'User updated successfully');
+        return $this->ok($this->service->update($user, $validated, $request->user()), 'User updated successfully');
     }
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
-        $user = User::findOrFail($id);
+        $this->authorizePermission($request, 'user.manage');
+        $user = \App\Models\User::findOrFail($id);
         if ($request->user()?->id === $user->id) {
             return $this->fail('You cannot delete your own account.', 422);
         }

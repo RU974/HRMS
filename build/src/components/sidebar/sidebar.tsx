@@ -16,7 +16,7 @@ export function Sidebar() {
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-[var(--primary)] text-sm font-bold text-white">H</div>
         {open && (
           <div>
-            <div className="text-sm font-bold">HRMS One</div>
+            <div className="text-sm font-bold">Sling shot tech</div>
             <div className="text-xs text-[var(--muted)]">Enterprise suite</div>
           </div>
         )}

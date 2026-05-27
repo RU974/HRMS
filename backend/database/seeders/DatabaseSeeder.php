@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Models\Role;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -21,13 +22,12 @@ class DatabaseSeeder extends Seeder
         $adminEmail = env('DEFAULT_ADMIN_EMAIL', 'admin@example.com');
         $adminPassword = env('DEFAULT_ADMIN_PASSWORD', 'password');
 
-        User::updateOrCreate(
+        $admin = User::updateOrCreate(
             ['email' => $adminEmail],
             [
                 'name' => env('DEFAULT_ADMIN_NAME', 'Super Admin'),
                 'email' => $adminEmail,
                 'password' => Hash::make($adminPassword),
-                'role' => User::ROLE_SUPER_ADMIN,
             ]
         );
 
@@ -35,5 +35,10 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             RoleSeeder::class,
         ]);
+
+        $superAdminRole = Role::where('name', User::ROLE_SUPER_ADMIN)->whereNull('company_id')->first();
+        if ($superAdminRole) {
+            $admin->rolesRelation()->syncWithoutDetaching([$superAdminRole->id => ['scope' => json_encode(new \stdClass())]]);
+        }
     }
 }

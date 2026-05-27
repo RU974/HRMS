@@ -38,29 +38,7 @@ class User extends Authenticatable
         'email',
         'username',
         'password',
-        'role',
     ];
-
-    /**
-     * Available HRMS roles.
-     *
-     * @return string[]
-     */
-    public static function roles(): array
-    {
-        return [
-            self::ROLE_SUPER_ADMIN,
-            self::ROLE_COMPANY_ADMIN,
-            self::ROLE_HR_MANAGER,
-            self::ROLE_HR_EXECUTIVE,
-            self::ROLE_DEPARTMENT_MANAGER,
-            self::ROLE_EMPLOYEE,
-            self::ROLE_PAYROLL_MANAGER,
-            self::ROLE_ATTENDANCE_MANAGER,
-            self::ROLE_RECRUITER,
-            self::ROLE_IT_SUPPORT,
-        ];
-    }
 
 
     /**
@@ -94,5 +72,43 @@ class User extends Authenticatable
             ->using(UserRole::class)
             ->withPivot('scope')
             ->withTimestamps();
+    }
+
+    public static function roles(): array
+    {
+        return [
+            self::ROLE_SUPER_ADMIN,
+            self::ROLE_COMPANY_ADMIN,
+            self::ROLE_HR_MANAGER,
+            self::ROLE_HR_EXECUTIVE,
+            self::ROLE_PAYROLL_MANAGER,
+            self::ROLE_ATTENDANCE_MANAGER,
+            self::ROLE_RECRUITER,
+            self::ROLE_DEPARTMENT_MANAGER,
+            self::ROLE_IT_SUPPORT,
+            self::ROLE_EMPLOYEE,
+        ];
+    }
+
+    public function hasPermission(string $permissionKey): bool
+    {
+        return app(\App\Services\PermissionService::class)->hasPermission($this, $permissionKey);
+    }
+
+    public function hasAnyPermission(array $permissionKeys): bool
+    {
+        foreach ($permissionKeys as $permissionKey) {
+            if ($this->hasPermission($permissionKey)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function getRoleAttribute(): ?string
+    {
+        $this->loadMissing('rolesRelation');
+        return $this->rolesRelation->pluck('name')->first();
     }
 }

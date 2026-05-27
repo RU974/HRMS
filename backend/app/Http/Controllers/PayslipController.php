@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Payslip;
 use App\Models\Payroll;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
 class PayslipController extends Controller
@@ -52,8 +53,20 @@ class PayslipController extends Controller
             'file_url' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $this->assertPayrollEmployeeMatch((int) $validated['payroll_id'], (int) $validated['employee_id']);
 
-        $item = Payslip::create($validated);
+        try {
+            $item = Payslip::create($validated);
+        } catch (QueryException $e) {
+            if ($this->isSlipNumberUniqueError($e)) {
+                return $this->fail('Payslip number already exists.', 422, [
+                    'slip_number' => ['The slip number has already been taken.'],
+                ]);
+            }
+
+            throw $e;
+        }
+
         return $this->ok($item->load(['employee', 'payroll']), 'Payslip created successfully', 201);
     }
 
@@ -106,7 +119,25 @@ class PayslipController extends Controller
             ]
         );
 
+        if (!$item->wasRecentlyCreated && $item->issue_date !== $validated['issue_date']) {
+            $item->update(['issue_date' => $validated['issue_date']]);
+        }
+
         return $this->ok($item->load(['employee', 'payroll']), 'Salary slip created successfully');
+    }
+
+    private function assertPayrollEmployeeMatch(int $payrollId, int $employeeId): void
+    {
+        $payrollEmployeeId = (int) Payroll::whereKey($payrollId)->value('employee_id');
+        if ($payrollEmployeeId !== $employeeId) {
+            abort(422, 'Selected payroll does not belong to the selected employee.');
+        }
+    }
+
+    private function isSlipNumberUniqueError(QueryException $e): bool
+    {
+        $message = strtolower($e->getMessage());
+        return str_contains($message, 'unique') || str_contains($message, 'payslips_slip_number_unique');
     }
 
     private function authorizeRead(Request $request): void
@@ -130,4 +161,3 @@ class PayslipController extends Controller
         abort(403, 'You are not authorized to access this payslip.');
     }
 }
-

@@ -85,6 +85,10 @@ class RolePermissionController extends Controller
         ]);
 
         $role = Role::with('users')->findOrFail($id);
+        $companyId = $request->user()?->company_id;
+        if ($role->company_id !== null && $role->company_id !== $companyId) {
+            return $this->fail('You are not allowed to modify this role.', 403);
+        }
         if ($role->is_system) {
             return $this->fail('System roles cannot be edited.', 422);
         }
@@ -104,7 +108,11 @@ class RolePermissionController extends Controller
 
     public function deleteRole(Request $request, string $id)
     {
-        $role = Role::withCount('users')->findOrFail($id);
+        $role = Role::with('users')->withCount('users')->findOrFail($id);
+        $companyId = $request->user()?->company_id;
+        if ($role->company_id !== null && $role->company_id !== $companyId) {
+            return $this->fail('You are not allowed to delete this role.', 403);
+        }
         if ($role->is_system) {
             return $this->fail('System roles cannot be deleted.', 422);
         }
@@ -113,7 +121,9 @@ class RolePermissionController extends Controller
             return $this->fail('Role is assigned to users. Pass force=true after confirmation.', 409);
         }
 
+        $affectedUsers = $role->users;
         $role->delete();
+        $affectedUsers->each(fn ($user) => $this->permissionService->flushUserPermissionCache($user));
 
         return $this->ok(null, 'Role deleted successfully');
     }
