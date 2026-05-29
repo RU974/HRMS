@@ -2,98 +2,119 @@
 
 Operational guidance for coding agents working in `D:\HRMS`.
 
-## Scope And Priorities
+## Priority Order
 
-- Keep changes scoped to the target app (`build/` or `backend/`) unless integration is required.
-- Preserve existing API contracts and route names unless the task explicitly includes coordinated contract updates.
-- Favor incremental, reviewable changes over broad refactors.
+- Follow direct user instructions first.
+- Follow this file next.
+- Preserve existing repo conventions when neither of the above is explicit.
 
-## Workspace Layout
+## Scope
 
-- `build/`: React frontend (Vite + TypeScript).
+- This file applies to the entire repository rooted at `D:\HRMS`.
+- Keep edits scoped to the target app (`build/` or `backend/`) unless the task requires integration work.
+- Prefer incremental, reviewable changes over broad refactors.
+- Preserve existing API contracts, route names, and payload shapes unless the task explicitly includes coordinated contract updates.
+
+## Repository Layout
+
+- `build/`: React frontend built with Vite and TypeScript.
 - `backend/`: Laravel API backend.
-- `SETTINGS_AUDIT_REPORT.md`: operational reference for settings/audit behaviors.
+- `SETTINGS_AUDIT_REPORT.md`: reference for settings and audit behavior.
 
-## Frontend Stack (build/)
+## Shared Rules
+
+- Do not edit generated or dependency directories manually.
+- Never modify `build/node_modules/` or `backend/vendor/`.
+- Do not use destructive git commands unless explicitly requested.
+- Do not revert unrelated user changes.
+- Keep changes minimal, direct, and consistent with surrounding code.
+- Use existing primitives, services, and helpers before introducing new abstractions.
+
+## Frontend (`build/`)
+
+### Stack
 
 - React `19.x`
 - Vite `8.x`
-- TypeScript `6.x` (strict mode expected)
+- TypeScript `6.x` in strict mode
 - Tailwind CSS `4.x`
 - React Router DOM `7.x`
 - Zustand `5.x`
 - TanStack React Query `5.x`
 - Framer Motion `12.x`
 - Lucide React `1.x`
-- React Hook Form + Zod for forms/validation
+- React Hook Form + Zod for forms and validation
 
-### Frontend Key Paths
+### Key Paths
 
 - `build/src/main.tsx`: app bootstrap and providers.
 - `build/src/app/routes/app-routes.tsx`: route map.
 - `build/src/app/layouts/app-layout.tsx`: authenticated shell.
 - `build/src/modules/`: feature modules and pages.
 - `build/src/components/`: reusable UI primitives.
-- `build/src/services/`: API-facing services/contracts.
+- `build/src/services/`: API-facing services and contracts.
 - `build/src/store/`: Zustand stores.
 - `build/src/styles/theme.css`: theme tokens.
 
 ### Frontend Rules
 
 - Use `@/*` imports from `build/src`.
-- Reuse existing primitives before introducing new UI patterns.
+- Reuse existing UI primitives before adding new patterns.
 - Use React Query for server state, cache keys, and invalidation.
-- Keep list/filter/form behavior deterministic and role-safe.
-- Avoid introducing dead routes or duplicate service layers.
+- Keep list, filter, and form behavior deterministic.
+- Keep role-sensitive UI behavior consistent with backend permissions.
+- Avoid dead routes, duplicate service layers, and unnecessary state duplication.
+- Prefer responsive implementations that work at desktop and mobile widths.
 
-## Backend Stack (backend/)
+### Frontend Verification
+
+- Run `npm.cmd run build` from `build/` after meaningful frontend changes.
+- Run `npx.cmd tsc --noEmit` from `build/` after TypeScript-impacting changes.
+- Run `npm.cmd run lint` when touching shared UI, hooks, services, or reusable modules.
+- Verify affected screens manually at desktop and mobile sizes when the UI changes.
+
+## Backend (`backend/`)
+
+### Stack
 
 - PHP `^8.2`
 - Laravel `12.x`
-- Laravel Sanctum for API auth
+- Laravel Sanctum for API authentication
 
-### Backend Key Paths
+### Key Paths
 
 - `backend/routes/api.php`: API route registration.
 - `backend/app/Http/Controllers/`: controllers.
 - `backend/app/Models/`: Eloquent models.
-- `backend/app/Services/`: domain/application services.
+- `backend/app/Services/`: domain and application services.
 - `backend/database/migrations/`: schema history.
 - `backend/database/seeders/`: seed data and role templates.
-- `backend/tests/`: feature/unit tests.
+- `backend/tests/`: feature and unit tests.
 
-Never edit generated/vendor code manually:
+### Backend Rules
 
-- `backend/vendor/`
-- `build/node_modules/`
-
-## API Topology And Contracts
-
-Current route registration pattern in `backend/routes/api.php`:
-
-- Unversioned routes under `/api/*`.
-- Versioned mirror routes under `/api/v1/*`.
-- Protected routes use `auth:sanctum` and `audit.log` middleware.
-
-### Response Shape Standard
-
-Keep API responses consistent with base helpers:
-
-- Success: `{ success: true, message, data }`
-- Failure: `{ success: false, message, errors }`
-
-### Routing Rules
-
-- Prefer `Route::apiResource(...)` for CRUD.
-- Add explicit custom endpoints only when CRUD semantics are insufficient.
-- Preserve middleware and permission boundaries when extending endpoints.
-- Group search `orWhere` clauses inside closures to prevent query leakage.
-
-### Query And Data Rules
-
+- Prefer `Route::apiResource(...)` for CRUD endpoints.
+- Add custom endpoints only when CRUD semantics are insufficient.
+- Preserve middleware and permission boundaries when extending routes.
 - Validate strictly in `store` and `update`.
-- Eager-load required relations for frontend tables/forms.
-- Keep pagination/filter/sort contracts explicit and stable.
+- Eager-load the relations needed by frontend tables and forms.
+- Keep pagination, filter, and sort contracts explicit and stable.
+- Group `orWhere` clauses inside closures to prevent query leakage.
+
+### API Contract
+
+- Unversioned routes live under `/api/*`.
+- Versioned mirror routes live under `/api/v1/*`.
+- Protected routes use `auth:sanctum` and `audit.log` middleware.
+- Success responses should use `{ success: true, message, data }`.
+- Failure responses should use `{ success: false, message, errors }`.
+
+### Backend Verification
+
+- Run `php artisan migrate` after schema changes.
+- Run `php artisan migrate:status` and confirm expected state after migration work.
+- Run `php -l` on each edited or new PHP file if full tests are not run.
+- Run `php artisan test` for touched domains when feasible.
 
 ## Performance Module Contract
 
@@ -125,19 +146,15 @@ Keep API responses consistent with base helpers:
 
 ## Communication And Notification Domain
 
-When working on chat/notifications, review and preserve behavior in:
+- When working on chat or notifications, preserve the behavior in `backend/app/Models/ChatMessage.php` and `backend/app/Models/NotificationItem.php`.
+- Avoid changing payload semantics for existing consumers unless frontend and backend are updated together.
 
-- `backend/app/Models/ChatMessage.php`
-- `backend/app/Models/NotificationItem.php`
+## Access Control
 
-Avoid changing payload semantics for existing consumers unless frontend and backend are updated together.
-
-## Access Control Rules
-
-- Assume role/permission restrictions on most protected endpoints.
-- Do not use manager/admin-only endpoints for employee self-service flows.
-- For cross-role dropdown/reference needs, prefer narrow meta endpoints (for example, `performance/meta/employees`).
-- Keep settings/role-management routes behind existing permission middleware.
+- Assume role and permission restrictions on protected endpoints.
+- Do not use manager-only or admin-only endpoints for employee self-service flows.
+- For cross-role dropdown or reference data, prefer narrow meta endpoints such as `performance/meta/employees`.
+- Keep settings and role-management routes behind existing permission middleware.
 
 ## Recommended Commands
 
@@ -162,40 +179,9 @@ php artisan db:seed --class=DatabaseSeeder
 php artisan test
 ```
 
-## Mandatory Verification Checklist
-
-### After Meaningful Frontend Changes
-
-1. Run `npm.cmd run build` from `build/`.
-2. Run `npx.cmd tsc --noEmit` from `build/`.
-3. Run `npm.cmd run lint` when touching shared UI, hooks, or services.
-4. Verify affected screens at desktop and mobile widths.
-
-### After Backend CRUD Or Schema Changes
-
-1. Run `php artisan migrate` from `backend/`.
-2. Run `php artisan migrate:status` and confirm expected state.
-3. Run `php -l` on each edited/new PHP file if full tests are not run.
-4. Run `php artisan test` for touched domains when feasible.
-
-### After Frontend + Backend Integration Changes
-
-1. Validate create/read/update/delete manually for each affected resource.
-2. Confirm frontend payload keys match backend validation keys.
-3. Confirm filters/search do not leak cross-scope records.
-4. Confirm reference/meta endpoints are accessible for intended roles.
-5. Test both `/api/*` and `/api/v1/*` consumers if the change is route-sensitive.
-
-## Safety Rules
-
-- Do not run destructive git commands unless explicitly requested.
-- Do not revert unrelated user changes.
-- Do not modify generated dependency directories.
-- If sandbox/permission blocks required checks, request escalation instead of bypassing safety.
-
 ## Non-Goals
 
 - No broad refactors unrelated to the task.
 - No silent API contract changes without updating all consumers.
-- No route renaming/removal without coordinated frontend/backend updates.
+- No route renaming or removal without coordinated frontend and backend updates.
 - No UI changes that reduce operational density or dashboard usability.

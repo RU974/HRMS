@@ -22,8 +22,8 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
-            'role_ids' => 'nullable|array',
-            'role_ids.*' => 'uuid|exists:roles,id',
+            'role_ids' => ['sometimes', 'array', 'min:1'],
+            'role_ids.*' => ['uuid', 'exists:roles,id'],
         ]);
 
         $user = User::create([

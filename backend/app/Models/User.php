@@ -38,6 +38,7 @@ class User extends Authenticatable
         'email',
         'username',
         'password',
+        'role',
     ];
 
 
@@ -64,6 +65,52 @@ class User extends Authenticatable
             'company_id' => 'string',
             'branch_id' => 'string',
         ];
+    }
+
+    protected ?string $legacyRoleName = null;
+
+    protected static function booted(): void
+    {
+        static::created(function (self $user): void {
+            $user->syncLegacyRoleAssignment();
+        });
+    }
+
+    public function setRoleAttribute(?string $value): void
+    {
+        $this->legacyRoleName = $value !== null ? trim($value) : null;
+    }
+
+    private function syncLegacyRoleAssignment(): void
+    {
+        if (!$this->legacyRoleName) {
+            return;
+        }
+
+        $role = null;
+        if ($this->company_id) {
+            $role = Role::query()
+                ->where('name', $this->legacyRoleName)
+                ->where('company_id', $this->company_id)
+                ->first();
+        }
+
+        if (!$role) {
+            $role = Role::query()
+                ->where('name', $this->legacyRoleName)
+                ->whereNull('company_id')
+                ->first();
+        }
+
+        if (!$role) {
+            return;
+        }
+
+        $this->rolesRelation()->syncWithoutDetaching([
+            $role->id => ['scope' => json_encode(new \stdClass())],
+        ]);
+
+        $this->loadMissing('rolesRelation.permissions');
     }
 
     public function rolesRelation(): BelongsToMany

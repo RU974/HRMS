@@ -10,7 +10,7 @@ class PerformanceGoalController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PerformanceGoal::query()->with('employee:id,first_name,last_name,employee_code');
+        $query = PerformanceGoal::query()->with('employee:id,first_name,last_name,employee_number');
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -44,12 +44,12 @@ class PerformanceGoalController extends Controller
             'status' => $validated['status'] ?? 'not_started',
         ]);
 
-        return $this->ok($item->load('employee:id,first_name,last_name,employee_code'), 'Performance goal created successfully', 201);
+        return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance goal created successfully', 201);
     }
 
     public function show($id)
     {
-        return $this->ok(PerformanceGoal::with('employee:id,first_name,last_name,employee_code')->findOrFail($id));
+        return $this->ok(PerformanceGoal::with('employee:id,first_name,last_name,employee_number')->findOrFail($id));
     }
 
     public function update(Request $request, $id)
@@ -65,7 +65,7 @@ class PerformanceGoalController extends Controller
         ]);
 
         $item->update($validated);
-        return $this->ok($item->load('employee:id,first_name,last_name,employee_code'), 'Performance goal updated successfully');
+        return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance goal updated successfully');
     }
 
     public function destroy($id)

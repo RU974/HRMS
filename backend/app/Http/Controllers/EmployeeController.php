@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Designation;
 use App\Models\Employee;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Shift;
 use Illuminate\Http\Request;
@@ -101,6 +102,7 @@ class EmployeeController extends Controller
         $employee = DB::transaction(function () use ($validated, $name, $request) {
             $linkedUserId = $validated['user_id'] ?? null;
             $createUser = $validated['create_user'] ?? true;
+            $roleName = $validated['role'] ?? User::ROLE_EMPLOYEE;
 
             if (!$linkedUserId && $createUser) {
                 $existingUser = User::where('email', $validated['email'])->first();
@@ -128,6 +130,9 @@ class EmployeeController extends Controller
                     'user_id' => ['This user is already linked to another employee.'],
                 ]);
             }
+
+            $user = User::findOrFail($linkedUserId);
+            $this->assignRoleToUser($user, $roleName);
 
             $designationLabel = $validated['designation'] ?? ($validated['position'] ?? '');
             if (!empty($validated['designation_id'])) {
@@ -332,5 +337,29 @@ class EmployeeController extends Controller
             return;
         }
         abort(403, 'You are not authorized to access this employee.');
+    }
+
+    private function assignRoleToUser(User $user, ?string $roleName): void
+    {
+        $resolvedRoleName = $roleName ?: User::ROLE_EMPLOYEE;
+
+        $role = Role::query()
+            ->where('name', $resolvedRoleName)
+            ->where(function ($query) use ($user): void {
+                $query->whereNull('company_id');
+
+                if ($user->company_id) {
+                    $query->orWhere('company_id', $user->company_id);
+                }
+            })
+            ->first();
+
+        if (!$role) {
+            return;
+        }
+
+        $user->rolesRelation()->syncWithoutDetaching([
+            $role->id => ['scope' => json_encode(new \stdClass())],
+        ]);
     }
 }

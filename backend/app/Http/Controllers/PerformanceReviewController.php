@@ -9,7 +9,7 @@ class PerformanceReviewController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PerformanceReview::query()->with(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email']);
+        $query = PerformanceReview::query()->with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']);
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -37,12 +37,12 @@ class PerformanceReviewController extends Controller
             'reviewer_id' => $validated['reviewer_id'] ?? $request->user()?->id,
         ]);
 
-        return $this->ok($item->load(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email']), 'Performance review created successfully', 201);
+        return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance review created successfully', 201);
     }
 
     public function show($id)
     {
-        return $this->ok(PerformanceReview::with(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email'])->findOrFail($id));
+        return $this->ok(PerformanceReview::with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email'])->findOrFail($id));
     }
 
     public function update(Request $request, $id)
@@ -57,7 +57,7 @@ class PerformanceReviewController extends Controller
         ]);
 
         $item->update($validated);
-        return $this->ok($item->load(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email']), 'Performance review updated successfully');
+        return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance review updated successfully');
     }
 
     public function destroy($id)

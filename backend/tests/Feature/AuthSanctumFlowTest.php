@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class AuthSanctumFlowTest extends TestCase
@@ -13,12 +15,16 @@ class AuthSanctumFlowTest extends TestCase
 
     public function test_register_login_refresh_and_me_flow(): void
     {
-        $register = $this->postJson('/api/auth/register', [
+        $employeeRole = Role::create([
+            'name' => User::ROLE_EMPLOYEE,
+        ]);
+
+        $register = $this->postJson('/api/v1/auth/register', [
             'name' => 'Flow User',
             'email' => 'flow@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'role' => User::ROLE_EMPLOYEE,
+            'role_ids' => [$employeeRole->id],
         ]);
 
         $register->assertCreated()->assertJsonPath('success', true)->assertJsonStructure([
@@ -29,12 +35,12 @@ class AuthSanctumFlowTest extends TestCase
         $token = $register->json('data.token');
 
         $this->withHeader('Authorization', 'Bearer ' . $token)
-            ->getJson('/api/auth/me')
+            ->getJson('/api/v1/auth/me')
             ->assertOk()
             ->assertJsonPath('data.email', 'flow@example.com');
 
         $refresh = $this->withHeader('Authorization', 'Bearer ' . $token)
-            ->postJson('/api/auth/refresh');
+            ->postJson('/api/v1/auth/refresh');
 
         $refresh->assertOk()->assertJsonPath('success', true)->assertJsonStructure([
             'success',
@@ -45,9 +51,29 @@ class AuthSanctumFlowTest extends TestCase
         $this->assertNotSame($token, $newToken);
 
         $this->withHeader('Authorization', 'Bearer ' . $newToken)
-            ->postJson('/api/auth/logout')
+            ->postJson('/api/v1/auth/logout')
             ->assertOk()
             ->assertJsonPath('success', true);
+    }
+
+    public function test_protected_routes_require_auth_and_only_v1_routes_exist(): void
+    {
+        $this->getJson('/api/v1/auth/me')->assertUnauthorized();
+        // legacy /api routes should not exist
+        $this->getJson('/api/auth/me')->assertStatus(404);
+    }
+
+    public function test_register_rejects_invalid_role_ids(): void
+    {
+        $this->postJson('/api/v1/auth/register', [
+            'name' => 'Invalid Role',
+            'email' => 'invalid-role@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'role_ids' => [Str::uuid()->toString()],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['role_ids.0']);
     }
 
     public function test_forgot_and_reset_password_flow(): void
@@ -57,22 +83,24 @@ class AuthSanctumFlowTest extends TestCase
             'password' => bcrypt('oldPassword123'),
         ]);
 
-        $this->postJson('/api/auth/forgot-password', [
+        $this->postJson('/api/v1/auth/forgot-password', [
             'email' => $user->email,
         ])->assertOk()->assertJsonPath('success', true);
 
         $token = Password::broker()->createToken($user);
 
-        $this->postJson('/api/auth/reset-password', [
+        $this->postJson('/api/v1/auth/reset-password', [
             'token' => $token,
             'email' => $user->email,
             'password' => 'NewPassword123',
             'password_confirmation' => 'NewPassword123',
         ])->assertOk()->assertJsonPath('success', true);
 
-        $this->postJson('/api/auth/login', [
+        $this->postJson('/api/v1/auth/login', [
             'email' => $user->email,
             'password' => 'NewPassword123',
         ])->assertOk()->assertJsonPath('success', true);
     }
 }
+
+

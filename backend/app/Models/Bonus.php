@@ -17,6 +17,15 @@ class Bonus extends Model
         'notes',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'amount' => 'decimal:2',
+            'taxable' => 'boolean',
+            'effective_date' => 'date:Y-m-d',
+        ];
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
@@ -27,4 +36,3 @@ class Bonus extends Model
         return $this->belongsTo(Payroll::class);
     }
 }
-

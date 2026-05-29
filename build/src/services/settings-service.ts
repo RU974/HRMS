@@ -2,7 +2,16 @@ import { apiClient } from "@/services/api-client";
 
 export type RoleItem = { id: string; name: string; description?: string | null; permissions?: { id: string; key: string }[] };
 export type PermissionGroup = { module: string; permissions: { id: string; key: string }[] };
-export type UserItem = { id: number; name: string; email: string; rolesRelation?: { id: string; name: string }[]; company_id?: string | null; branch_id?: string | null };
+export type UserItem = {
+  id: number;
+  name: string;
+  email: string;
+  role?: string | null;
+  rolesRelation?: { id: string; name: string }[];
+  roles_relation?: { id: string; name: string }[];
+  company_id?: string | null;
+  branch_id?: string | null;
+};
 export type CompanyItem = { id: string; name: string; email?: string | null; phone?: string | null; timezone?: string | null };
 export type BranchItem = { id: string; company_id: string; name: string; code?: string | null; email?: string | null; phone?: string | null };
 export type ThemeItem = { id: number; theme: string; preferences?: Record<string, unknown> | null };

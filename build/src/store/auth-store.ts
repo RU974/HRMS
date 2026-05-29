@@ -5,6 +5,7 @@ export interface AuthUser {
   name: string;
   email: string;
   rolesRelation?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
+  roles_relation?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
 }
 
 interface AuthState {
@@ -20,7 +21,7 @@ interface AuthState {
 const storedToken = localStorage.getItem("hrms_token");
 const storedUser = localStorage.getItem("hrms_user");
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: Boolean(storedToken),
   token: storedToken,
   user: storedUser ? JSON.parse(storedUser) as AuthUser : null,
@@ -34,8 +35,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, isAuthenticated: true });
   },
   hasPermission: (permission) => {
-    const state = useAuthStore.getState();
-    const keys = (state.user?.rolesRelation ?? []).flatMap((r) => (r.permissions ?? []).map((p) => p.key));
+    const state = get();
+    const roles = state.user?.rolesRelation ?? state.user?.roles_relation ?? [];
+    const keys = roles.flatMap((r) => (r.permissions ?? []).map((p) => p.key));
     return keys.includes("*.*") || keys.includes(permission);
   },
   logout: () => {

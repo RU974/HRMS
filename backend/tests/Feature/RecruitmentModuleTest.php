@@ -18,7 +18,7 @@ class RecruitmentModuleTest extends TestCase
         $department = Department::create(['name' => 'Engineering']);
         Sanctum::actingAs($recruiter);
 
-        $jobResponse = $this->postJson('/api/job-openings', [
+        $jobResponse = $this->postJson('/api/v1/job-openings', [
             'title' => 'Backend Engineer',
             'department_id' => $department->id,
             'employment_type' => 'full_time',
@@ -28,7 +28,7 @@ class RecruitmentModuleTest extends TestCase
         ])->assertCreated();
         $jobId = $jobResponse->json('data.id');
 
-        $candidateResponse = $this->postJson('/api/candidates', [
+        $candidateResponse = $this->postJson('/api/v1/candidates', [
             'job_opening_id' => $jobId,
             'full_name' => 'Ali Khan',
             'email' => 'ali.khan@example.com',
@@ -37,7 +37,7 @@ class RecruitmentModuleTest extends TestCase
         ])->assertCreated();
         $candidateId = $candidateResponse->json('data.id');
 
-        $this->postJson('/api/interviews', [
+        $this->postJson('/api/v1/interviews', [
             'candidate_id' => $candidateId,
             'interviewer_name' => 'Sara Manager',
             'interview_type' => 'technical',
@@ -45,23 +45,23 @@ class RecruitmentModuleTest extends TestCase
             'result' => 'pending',
         ])->assertCreated();
 
-        $this->putJson("/api/candidates/{$candidateId}", [
+        $this->putJson("/api/v1/candidates/{$candidateId}", [
             'stage' => 'hired',
         ])->assertOk();
 
-        $this->postJson('/api/onboarding', [
+        $this->postJson('/api/v1/onboarding', [
             'candidate_id' => $candidateId,
             'onboarding_status' => 'in_progress',
             'onboarding_start_date' => '2026-05-21',
             'onboarding_notes' => 'Offer accepted and docs pending',
         ])->assertCreated();
 
-        $this->getJson('/api/onboarding')
+        $this->getJson('/api/v1/onboarding')
             ->assertOk()
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.data.0.id', $candidateId);
 
-        $this->getJson('/api/recruitment/pipeline-summary')
+        $this->getJson('/api/v1/recruitment/pipeline-summary')
             ->assertOk()
             ->assertJsonPath('success', true);
     }
@@ -71,9 +71,11 @@ class RecruitmentModuleTest extends TestCase
         $employee = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
         Sanctum::actingAs($employee);
 
-        $this->getJson('/api/job-openings')->assertForbidden();
-        $this->getJson('/api/candidates')->assertForbidden();
-        $this->getJson('/api/interviews')->assertForbidden();
-        $this->getJson('/api/onboarding')->assertForbidden();
+        $this->getJson('/api/v1/job-openings')->assertForbidden();
+        $this->getJson('/api/v1/candidates')->assertForbidden();
+        $this->getJson('/api/v1/interviews')->assertForbidden();
+        $this->getJson('/api/v1/onboarding')->assertForbidden();
     }
 }
+
+

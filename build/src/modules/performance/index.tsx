@@ -116,10 +116,11 @@ export function PerformancePage() {
     setModalOpen(true);
   }
 
-  function employeeName(item?: { first_name?: string | null; last_name?: string | null; name?: string | null; employee_code?: string | null } | null) {
+  function employeeName(item?: { first_name?: string | null; last_name?: string | null; name?: string | null; employee_code?: string | null; employee_number?: string | null } | null) {
     if (!item) return "-";
     const name = `${item.first_name ?? item.name ?? ""} ${item.last_name ?? ""}`.trim();
-    return item.employee_code ? `${name} (${item.employee_code})` : name;
+    const employeeCode = item.employee_code ?? item.employee_number;
+    return employeeCode ? `${name} (${employeeCode})` : name;
   }
 
   async function onDelete(id: number) {

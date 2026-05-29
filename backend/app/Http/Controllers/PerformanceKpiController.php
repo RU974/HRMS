@@ -9,7 +9,7 @@ class PerformanceKpiController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PerformanceKpi::query()->with('employee:id,first_name,last_name,employee_code');
+        $query = PerformanceKpi::query()->with('employee:id,first_name,last_name,employee_number');
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -38,12 +38,12 @@ class PerformanceKpiController extends Controller
             'unit' => $validated['unit'] ?? '%',
         ]);
 
-        return $this->ok($item->load('employee:id,first_name,last_name,employee_code'), 'Performance KPI created successfully', 201);
+        return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance KPI created successfully', 201);
     }
 
     public function show($id)
     {
-        return $this->ok(PerformanceKpi::with('employee:id,first_name,last_name,employee_code')->findOrFail($id));
+        return $this->ok(PerformanceKpi::with('employee:id,first_name,last_name,employee_number')->findOrFail($id));
     }
 
     public function update(Request $request, $id)
@@ -58,7 +58,7 @@ class PerformanceKpiController extends Controller
         ]);
 
         $item->update($validated);
-        return $this->ok($item->load('employee:id,first_name,last_name,employee_code'), 'Performance KPI updated successfully');
+        return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance KPI updated successfully');
     }
 
     public function destroy($id)

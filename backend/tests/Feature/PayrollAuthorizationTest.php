@@ -42,7 +42,7 @@ class PayrollAuthorizationTest extends TestCase
         ]);
 
         Sanctum::actingAs($employeeUser);
-        $this->postJson('/api/payroll/' . $payroll->id . '/mark-paid')
+        $this->postJson('/api/v1/payroll/' . $payroll->id . '/mark-paid')
             ->assertForbidden();
     }
 
@@ -75,7 +75,7 @@ class PayrollAuthorizationTest extends TestCase
         ]);
 
         Sanctum::actingAs($manager);
-        $this->postJson('/api/payroll/' . $payroll->id . '/mark-paid')
+        $this->postJson('/api/v1/payroll/' . $payroll->id . '/mark-paid')
             ->assertOk()
             ->assertJsonPath('data.status', 'paid');
     }
@@ -110,7 +110,7 @@ class PayrollAuthorizationTest extends TestCase
 
         Sanctum::actingAs($manager);
 
-        $this->postJson('/api/payroll/generate', [
+        $this->postJson('/api/v1/payroll/generate', [
             'month' => 5,
             'year' => 2026,
         ])
@@ -120,3 +120,5 @@ class PayrollAuthorizationTest extends TestCase
             ->assertJsonPath('data.failed', 0);
     }
 }
+
+

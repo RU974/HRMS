@@ -131,6 +131,26 @@ export function SettingsPage() {
     return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
   }
 
+  function getUserRoles(user: UserItem) {
+    return user.rolesRelation ?? user.roles_relation ?? [];
+  }
+
+  function getUserRoleIds(user: UserItem) {
+    const assignedRoles = getUserRoles(user);
+    if (assignedRoles.length > 0) {
+      return assignedRoles.map((role) => role.id);
+    }
+
+    if (user.role) {
+      const matchedRole = roles.find((role) => role.name === user.role);
+      if (matchedRole) {
+        return [matchedRole.id];
+      }
+    }
+
+    return [];
+  }
+
   function resetUserForm() {
     setEditingUserId(null);
     setUserForm({ name: "", email: "", password: "", role_ids: [], company_id: "", branch_id: "" });
@@ -200,7 +220,7 @@ export function SettingsPage() {
             })}>{editingUserId ? "Update" : "Create"}</Button><Button variant="outline" onClick={resetUserForm}>Reset</Button></div>
           </aside>
           <div className={`${panelClass} overflow-auto p-4`}>
-            <table className="min-w-full text-sm"><thead><tr className="border-b"><th className="pb-2 text-left">Name</th><th className="pb-2 text-left">Email</th><th className="pb-2 text-left">Roles</th><th /></tr></thead><tbody>{filteredUsers.map((u) => <tr key={u.id} className="border-b last:border-0"><td className="py-2">{u.name}</td><td>{u.email}</td><td>{(u.rolesRelation ?? []).map((r) => r.name).join(", ") || "Unassigned"}</td><td className="space-x-2 text-right"><Button variant="outline" onClick={() => { setEditingUserId(u.id); setUserForm({ name: u.name, email: u.email, password: "", role_ids: (u.rolesRelation ?? []).map((r) => r.id), company_id: u.company_id ?? "", branch_id: u.branch_id ?? "" }); }}>Edit</Button><Button variant="outline" onClick={() => window.confirm("Delete user?") && withReload(() => deleteUser(u.id))}>Delete</Button></td></tr>)}</tbody></table>
+            <table className="min-w-full text-sm"><thead><tr className="border-b"><th className="pb-2 text-left">Name</th><th className="pb-2 text-left">Email</th><th className="pb-2 text-left">Roles</th><th /></tr></thead><tbody>{filteredUsers.map((u) => <tr key={u.id} className="border-b last:border-0"><td className="py-2">{u.name}</td><td>{u.email}</td><td>{getUserRoles(u).map((r) => r.name).join(", ") || u.role || "Unassigned"}</td><td className="space-x-2 text-right"><Button variant="outline" onClick={() => { setEditingUserId(u.id); setUserForm({ name: u.name, email: u.email, password: "", role_ids: getUserRoleIds(u), company_id: u.company_id ?? "", branch_id: u.branch_id ?? "" }); }}>Edit</Button><Button variant="outline" onClick={() => window.confirm("Delete user?") && withReload(() => deleteUser(u.id))}>Delete</Button></td></tr>)}</tbody></table>
           </div>
         </section>
       )}

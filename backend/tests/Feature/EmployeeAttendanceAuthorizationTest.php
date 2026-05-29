@@ -19,7 +19,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
         $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
         Sanctum::actingAs($employeeUser);
 
-        $this->getJson('/api/employees')->assertForbidden();
+        $this->getJson('/api/v1/employees')->assertForbidden();
     }
 
     public function test_employee_cannot_search_employees()
@@ -27,7 +27,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
         $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
         Sanctum::actingAs($employeeUser);
 
-        $this->getJson('/api/employees/search?q=John')->assertForbidden();
+        $this->getJson('/api/v1/employees/search?q=John')->assertForbidden();
     }
 
     public function test_employee_cannot_get_employees_by_department()
@@ -36,7 +36,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
         $department = Department::create(['name' => 'Operations']);
         Sanctum::actingAs($employeeUser);
 
-        $this->getJson('/api/employees/department/' . $department->id)->assertForbidden();
+        $this->getJson('/api/v1/employees/department/' . $department->id)->assertForbidden();
     }
 
     public function test_employee_cannot_export_employees()
@@ -44,7 +44,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
         $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
         Sanctum::actingAs($employeeUser);
 
-        $this->get('/api/employees/export/csv')->assertForbidden();
+        $this->get('/api/v1/employees/export/csv')->assertForbidden();
     }
 
     public function test_employee_cannot_check_in_for_another_employee()
@@ -75,7 +75,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
         Sanctum::actingAs($selfUser);
 
-        $this->postJson('/api/attendance/check-in', ['employee_id' => $otherEmployee->id])
+        $this->postJson('/api/v1/attendance/check-in', ['employee_id' => $otherEmployee->id])
             ->assertForbidden();
     }
 
@@ -114,7 +114,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
         Sanctum::actingAs($selfUser);
 
-        $this->postJson('/api/attendance/check-out', ['employee_id' => $otherEmployee->id])
+        $this->postJson('/api/v1/attendance/check-out', ['employee_id' => $otherEmployee->id])
             ->assertForbidden();
     }
 
@@ -146,7 +146,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
         Sanctum::actingAs($selfUser);
 
-        $this->getJson('/api/attendance?employee_id=' . $otherEmployee->id)
+        $this->getJson('/api/v1/attendance?employee_id=' . $otherEmployee->id)
             ->assertForbidden();
     }
 
@@ -185,7 +185,9 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
         Sanctum::actingAs($selfUser);
 
-        $this->getJson('/api/attendance/' . $attendance->id)
+        $this->getJson('/api/v1/attendance/' . $attendance->id)
             ->assertForbidden();
     }
 }
+
+

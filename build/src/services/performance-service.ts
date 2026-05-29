@@ -6,6 +6,7 @@ export interface PerformanceEmployee {
   last_name?: string | null;
   name?: string | null;
   employee_code?: string | null;
+  employee_number?: string | null;
 }
 
 export interface PerformanceReview {
@@ -119,4 +120,3 @@ export function updatePerformanceAppraisal(id: number, payload: Partial<Performa
 export function deletePerformanceAppraisal(id: number) {
   return apiClient<null>(`/performance-appraisals/${id}`, { method: "DELETE" });
 }
-

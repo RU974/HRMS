@@ -60,22 +60,22 @@ class ReportDashboardTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->getJson('/api/reports/employees')
+        $this->getJson('/api/v1/reports/employees')
             ->assertOk()
             ->assertJsonStructure(['success', 'message', 'data'])
             ->assertJsonCount(1, 'data');
 
-        $this->getJson('/api/reports/attendance?month=5&year=2026')
+        $this->getJson('/api/v1/reports/attendance?month=5&year=2026')
             ->assertOk()
             ->assertJsonStructure(['success', 'message', 'data'])
             ->assertJsonCount(1, 'data');
 
-        $this->getJson('/api/reports/leave?month=5&year=2026')
+        $this->getJson('/api/v1/reports/leave?month=5&year=2026')
             ->assertOk()
             ->assertJsonStructure(['success', 'message', 'data'])
             ->assertJsonCount(1, 'data');
 
-        $this->getJson('/api/reports/payroll?month=5&year=2026')
+        $this->getJson('/api/v1/reports/payroll?month=5&year=2026')
             ->assertOk()
             ->assertJsonStructure(['success', 'message', 'data'])
             ->assertJsonCount(1, 'data');
@@ -86,9 +86,9 @@ class ReportDashboardTest extends TestCase
         $user = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
         Sanctum::actingAs($user);
 
-        $this->getJson('/api/reports/attendance?month=13&year=1999')->assertStatus(422);
-        $this->getJson('/api/reports/leave?month=13&year=1999')->assertStatus(422);
-        $this->getJson('/api/reports/payroll?month=13&year=1999')->assertStatus(422);
+        $this->getJson('/api/v1/reports/attendance?month=13&year=1999')->assertStatus(422);
+        $this->getJson('/api/v1/reports/leave?month=13&year=1999')->assertStatus(422);
+        $this->getJson('/api/v1/reports/payroll?month=13&year=1999')->assertStatus(422);
     }
 
     public function test_dashboard_summary_returns_expected_structure(): void
@@ -128,7 +128,7 @@ class ReportDashboardTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->getJson('/api/dashboard/summary?month=5&year=2026')
+        $this->getJson('/api/v1/dashboard/summary?month=5&year=2026')
             ->assertOk()
             ->assertJsonPath('data.month', '5')
             ->assertJsonPath('data.year', '2026')
@@ -140,7 +140,9 @@ class ReportDashboardTest extends TestCase
         $user = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
         Sanctum::actingAs($user);
 
-        $this->getJson('/api/dashboard/summary?month=13&year=1999')
+        $this->getJson('/api/v1/dashboard/summary?month=13&year=1999')
             ->assertStatus(422);
     }
 }
+
+

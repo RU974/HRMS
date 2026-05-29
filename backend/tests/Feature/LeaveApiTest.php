@@ -30,7 +30,7 @@ class LeaveApiTest extends TestCase
         ]);
 
         Sanctum::actingAs($employeeUser);
-        $createResponse = $this->postJson('/api/leaves', [
+        $createResponse = $this->postJson('/api/v1/leaves', [
             'employee_id' => $employee->id,
             'type' => 'annual',
             'from_date' => '2026-05-20',
@@ -41,7 +41,7 @@ class LeaveApiTest extends TestCase
         $leaveId = $createResponse->json('data.id');
 
         Sanctum::actingAs($manager);
-        $this->putJson('/api/leaves/' . $leaveId, ['status' => 'approved'])
+        $this->putJson('/api/v1/leaves/' . $leaveId, ['status' => 'approved'])
             ->assertOk()
             ->assertJsonPath('data.status', 'approved');
     }
@@ -73,7 +73,7 @@ class LeaveApiTest extends TestCase
         ]);
 
         Sanctum::actingAs($employeeUserA);
-        $this->postJson('/api/leaves', [
+        $this->postJson('/api/v1/leaves', [
             'employee_id' => $employeeB->id,
             'type' => 'sick',
             'from_date' => '2026-05-20',
@@ -81,3 +81,5 @@ class LeaveApiTest extends TestCase
         ])->assertForbidden();
     }
 }
+
+

@@ -181,8 +181,12 @@ $registerRoutes = function (): void {
     });
 };
 
-// Backward-compatible routes: /api/*
-$registerRoutes();
+Route::get('/', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'HRMS API v1',
+        'version' => 'v1',
+    ]);
+});
 
-// Versioned routes: /api/v1/*
 Route::prefix('v1')->group($registerRoutes);

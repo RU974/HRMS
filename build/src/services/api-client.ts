@@ -7,7 +7,10 @@ export interface ApiResponse<T> {
   errors?: unknown;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ??
+  import.meta.env.VITE_API_URL ??
+  "/api/v1";
 
 interface RequestOptions extends RequestInit {
   auth?: boolean;

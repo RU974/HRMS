@@ -9,7 +9,7 @@ class PerformanceAppraisalController extends Controller
 {
     public function index(Request $request)
     {
-        $query = PerformanceAppraisal::query()->with(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email']);
+        $query = PerformanceAppraisal::query()->with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']);
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -39,12 +39,12 @@ class PerformanceAppraisalController extends Controller
             'reviewer_id' => $validated['reviewer_id'] ?? $request->user()?->id,
         ]);
 
-        return $this->ok($item->load(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email']), 'Performance appraisal created successfully', 201);
+        return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance appraisal created successfully', 201);
     }
 
     public function show($id)
     {
-        return $this->ok(PerformanceAppraisal::with(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email'])->findOrFail($id));
+        return $this->ok(PerformanceAppraisal::with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email'])->findOrFail($id));
     }
 
     public function update(Request $request, $id)
@@ -60,7 +60,7 @@ class PerformanceAppraisalController extends Controller
         ]);
 
         $item->update($validated);
-        return $this->ok($item->load(['employee:id,first_name,last_name,employee_code', 'reviewer:id,name,email']), 'Performance appraisal updated successfully');
+        return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance appraisal updated successfully');
     }
 
     public function destroy($id)
