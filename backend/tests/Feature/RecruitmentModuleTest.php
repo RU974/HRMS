@@ -14,7 +14,7 @@ class RecruitmentModuleTest extends TestCase
 
     public function test_recruiter_can_run_recruitment_flow(): void
     {
-        $recruiter = User::factory()->create(['role' => User::ROLE_RECRUITER]);
+        $recruiter = $this->createUserWithRole(User::ROLE_RECRUITER);
         $department = Department::create(['name' => 'Engineering']);
         Sanctum::actingAs($recruiter);
 
@@ -68,7 +68,7 @@ class RecruitmentModuleTest extends TestCase
 
     public function test_non_recruitment_role_cannot_access_recruitment_routes(): void
     {
-        $employee = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employee = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         Sanctum::actingAs($employee);
 
         $this->getJson('/api/v1/job-openings')->assertForbidden();

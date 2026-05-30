@@ -11,6 +11,7 @@ export type OnboardingStatus = "pending" | "in_progress" | "completed" | "deferr
 
 export interface JobOpening {
   id: number;
+  department_id?: number | null;
   title: string;
   employment_type: string;
   location?: string | null;
@@ -19,6 +20,7 @@ export interface JobOpening {
   open_positions: number;
   posted_at?: string | null;
   closed_at?: string | null;
+  department?: { id: number; name: string } | null;
 }
 
 export interface Candidate {
@@ -53,6 +55,7 @@ export interface Interview {
 
 export interface JobOpeningPayload {
   title: string;
+  department_id?: number | null;
   employment_type?: string;
   location?: string;
   description?: string;
@@ -159,3 +162,11 @@ export function deleteOnboarding(id: number) {
   return apiClient<null>(`/onboarding/${id}`, { method: "DELETE" });
 }
 
+export interface RecruitmentPipelineSummaryItem {
+  stage: CandidateStage;
+  count: number;
+}
+
+export function getRecruitmentPipelineSummary() {
+  return apiClient<RecruitmentPipelineSummaryItem[]>("/recruitment/pipeline-summary");
+}

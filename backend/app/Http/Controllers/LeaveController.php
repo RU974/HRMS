@@ -9,19 +9,12 @@ use Illuminate\Http\Request;
 
 class LeaveController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-    ];
-
     public function index(Request $request)
     {
         $query = Leave::query()->with('employee:id,name');
-        $role = $request->user()?->role;
+        $user = $request->user();
 
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($user?->can('view leaves') || $user?->can('approve leaves')) {
             if ($request->filled('employee_id')) {
                 $query->where('employee_id', $request->employee_id);
             }
@@ -29,7 +22,7 @@ class LeaveController extends Controller
                 $query->where('status', $request->status);
             }
         } else {
-            $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
+            $employee = Employee::where('user_id', $user?->id)->firstOrFail();
             $query->where('employee_id', $employee->id);
         }
 
@@ -64,9 +57,7 @@ class LeaveController extends Controller
     public function update(Request $request, $id)
     {
         $leave = Leave::findOrFail($id);
-        $role = $request->user()?->role;
-        $isManager = in_array($role, self::MANAGER_ROLES, true);
-        if (!$isManager) {
+        if (!$request->user()?->can('approve leaves')) {
             abort(403, 'You are not authorized to update this leave request.');
         }
 
@@ -88,9 +79,8 @@ class LeaveController extends Controller
     public function destroy(Request $request, $id)
     {
         $leave = Leave::findOrFail($id);
-        $role = $request->user()?->role;
 
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('approve leaves')) {
             $leave->delete();
             return $this->ok(null, 'Leave request deleted successfully');
         }
@@ -106,8 +96,7 @@ class LeaveController extends Controller
 
     private function authorizeRead(Request $request, Leave $leave): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('view leaves') || $request->user()?->can('approve leaves')) {
             return;
         }
 
@@ -121,13 +110,12 @@ class LeaveController extends Controller
 
     private function authorizeCreate(Request $request, int $employeeId): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('manage leaves') || $request->user()?->can('approve leaves')) {
             return;
         }
 
         $employee = Employee::where('user_id', $request->user()?->id)->first();
-        if ($employee && (int) $employee->id === $employeeId) {
+        if ($request->user()?->can('request own leave') && $employee && (int) $employee->id === $employeeId) {
             return;
         }
 

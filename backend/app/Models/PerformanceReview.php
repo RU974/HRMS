@@ -15,6 +15,10 @@ class PerformanceReview extends Model
         'summary',
     ];
 
+    protected $casts = [
+        'rating' => 'integer',
+    ];
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
@@ -25,4 +29,3 @@ class PerformanceReview extends Model
         return $this->belongsTo(User::class, 'reviewer_id');
     }
 }
-

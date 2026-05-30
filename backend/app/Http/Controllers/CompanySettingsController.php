@@ -9,27 +9,25 @@ use Illuminate\Http\Request;
 
 class CompanySettingsController extends Controller
 {
-    private const ADMIN_ROLES = [User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN, User::ROLE_HR_MANAGER];
-
     public function __construct(private readonly CompanySettingsService $service)
     {
     }
 
     public function index(Request $request)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         return $this->ok(Company::query()->orderBy('name')->get());
     }
 
     public function show(Request $request, string $id)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         return $this->ok(Company::findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|max:255',
@@ -45,7 +43,7 @@ class CompanySettingsController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => 'nullable|email|max:255',
@@ -61,7 +59,7 @@ class CompanySettingsController extends Controller
 
     public function destroy(Request $request, string $id)
     {
-        $this->authorizeRoles($request, self::ADMIN_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         Company::findOrFail($id)->delete();
         return $this->ok(null, 'Company deleted successfully');
     }

@@ -14,8 +14,8 @@ class UserManagementController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'user.manage');
-        $q = \App\Models\User::query()->with('rolesRelation');
+        $this->authorizePermission($request, 'manage users');
+        $q = \App\Models\User::query()->with(['roles.permissions', 'permissions']);
         if ($request->filled('search')) {
             $search = (string) $request->input('search');
             $q->where(function ($w) use ($search) {
@@ -27,13 +27,13 @@ class UserManagementController extends Controller
 
     public function show(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'user.manage');
-        return $this->ok(\App\Models\User::with('rolesRelation')->findOrFail($id));
+        $this->authorizePermission($request, 'manage users');
+        return $this->ok(\App\Models\User::with(['roles.permissions', 'permissions'])->findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'user.manage');
+        $this->authorizePermission($request, 'manage users');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email',
@@ -59,7 +59,7 @@ class UserManagementController extends Controller
 
     public function update(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'user.manage');
+        $this->authorizePermission($request, 'manage users');
         $user = \App\Models\User::findOrFail($id);
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
@@ -85,7 +85,7 @@ class UserManagementController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'user.manage');
+        $this->authorizePermission($request, 'manage users');
         $user = \App\Models\User::findOrFail($id);
         if ($request->user()?->id === $user->id) {
             return $this->fail('You cannot delete your own account.', 422);

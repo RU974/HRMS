@@ -18,7 +18,7 @@ class ReportDashboardTest extends TestCase
 
     public function test_reports_endpoints_return_counts_for_valid_input(): void
     {
-        $user = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
         $department = Department::create(['name' => 'Operations']);
         $employee = Employee::create([
             'user_id' => $user->id,
@@ -83,7 +83,7 @@ class ReportDashboardTest extends TestCase
 
     public function test_report_endpoints_validate_month_and_year(): void
     {
-        $user = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
         Sanctum::actingAs($user);
 
         $this->getJson('/api/v1/reports/attendance?month=13&year=1999')->assertStatus(422);
@@ -93,7 +93,7 @@ class ReportDashboardTest extends TestCase
 
     public function test_dashboard_summary_returns_expected_structure(): void
     {
-        $user = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
         $department = Department::create(['name' => 'Operations']);
         $employee = Employee::create([
             'user_id' => $user->id,
@@ -137,7 +137,7 @@ class ReportDashboardTest extends TestCase
 
     public function test_dashboard_summary_validates_month_and_year(): void
     {
-        $user = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
         Sanctum::actingAs($user);
 
         $this->getJson('/api/v1/dashboard/summary?month=13&year=1999')

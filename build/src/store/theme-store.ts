@@ -1,15 +1,27 @@
 import { create } from "zustand";
 
-type Theme = "light" | "dark";
+export type ThemePreference = "light" | "dark" | "system";
 
 interface ThemeState {
-  theme: Theme;
+  theme: ThemePreference;
+  setTheme: (theme: ThemePreference) => void;
   toggleTheme: () => void;
 }
 
-export const useThemeStore = create<ThemeState>((set) => ({
+function getSystemTheme(): "light" | "dark" {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+
+  return "light";
+}
+
+export const useThemeStore = create<ThemeState>((set, get) => ({
   theme: "light",
-  toggleTheme: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" }))
+  setTheme: (theme) => set({ theme }),
+  toggleTheme: () => {
+    const current = get().theme;
+    const resolved = current === "system" ? getSystemTheme() : current;
+    set({ theme: resolved === "light" ? "dark" : "light" });
+  },
 }));
-
-

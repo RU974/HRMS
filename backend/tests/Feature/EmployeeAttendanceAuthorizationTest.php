@@ -16,7 +16,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_list_employees()
     {
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         Sanctum::actingAs($employeeUser);
 
         $this->getJson('/api/v1/employees')->assertForbidden();
@@ -24,7 +24,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_search_employees()
     {
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         Sanctum::actingAs($employeeUser);
 
         $this->getJson('/api/v1/employees/search?q=John')->assertForbidden();
@@ -32,7 +32,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_get_employees_by_department()
     {
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Operations']);
         Sanctum::actingAs($employeeUser);
 
@@ -41,7 +41,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_export_employees()
     {
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         Sanctum::actingAs($employeeUser);
 
         $this->get('/api/v1/employees/export/csv')->assertForbidden();
@@ -49,8 +49,8 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_check_in_for_another_employee()
     {
-        $selfUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
-        $otherUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $selfUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $otherUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
 
         $selfEmployee = Employee::create([
@@ -81,8 +81,8 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_check_out_for_another_employee()
     {
-        $selfUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
-        $otherUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $selfUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $otherUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
 
         $selfEmployee = Employee::create([
@@ -120,8 +120,8 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_view_other_employee_attendance_list()
     {
-        $selfUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
-        $otherUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $selfUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $otherUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
 
         $selfEmployee = Employee::create([
@@ -152,8 +152,8 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
 
     public function test_employee_cannot_view_other_employee_attendance_record()
     {
-        $selfUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
-        $otherUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $selfUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $otherUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
 
         $selfEmployee = Employee::create([

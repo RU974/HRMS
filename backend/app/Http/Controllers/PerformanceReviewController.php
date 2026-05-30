@@ -9,13 +9,20 @@ class PerformanceReviewController extends Controller
 {
     public function index(Request $request)
     {
+        $this->authorizePermission($request, 'view performance');
         $query = PerformanceReview::query()->with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']);
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
             $query->where(function ($builder) use ($search) {
                 $builder->where('period', 'like', "%{$search}%")
-                    ->orWhere('summary', 'like', "%{$search}%");
+                    ->orWhere('summary', 'like', "%{$search}%")
+                    ->orWhereHas('employee', function ($employeeQuery) use ($search) {
+                        $employeeQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('employee_number', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -24,6 +31,7 @@ class PerformanceReviewController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizePermission($request, 'manage performance');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'period' => 'required|string|max:100',
@@ -40,13 +48,15 @@ class PerformanceReviewController extends Controller
         return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance review created successfully', 201);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $this->authorizePermission($request, 'view performance');
         return $this->ok(PerformanceReview::with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email'])->findOrFail($id));
     }
 
     public function update(Request $request, $id)
     {
+        $this->authorizePermission($request, 'edit performance');
         $item = PerformanceReview::findOrFail($id);
         $validated = $request->validate([
             'employee_id' => 'sometimes|exists:employees,id',
@@ -60,8 +70,9 @@ class PerformanceReviewController extends Controller
         return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance review updated successfully');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->authorizePermission($request, 'manage performance');
         PerformanceReview::findOrFail($id)->delete();
         return $this->ok(null, 'Performance review deleted successfully');
     }

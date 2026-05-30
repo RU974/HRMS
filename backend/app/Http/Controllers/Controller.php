@@ -27,7 +27,7 @@ abstract class Controller
     protected function authorizePermission(Request $request, string $permission, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
-        if (!$user || !$user->hasPermission($permission)) {
+        if (!$user || !$user->can($permission)) {
             abort(403, $message);
         }
     }
@@ -35,7 +35,7 @@ abstract class Controller
     protected function authorizeAnyPermission(Request $request, array $permissions, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
-        if (!$user || !$user->hasAnyPermission($permissions)) {
+        if (!$user || !$user->can($permissions)) {
             abort(403, $message);
         }
     }
@@ -55,25 +55,21 @@ abstract class Controller
 
     protected function authorizeRoles(Request $request, array $roles, string $message = 'You are not authorized to perform this action.'): void
     {
-        $user = $request->user()?->loadMissing('rolesRelation');
+        $user = $request->user()?->loadMissing('roles');
         if (!$user) {
             abort(403, $message);
         }
 
-        $userRoleNames = $user->rolesRelation->pluck('name')->all();
-        if (count(array_intersect($roles, $userRoleNames)) === 0) {
+        if (!$user->hasAnyRole($roles)) {
             abort(403, $message);
         }
     }
 
     protected function authorizeSelfOrRole(Request $request, ?int $userId, array $roles, string $message = 'You are not authorized to perform this action.'): void
     {
-        $user = $request->user()?->loadMissing('rolesRelation');
-        if ($user) {
-            $userRoleNames = $user->rolesRelation->pluck('name')->all();
-            if (count(array_intersect($roles, $userRoleNames)) > 0) {
-                return;
-            }
+        $user = $request->user();
+        if ($user && $user->hasAnyRole($roles)) {
+            return;
         }
 
         if ($userId !== null && $request->user()?->id === $userId) {

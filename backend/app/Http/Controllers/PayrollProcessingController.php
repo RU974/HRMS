@@ -9,17 +9,9 @@ use Illuminate\Http\Request;
 
 class PayrollProcessingController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-        User::ROLE_PAYROLL_MANAGER,
-    ];
-
     public function index(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'process payroll');
         $query = PayrollProcessing::query();
 
         if ($request->filled('month')) {
@@ -37,7 +29,7 @@ class PayrollProcessingController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'process payroll');
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2020',
@@ -62,13 +54,13 @@ class PayrollProcessingController extends Controller
 
     public function show(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'process payroll');
         return $this->ok(PayrollProcessing::findOrFail($id));
     }
 
     public function update(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'process payroll');
         $item = PayrollProcessing::findOrFail($id);
         $validated = $request->validate([
             'month' => 'sometimes|integer|min:1|max:12',
@@ -96,7 +88,7 @@ class PayrollProcessingController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'process payroll');
         PayrollProcessing::findOrFail($id)->delete();
         return $this->ok(null, 'Payroll processing deleted successfully');
     }

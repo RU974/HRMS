@@ -11,42 +11,37 @@ class RoleSeeder extends Seeder
 {
     public function run(): void
     {
-        $all = Permission::all()->keyBy(fn (Permission $p) => $p->module . '.' . $p->action);
+        $all = Permission::all()->keyBy(function (Permission $permission): string {
+            return mb_strtolower($permission->name ?: $permission->module . '.' . $permission->action);
+        });
+        $allPermissionKeys = $all->keys()->all();
 
         $roles = [
-            'Super Admin' => ['*.*'],
-            'Company Admin' => ['dashboard.view', 'employee.view', 'employee.create', 'employee.edit', 'employee.delete', 'attendance.view', 'attendance.mark', 'attendance.edit', 'leave.view', 'leave.approve', 'payroll.view', 'payroll.generate', 'payroll.edit', 'recruitment.view', 'recruitment.create', 'recruitment.edit', 'recruitment.schedule', 'recruitment.offer', 'performance.view', 'performance.create', 'performance.edit', 'reports.view', 'reports.export', 'system.settings.view', 'role.manage', 'permission.manage', 'user.manage'],
-            'HR Manager' => ['dashboard.view', 'employee.view', 'employee.create', 'employee.edit', 'employee.delete', 'employee.export', 'employee.document.manage', 'attendance.view', 'attendance.mark', 'attendance.edit', 'leave.request', 'leave.approve', 'leave.view', 'performance.view', 'performance.create', 'performance.edit', 'reports.view', 'reports.export'],
-            'HR Executive' => ['dashboard.view', 'employee.view', 'employee.create', 'employee.edit', 'attendance.view', 'attendance.mark', 'leave.request', 'leave.view', 'reports.view'],
-            'Payroll Manager' => ['dashboard.view', 'payroll.view', 'payroll.generate', 'payroll.edit', 'reports.view', 'reports.export'],
-            'Attendance Manager' => ['dashboard.view', 'attendance.view', 'attendance.mark', 'attendance.edit'],
-            'Recruiter' => ['dashboard.view', 'recruitment.view', 'recruitment.create', 'recruitment.edit', 'recruitment.schedule', 'recruitment.offer'],
-            'Department Manager' => ['dashboard.view', 'employee.view', 'attendance.view', 'leave.view', 'leave.approve', 'performance.view', 'performance.edit'],
-            'IT Support' => ['dashboard.view', 'system.settings.view', 'reports.view'],
-            'Employee' => ['dashboard.view', 'profile.view', 'profile.edit', 'leave.request', 'attendance.self'],
+            'Super Admin' => $allPermissionKeys,
+            'Company Admin' => ['view dashboard', 'view users', 'create users', 'edit users', 'delete users', 'assign roles', 'view employees', 'create employees', 'edit employees', 'delete employees', 'manage employees', 'view attendance', 'manage attendance', 'approve attendance', 'view leaves', 'approve leaves', 'view payroll', 'process payroll', 'manage payroll', 'view recruitment', 'manage recruitment', 'edit recruitment', 'schedule interviews', 'send offers', 'view performance', 'manage performance', 'edit performance', 'view reports', 'export reports', 'manage settings', 'view audit logs', 'manage roles', 'manage permissions', 'view system settings'],
+            'HR Manager' => ['view dashboard', 'view employees', 'create employees', 'edit employees', 'delete employees', 'manage employees', 'export employees', 'manage employee documents', 'view attendance', 'manage attendance', 'approve attendance', 'manage leaves', 'approve leaves', 'view leaves', 'view performance', 'manage performance', 'edit performance', 'view reports', 'export reports'],
+            'HR Executive' => ['view dashboard', 'view employees', 'create employees', 'edit employees', 'manage employees', 'view attendance', 'manage attendance', 'manage leaves', 'view leaves', 'view reports'],
+            'Payroll Manager' => ['view dashboard', 'view payroll', 'process payroll', 'manage payroll', 'view reports', 'export reports'],
+            'Attendance Manager' => ['view dashboard', 'view attendance', 'manage attendance', 'approve attendance'],
+            'Recruiter' => ['view dashboard', 'view recruitment', 'manage recruitment', 'edit recruitment', 'schedule interviews', 'send offers'],
+            'Department Manager' => ['view dashboard', 'view employees', 'view attendance', 'view leaves', 'approve leaves', 'view performance', 'edit performance'],
+            'IT Support' => ['view dashboard', 'view system settings', 'view reports'],
+            'Employee' => ['view dashboard', 'view profile', 'edit profile', 'request own leave', 'view own attendance', 'view own payroll'],
         ];
 
         foreach ($roles as $roleName => $permissionKeys) {
             $role = Role::updateOrCreate(
                 ['company_id' => null, 'name' => $roleName],
-                ['description' => $roleName . ' system template', 'is_system' => true]
+                ['description' => $roleName . ' system template', 'guard_name' => 'web', 'is_system' => true]
             );
 
             $permissionIds = collect($permissionKeys)
-                ->map(fn (string $key) => $all->get($key)?->id)
+                ->map(fn (string $key) => $all->get(mb_strtolower($key))?->id)
                 ->filter()
                 ->values()
                 ->all();
 
             $role->permissions()->sync($permissionIds);
-        }
-
-        $admin = User::query()->orderBy('id')->first();
-        if ($admin) {
-            $superAdminRole = Role::where('name', 'Super Admin')->whereNull('company_id')->first();
-            if ($superAdminRole) {
-                $admin->rolesRelation()->syncWithoutDetaching([$superAdminRole->id => ['scope' => json_encode(new \stdClass())]]);
-            }
         }
     }
 }

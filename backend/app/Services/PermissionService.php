@@ -15,10 +15,25 @@ class PermissionService
         $cacheKey = $this->cacheKey($user->id);
 
         return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($user) {
-            $loaded = $user->loadMissing('rolesRelation.permissions');
+            $loaded = $user->loadMissing(['roles.permissions', 'permissions']);
 
-            return $loaded->rolesRelation
-                ->flatMap(fn ($role) => $role->permissions->map(fn ($permission) => $permission->module . '.' . $permission->action))
+            return $loaded->roles
+                ->flatMap(function ($role) {
+                    return $role->permissions->flatMap(function ($permission) {
+                        return [
+                            mb_strtolower($permission->name),
+                            mb_strtolower($permission->module . '.' . $permission->action),
+                            mb_strtolower($permission->module . ':' . $permission->action),
+                        ];
+                    });
+                })
+                ->merge($loaded->permissions->flatMap(function ($permission) {
+                    return [
+                        mb_strtolower($permission->name),
+                        mb_strtolower($permission->module . '.' . $permission->action),
+                        mb_strtolower($permission->module . ':' . $permission->action),
+                    ];
+                }))
                 ->unique()
                 ->values();
         });
@@ -27,9 +42,13 @@ class PermissionService
     public function hasPermission(User $user, string $requiredPermission): bool
     {
         $permissions = $this->getMergedPermissions($user);
-        $normalized = str_replace(':', '.', $requiredPermission);
+        $normalized = mb_strtolower(trim($requiredPermission));
+        $normalizedKey = str_replace(':', '.', $normalized);
 
-        return $permissions->contains(self::WILDCARD) || $permissions->contains($normalized);
+        return $permissions->contains(self::WILDCARD)
+            || $permissions->contains('*')
+            || $permissions->contains($normalized)
+            || $permissions->contains($normalizedKey);
     }
 
     public function flushUserPermissionCache(User $user): void

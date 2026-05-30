@@ -16,7 +16,7 @@ class PayrollAuthorizationTest extends TestCase
 
     public function test_employee_cannot_mark_payroll_paid(): void
     {
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
         $employee = Employee::create([
             'user_id' => $employeeUser->id,
@@ -48,8 +48,8 @@ class PayrollAuthorizationTest extends TestCase
 
     public function test_payroll_manager_can_mark_payroll_paid(): void
     {
-        $manager = User::factory()->create(['role' => User::ROLE_PAYROLL_MANAGER]);
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
         $employee = Employee::create([
             'user_id' => $employeeUser->id,
@@ -82,8 +82,8 @@ class PayrollAuthorizationTest extends TestCase
 
     public function test_generate_payroll_skips_existing_employee_month_record(): void
     {
-        $manager = User::factory()->create(['role' => User::ROLE_PAYROLL_MANAGER]);
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Finance']);
         $employee = Employee::create([
             'user_id' => $employeeUser->id,

@@ -10,13 +10,6 @@ use Illuminate\Validation\Rule;
 
 class DepartmentController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-    ];
-
     public function index(Request $request)
     {
         $query = Department::query()->withCount('employees')->orderBy('name');
@@ -34,7 +27,7 @@ class DepartmentController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->whereNull('deleted_at')],
         ]);
@@ -43,7 +36,7 @@ class DepartmentController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $department = Department::findOrFail($id);
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->ignore($id)->whereNull('deleted_at')],
@@ -54,14 +47,14 @@ class DepartmentController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         Department::findOrFail($id)->delete();
         return $this->ok(message: 'Department archived successfully');
     }
 
     public function restore(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $department = Department::withTrashed()->findOrFail($id);
         $department->restore();
         return $this->ok($department, 'Department restored successfully');
@@ -69,7 +62,7 @@ class DepartmentController extends Controller
 
     public function reassignEmployees(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage employees');
         $source = Department::findOrFail($id);
         $validated = $request->validate([
             'target_department_id' => 'required|exists:departments,id',
@@ -84,7 +77,7 @@ class DepartmentController extends Controller
 
     public function forceDelete(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $department = Department::withTrashed()->findOrFail($id);
         $activeEmployees = Employee::where('department_id', $department->id)->count();
         if ($activeEmployees > 0) {

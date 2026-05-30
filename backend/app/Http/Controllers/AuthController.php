@@ -2,68 +2,101 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use App\Models\Role;
+use App\Models\User;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
+use App\Services\AuditLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class AuthController extends Controller
 {
+    public function __construct(private readonly AuditLogService $auditLogService)
+    {
+    }
+
     /**
      * Register a new user
      */
-    public function register(Request $request)
+    public function register(RegisterRequest $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'role_ids' => ['sometimes', 'array', 'min:1'],
-            'role_ids.*' => ['uuid', 'exists:roles,id'],
-        ]);
+        $validated = $request->validated();
 
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-        ]);
+        $user = DB::transaction(function () use ($validated) {
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
+            ]);
 
-        $roleIds = $validated['role_ids'] ?? [];
-        if (empty($roleIds)) {
-            $employeeRoleId = Role::where('name', User::ROLE_EMPLOYEE)->whereNull('company_id')->value('id');
-            if ($employeeRoleId) {
-                $roleIds = [$employeeRoleId];
-            }
-        }
-        if (!empty($roleIds)) {
-            $user->rolesRelation()->sync($roleIds);
-        }
+            $employeeRole = Role::firstOrCreate(
+                ['name' => User::ROLE_EMPLOYEE, 'company_id' => null],
+                ['guard_name' => 'web', 'description' => 'Default employee role', 'is_system' => true]
+            );
+
+            $user->assignRole($employeeRole);
+
+            return $user;
+        });
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->ok(['user' => $user->fresh('rolesRelation.permissions'), 'token' => $token], 'User registered successfully', 201);
+        $this->auditLogService->recordRequest(
+            $request,
+            'register',
+            'auth',
+            'User registered successfully',
+            null,
+            ['user_id' => $user->id, 'email' => $user->email],
+            201
+        );
+
+        return $this->ok([
+            'user' => $user->fresh(['roles.permissions', 'permissions']),
+            'token' => $token,
+        ], 'User registered successfully', 201);
     }
 
     /**
      * Login user
      */
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $validated = $request->validate([
-            'email' => 'required|string|email',
-            'password' => 'required|string',
-        ]);
+        $validated = $request->validated();
 
-        if (!Auth::attempt($validated)) {
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user || !Hash::check($validated['password'], $user->password)) {
+            $this->auditLogService->recordRequest(
+                $request,
+                'login_failure',
+                'auth',
+                'Failed login attempt',
+                null,
+                ['email' => $validated['email']],
+                401
+            );
+
             return $this->fail('Invalid credentials', 401);
         }
 
-        $user = Auth::user()?->loadMissing('rolesRelation.permissions');
+        $user->loadMissing(['roles.permissions', 'permissions']);
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        $this->auditLogService->recordRequest(
+            $request,
+            'login_success',
+            'auth',
+            'User logged in successfully',
+            null,
+            ['user_id' => $user->id, 'email' => $user->email],
+            200
+        );
 
         return $this->ok(['user' => $user, 'token' => $token], 'Login successful');
     }
@@ -75,6 +108,16 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
 
+        $this->auditLogService->recordRequest(
+            $request,
+            'logout',
+            'auth',
+            'User logged out successfully',
+            null,
+            ['user_id' => $request->user()?->id],
+            200
+        );
+
         return $this->ok(null, 'Logout successful');
     }
 
@@ -83,7 +126,7 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        return $this->ok($request->user()?->loadMissing('rolesRelation.permissions'));
+        return $this->ok($request->user()?->loadMissing(['roles.permissions', 'permissions']));
     }
 
     /**
@@ -94,6 +137,16 @@ class AuthController extends Controller
         $user = $request->user();
         $request->user()->currentAccessToken()?->delete();
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        $this->auditLogService->recordRequest(
+            $request,
+            'token_refresh',
+            'auth',
+            'Access token refreshed',
+            null,
+            ['user_id' => $user->id],
+            200
+        );
 
         return $this->ok(['token' => $token], 'Token refreshed successfully');
     }
@@ -112,8 +165,27 @@ class AuthController extends Controller
         ]);
 
         if ($status !== Password::RESET_LINK_SENT) {
+            $this->auditLogService->recordRequest(
+                $request,
+                'password_reset_link_failed',
+                'auth',
+                'Password reset link request failed',
+                null,
+                ['email' => $validated['email']],
+                400
+            );
             return $this->fail(__($status), 400);
         }
+
+        $this->auditLogService->recordRequest(
+            $request,
+            'password_reset_link_sent',
+            'auth',
+            'Password reset link sent',
+            null,
+            ['email' => $validated['email']],
+            200
+        );
 
         return $this->ok(null, 'Password reset link sent successfully');
     }
@@ -140,8 +212,27 @@ class AuthController extends Controller
         );
 
         if ($status !== Password::PASSWORD_RESET) {
+            $this->auditLogService->recordRequest(
+                $request,
+                'password_reset_failed',
+                'auth',
+                'Password reset failed',
+                null,
+                ['email' => $validated['email']],
+                400
+            );
             return $this->fail(__($status), 400);
         }
+
+        $this->auditLogService->recordRequest(
+            $request,
+            'password_reset_success',
+            'auth',
+            'Password reset successful',
+            null,
+            ['email' => $validated['email']],
+            200
+        );
 
         return $this->ok(null, 'Password reset successfully');
     }

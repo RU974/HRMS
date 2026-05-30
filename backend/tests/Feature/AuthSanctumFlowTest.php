@@ -15,16 +15,11 @@ class AuthSanctumFlowTest extends TestCase
 
     public function test_register_login_refresh_and_me_flow(): void
     {
-        $employeeRole = Role::create([
-            'name' => User::ROLE_EMPLOYEE,
-        ]);
-
         $register = $this->postJson('/api/v1/auth/register', [
             'name' => 'Flow User',
             'email' => 'flow@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'role_ids' => [$employeeRole->id],
         ]);
 
         $register->assertCreated()->assertJsonPath('success', true)->assertJsonStructure([
@@ -63,17 +58,17 @@ class AuthSanctumFlowTest extends TestCase
         $this->getJson('/api/auth/me')->assertStatus(404);
     }
 
-    public function test_register_rejects_invalid_role_ids(): void
+    public function test_register_rejects_role_payloads(): void
     {
         $this->postJson('/api/v1/auth/register', [
             'name' => 'Invalid Role',
             'email' => 'invalid-role@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'role_ids' => [Str::uuid()->toString()],
+            'role' => 'Super Admin',
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['role_ids.0']);
+        ->assertJsonValidationErrors(['role']);
     }
 
     public function test_forgot_and_reset_password_flow(): void
@@ -102,5 +97,4 @@ class AuthSanctumFlowTest extends TestCase
         ])->assertOk()->assertJsonPath('success', true);
     }
 }
-
 

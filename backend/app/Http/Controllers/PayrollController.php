@@ -10,14 +10,6 @@ use Carbon\Carbon;
 
 class PayrollController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-        User::ROLE_PAYROLL_MANAGER,
-    ];
-
     /**
      * Get all payroll records
      */
@@ -25,7 +17,7 @@ class PayrollController extends Controller
     {
         $this->authorizeRead($request);
         $query = Payroll::with('employee');
-        if ($request->user()?->role === User::ROLE_EMPLOYEE) {
+        if (!$request->user()?->can('manage payroll')) {
             $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
             $query->where('employee_id', $employee->id);
         }
@@ -67,7 +59,7 @@ class PayrollController extends Controller
      */
     public function store(Request $request)
     {
-        $this->authorizeManager($request);
+        $this->authorizePermission($request, 'manage payroll');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'month' => 'required|integer|min:1|max:12',
@@ -91,7 +83,7 @@ class PayrollController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $this->authorizeManager($request);
+        $this->authorizePermission($request, 'manage payroll');
         $payroll = Payroll::findOrFail($id);
 
         $validated = $request->validate([
@@ -113,7 +105,7 @@ class PayrollController extends Controller
      */
     public function destroy($id)
     {
-        $this->authorizeManager(request());
+        $this->authorizePermission(request(), 'manage payroll');
         $payroll = Payroll::findOrFail($id);
         $payroll->delete();
 
@@ -142,7 +134,7 @@ class PayrollController extends Controller
      */
     public function generatePayroll(Request $request)
     {
-        $this->authorizeManager($request);
+        $this->authorizePermission($request, 'process payroll');
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2020',
@@ -201,7 +193,7 @@ class PayrollController extends Controller
      */
     public function markAsPaid($id)
     {
-        $this->authorizeManager(request());
+        $this->authorizePermission(request(), 'manage payroll');
         $payroll = Payroll::findOrFail($id);
         $payroll->update(['status' => 'paid']);
 
@@ -213,7 +205,7 @@ class PayrollController extends Controller
      */
     public function getMonthlySummary(Request $request)
     {
-        $this->authorizeManager($request);
+        $this->authorizePermission($request, 'view payroll');
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2020',
@@ -236,15 +228,9 @@ class PayrollController extends Controller
         return $this->ok($summary);
     }
 
-    private function authorizeManager(Request $request): void
-    {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
-    }
-
     private function authorizeRead(Request $request): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true) || $role === User::ROLE_EMPLOYEE) {
+        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll') || $request->user()?->can('view own payroll')) {
             return;
         }
 
@@ -253,12 +239,11 @@ class PayrollController extends Controller
 
     private function authorizeEmployeeScopedAccess(Request $request, int $employeeId): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('manage payroll')) {
             return;
         }
 
-        if ($role === User::ROLE_EMPLOYEE) {
+        if ($request->user()?->can('view own payroll')) {
             $employee = Employee::where('user_id', $request->user()?->id)->first();
             if ($employee && (int) $employee->id === $employeeId) {
                 return;

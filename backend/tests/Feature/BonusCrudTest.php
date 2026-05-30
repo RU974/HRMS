@@ -6,7 +6,6 @@ use App\Models\Bonus;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Payroll;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -141,14 +140,7 @@ class BonusCrudTest extends TestCase
 
     private function createPayrollManagerAndEmployee(): array
     {
-        $manager = User::factory()->create();
-        $managerRole = Role::create([
-            'company_id' => null,
-            'name' => User::ROLE_PAYROLL_MANAGER,
-            'description' => 'Payroll manager',
-            'is_system' => true,
-        ]);
-        $manager->rolesRelation()->attach($managerRole->id);
+        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER);
 
         return [$manager, $this->createEmployee('Bonus Employee One', 'bonus.one@example.com')];
     }

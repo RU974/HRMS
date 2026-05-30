@@ -10,18 +10,11 @@ class PerformanceMetaController extends Controller
 {
     public function employees(Request $request)
     {
+        $this->authorizePermission($request, 'view performance');
         $user = $request->user();
         $query = Employee::query()->select(['id', 'user_id', 'name', 'first_name', 'last_name', 'employee_number']);
 
-        $managerRoles = [
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_COMPANY_ADMIN,
-            User::ROLE_HR_MANAGER,
-            User::ROLE_HR_EXECUTIVE,
-            User::ROLE_DEPARTMENT_MANAGER,
-        ];
-
-        if (!in_array($user?->role, $managerRoles, true)) {
+        if (!$user?->can('view employees')) {
             $query->where('user_id', $user?->id);
         }
 
@@ -36,4 +29,3 @@ class PerformanceMetaController extends Controller
         }));
     }
 }
-

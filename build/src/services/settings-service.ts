@@ -12,10 +12,50 @@ export type UserItem = {
   company_id?: string | null;
   branch_id?: string | null;
 };
-export type CompanyItem = { id: string; name: string; email?: string | null; phone?: string | null; timezone?: string | null };
-export type BranchItem = { id: string; company_id: string; name: string; code?: string | null; email?: string | null; phone?: string | null };
-export type ThemeItem = { id: number; theme: string; preferences?: Record<string, unknown> | null };
-export type LogItem = { id: number; method: string; path: string; status_code: number; created_at: string };
+export type CompanyItem = {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  address?: string | null;
+  timezone?: string | null;
+  is_active?: boolean;
+};
+export type BranchItem = {
+  id: string;
+  company_id: string;
+  name: string;
+  code?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  is_active?: boolean;
+  company?: { id: string; name: string } | null;
+};
+export type ThemeItem = {
+  id: number;
+  company_id?: string | null;
+  user_id?: number | null;
+  theme: string;
+  preferences?: Record<string, unknown> | null;
+  updated_at?: string | null;
+};
+export type LogItem = {
+  id: number;
+  user_id?: number | null;
+  method: string;
+  path: string;
+  http_method?: string | null;
+  endpoint?: string | null;
+  module?: string | null;
+  action?: string | null;
+  description?: string | null;
+  payload?: string | Record<string, unknown> | null;
+  status_code: number;
+  created_at: string;
+  user?: { id: number; name: string; email?: string | null } | null;
+};
 
 export const listRoles = () => apiClient<RoleItem[]>("/roles");
 export const listPermissions = () => apiClient<PermissionGroup[]>("/permissions");
@@ -44,5 +84,3 @@ export const updateTheme = (id: number, payload: Record<string, unknown>) => api
 export const deleteTheme = (id: number) => apiClient<null>(`/settings/themes/${id}`, { method: "DELETE" });
 
 export const listLogs = () => apiClient<LogItem[]>("/settings/system-logs");
-export const deleteLog = (id: number) => apiClient<null>(`/settings/system-logs/${id}`, { method: "DELETE" });
-export const clearLogs = () => apiClient<{ deleted: number }>("/settings/system-logs", { method: "DELETE" });

@@ -20,10 +20,10 @@ class UserManagementService
         $user = User::create($data);
         if (!empty($roleIds)) {
             $validRoleIds = $this->resolveAssignableRoleIds($roleIds, $actor);
-            $user->rolesRelation()->sync($validRoleIds);
+            $user->syncRoles($validRoleIds);
             $this->permissionService->flushUserPermissionCache($user);
         }
-        return $user->fresh('rolesRelation.permissions');
+        return $user->fresh('roles.permissions');
     }
 
     public function update(User $user, array $data, ?User $actor = null): User
@@ -39,15 +39,19 @@ class UserManagementService
         $user->update($data);
         if (is_array($roleIds)) {
             $validRoleIds = $this->resolveAssignableRoleIds($roleIds, $actor);
-            $user->rolesRelation()->sync($validRoleIds);
+            $user->syncRoles($validRoleIds);
             $this->permissionService->flushUserPermissionCache($user);
         }
 
-        return $user->fresh('rolesRelation.permissions');
+        return $user->fresh('roles.permissions');
     }
 
     private function resolveAssignableRoleIds(array $roleIds, ?User $actor): array
     {
+        if (!$actor || !$actor->can('assign roles')) {
+            abort(403, 'You are not authorized to assign roles.');
+        }
+
         return Role::query()
             ->whereIn('id', $roleIds)
             ->where(function ($query) use ($actor) {

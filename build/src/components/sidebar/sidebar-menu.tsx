@@ -19,8 +19,8 @@ const menu: readonly MenuGroup[] = [
     dropdown: true,
     items: [["Salary Structure", "/payroll?tab=salary-structure"], ["Payroll Processing", "/payroll?tab=payroll-processing"], ["Payslips", "/payroll?tab=payslips"], ["Bonuses", "/payroll?tab=bonuses"], ["Deductions", "/payroll?tab=deductions"]]
   },
-  { title: "Recruitment", items: [["Candidates", "/recruitment"], ["Interviews", "/recruitment"], ["Jobs", "/recruitment"], ["Onboarding", "/recruitment"]] },
-  { title: "Performance", items: [["Reviews", "/performance"], ["KPIs", "/performance"], ["Goals", "/performance"], ["Appraisals", "/performance"]] },
+  { title: "Recruitment", items: [["Overview", "/recruitment"], ["Jobs", "/recruitment/jobs"], ["Candidates", "/recruitment/candidates"], ["Interviews", "/recruitment/interviews"], ["Onboarding", "/recruitment/onboarding"]] },
+  { title: "Performance", items: [["Overview", "/performance"], ["Reviews", "/performance/reviews"], ["KPIs", "/performance/kpis"], ["Goals", "/performance/goals"], ["Appraisals", "/performance/appraisals"]] },
   { title: "Communication", items: [["Announcements", "/announcements"], ["Notifications", "/notifications"], ["Chat", "/chat"]] },
   { title: "Reports", items: [["Attendance Reports", "/reports/attendance"], ["Employee Reports", "/reports/employees"], ["Payroll Reports", "/reports/payroll"], ["Analytics", "/reports/analytics"]] },
   { title: "Settings", items: [["User Management", "/settings?tab=users"], ["Roles & Permissions", "/settings?tab=roles"], ["Company Settings", "/settings?tab=company"], ["Branches", "/settings?tab=branches"], ["Themes", "/settings?tab=theme"], ["System Logs", "/settings?tab=logs"]] }

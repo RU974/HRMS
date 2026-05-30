@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Permission extends Model
 {
@@ -15,8 +16,10 @@ class Permission extends Model
     public $incrementing = false;
 
     protected $fillable = [
+        'name',
         'module',
         'action',
+        'guard_name',
         'description',
     ];
 
@@ -24,12 +27,23 @@ class Permission extends Model
 
     public function roles(): BelongsToMany
     {
-        return $this->belongsToMany(Role::class, 'role_permissions')
+        return $this->belongsToMany(Role::class, 'role_has_permissions')
+            ->withTimestamps();
+    }
+
+    public function users(): MorphToMany
+    {
+        return $this->morphedByMany(User::class, 'model', 'model_has_permissions', 'permission_id', 'model_id')
             ->withTimestamps();
     }
 
     public function getKeyAttribute(): string
     {
         return $this->module . '.' . $this->action;
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'name';
     }
 }

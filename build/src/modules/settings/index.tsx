@@ -9,7 +9,6 @@ import {
   RoleItem,
   ThemeItem,
   UserItem,
-  clearLogs,
   createBranch,
   createCompany,
   createRole,
@@ -17,7 +16,6 @@ import {
   createUser,
   deleteBranch,
   deleteCompany,
-  deleteLog,
   deleteRole,
   deleteTheme,
   deleteUser,
@@ -33,10 +31,11 @@ import {
   updateRole,
   updateTheme,
   updateUser,
+  LogItem,
 } from "@/services/settings-service";
+import { useThemeStore } from "@/store/theme-store";
 
 type SettingsTab = "users" | "roles" | "company" | "branches" | "theme" | "logs";
-type LogItem = { id: number; method: string; path: string; status_code: number; created_at: string };
 
 const tabs: Array<{ key: SettingsTab; label: string }> = [
   { key: "users", label: "Users" },
@@ -54,6 +53,7 @@ export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get("tab") as SettingsTab | null) ?? "users";
   const [tab, setTab] = useState<SettingsTab>(tabs.some((item) => item.key === initialTab) ? initialTab : "users");
+  const setTheme = useThemeStore((state) => state.setTheme);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +66,7 @@ export function SettingsPage() {
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [themes, setThemes] = useState<ThemeItem[]>([]);
   const [logs, setLogs] = useState<LogItem[]>([]);
+  const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
 
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role_ids: [] as string[], company_id: "", branch_id: "" });
@@ -87,7 +88,12 @@ export function SettingsPage() {
   const filteredRoles = useMemo(() => roles.filter((item) => `${item.name} ${item.description ?? ""}`.toLowerCase().includes(query.toLowerCase())), [roles, query]);
   const filteredCompanies = useMemo(() => companies.filter((item) => item.name.toLowerCase().includes(query.toLowerCase())), [companies, query]);
   const filteredBranches = useMemo(() => branches.filter((item) => item.name.toLowerCase().includes(query.toLowerCase())), [branches, query]);
-  const filteredLogs = useMemo(() => logs.filter((item) => `${item.method} ${item.path} ${item.status_code}`.toLowerCase().includes(query.toLowerCase())), [logs, query]);
+  const filteredLogs = useMemo(() => logs.filter((item) => {
+    const method = item.http_method ?? item.method;
+    const path = item.endpoint ?? item.path;
+    return `${method} ${path} ${item.module ?? ""} ${item.action ?? ""} ${item.description ?? ""} ${item.status_code}`.toLowerCase().includes(query.toLowerCase());
+  }), [logs, query]);
+  const selectedLog = useMemo(() => filteredLogs.find((item) => item.id === selectedLogId) ?? filteredLogs[0] ?? null, [filteredLogs, selectedLogId]);
 
   async function loadAll() {
     setBusy(true);
@@ -101,6 +107,7 @@ export function SettingsPage() {
       setBranches(b);
       setThemes(t);
       setLogs(l);
+      setSelectedLogId((current) => (current !== null && l.some((item) => item.id === current) ? current : l[0]?.id ?? null));
       if (!branchForm.company_id && c.length > 0) {
         setBranchForm((prev) => ({ ...prev, company_id: c[0].id }));
       }
@@ -255,7 +262,33 @@ export function SettingsPage() {
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={companyForm.is_active} onChange={(e) => setCompanyForm((p) => ({ ...p, is_active: e.target.checked }))} />Active</label>
             <div className="flex gap-2"><Button disabled={!companyForm.name} onClick={() => withReload(async () => { if (editingCompanyId) { await updateCompany(editingCompanyId, companyForm); } else { await createCompany(companyForm); } resetCompanyForm(); })}>{editingCompanyId ? "Update" : "Create"}</Button><Button variant="outline" onClick={resetCompanyForm}>Reset</Button></div>
           </aside>
-          <div className={`${panelClass} overflow-auto p-4`}><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="pb-2 text-left">Name</th><th className="pb-2 text-left">Email</th><th className="pb-2 text-left">Timezone</th><th /></tr></thead><tbody>{filteredCompanies.map((c) => <tr key={c.id} className="border-b last:border-0"><td className="py-2">{c.name}</td><td>{c.email ?? "-"}</td><td>{c.timezone ?? "-"}</td><td className="space-x-2 text-right"><Button variant="outline" onClick={() => { setEditingCompanyId(c.id); setCompanyForm({ name: c.name, email: c.email ?? "", phone: c.phone ?? "", website: "", address: "", timezone: c.timezone ?? "UTC", is_active: true }); }}>Edit</Button><Button variant="outline" onClick={() => window.confirm("Delete company?") && withReload(() => deleteCompany(c.id))}>Delete</Button></td></tr>)}</tbody></table></div>
+          <div className={`${panelClass} overflow-auto p-4`}>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="pb-2 text-left">Name</th>
+                  <th className="pb-2 text-left">Website</th>
+                  <th className="pb-2 text-left">Timezone</th>
+                  <th className="pb-2 text-left">Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCompanies.map((c) => (
+                  <tr key={c.id} className="border-b last:border-0">
+                    <td className="py-2">{c.name}</td>
+                    <td>{c.website ?? "-"}</td>
+                    <td>{c.timezone ?? "-"}</td>
+                    <td>{c.is_active === false ? "Inactive" : "Active"}</td>
+                    <td className="space-x-2 text-right">
+                      <Button variant="outline" onClick={() => { setEditingCompanyId(c.id); setCompanyForm({ name: c.name, email: c.email ?? "", phone: c.phone ?? "", website: c.website ?? "", address: c.address ?? "", timezone: c.timezone ?? "UTC", is_active: c.is_active ?? true }); }}>Edit</Button>
+                      <Button variant="outline" onClick={() => window.confirm("Delete company?") && withReload(() => deleteCompany(c.id))}>Delete</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
@@ -272,7 +305,33 @@ export function SettingsPage() {
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={branchForm.is_active} onChange={(e) => setBranchForm((p) => ({ ...p, is_active: e.target.checked }))} />Active</label>
             <div className="flex gap-2"><Button disabled={!branchForm.company_id || !branchForm.name} onClick={() => withReload(async () => { if (editingBranchId) { await updateBranch(editingBranchId, branchForm); } else { await createBranch(branchForm); } resetBranchForm(); })}>{editingBranchId ? "Update" : "Create"}</Button><Button variant="outline" onClick={resetBranchForm}>Reset</Button></div>
           </aside>
-          <div className={`${panelClass} overflow-auto p-4`}><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="pb-2 text-left">Branch</th><th className="pb-2 text-left">Company</th><th className="pb-2 text-left">Code</th><th /></tr></thead><tbody>{filteredBranches.map((b) => <tr key={b.id} className="border-b last:border-0"><td className="py-2">{b.name}</td><td>{companies.find((c) => c.id === b.company_id)?.name ?? b.company_id}</td><td>{b.code ?? "-"}</td><td className="space-x-2 text-right"><Button variant="outline" onClick={() => { setEditingBranchId(b.id); setBranchForm({ company_id: b.company_id, name: b.name, code: b.code ?? "", email: b.email ?? "", phone: b.phone ?? "", address: "", is_active: true }); }}>Edit</Button><Button variant="outline" onClick={() => window.confirm("Delete branch?") && withReload(() => deleteBranch(b.id))}>Delete</Button></td></tr>)}</tbody></table></div>
+          <div className={`${panelClass} overflow-auto p-4`}>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="pb-2 text-left">Branch</th>
+                  <th className="pb-2 text-left">Company</th>
+                  <th className="pb-2 text-left">Code</th>
+                  <th className="pb-2 text-left">Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBranches.map((b) => (
+                  <tr key={b.id} className="border-b last:border-0">
+                    <td className="py-2">{b.name}</td>
+                    <td>{b.company?.name ?? companies.find((c) => c.id === b.company_id)?.name ?? b.company_id}</td>
+                    <td>{b.code ?? "-"}</td>
+                    <td>{b.is_active === false ? "Inactive" : "Active"}</td>
+                    <td className="space-x-2 text-right">
+                      <Button variant="outline" onClick={() => { setEditingBranchId(b.id); setBranchForm({ company_id: b.company_id, name: b.name, code: b.code ?? "", email: b.email ?? "", phone: b.phone ?? "", address: b.address ?? "", is_active: b.is_active ?? true }); }}>Edit</Button>
+                      <Button variant="outline" onClick={() => window.confirm("Delete branch?") && withReload(() => deleteBranch(b.id))}>Delete</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
@@ -282,16 +341,122 @@ export function SettingsPage() {
             <h3 className="font-semibold">Theme Preferences</h3>
             <select className={fieldClass} value={themeForm.theme} onChange={(e) => setThemeForm((p) => ({ ...p, theme: e.target.value }))}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={themeForm.company_scope} onChange={(e) => setThemeForm((p) => ({ ...p, company_scope: e.target.checked }))} />Company Scope</label>
-            <Button onClick={() => withReload(() => createTheme({ theme: themeForm.theme, preferences: {}, company_scope: themeForm.company_scope }))}>Save Theme</Button>
+            <Button onClick={() => withReload(async () => {
+              const setting = await createTheme({ theme: themeForm.theme, preferences: {}, company_scope: themeForm.company_scope });
+              setTheme(setting.theme === "system" ? "system" : setting.theme === "dark" ? "dark" : "light");
+            })}>Save Theme</Button>
           </aside>
-          <div className={`${panelClass} overflow-auto p-4`}><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="pb-2 text-left">ID</th><th className="pb-2 text-left">Theme</th><th /></tr></thead><tbody>{themes.map((t) => <tr key={t.id} className="border-b last:border-0"><td className="py-2">{t.id}</td><td>{t.theme}</td><td className="space-x-2 text-right"><Button variant="outline" onClick={() => withReload(() => updateTheme(t.id, { theme: t.theme === "dark" ? "light" : "dark" }))}>Toggle</Button><Button variant="outline" onClick={() => window.confirm("Delete theme setting?") && withReload(() => deleteTheme(t.id))}>Delete</Button></td></tr>)}</tbody></table></div>
+          <div className={`${panelClass} overflow-auto p-4`}>
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="pb-2 text-left">ID</th>
+                  <th className="pb-2 text-left">Scope</th>
+                  <th className="pb-2 text-left">Theme</th>
+                  <th className="pb-2 text-left">Updated</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {themes.map((t) => (
+                  <tr key={t.id} className="border-b last:border-0">
+                    <td className="py-2">{t.id}</td>
+                    <td>{t.user_id ? "User" : t.company_id ? "Company" : "Global"}</td>
+                    <td>{t.theme}</td>
+                    <td>{t.updated_at ? new Date(t.updated_at).toLocaleString() : "-"}</td>
+                    <td className="space-x-2 text-right">
+                      <Button variant="outline" onClick={() => withReload(async () => {
+                        const updated = await updateTheme(t.id, { theme: t.theme === "dark" ? "light" : "dark" });
+                        setTheme(updated.theme === "system" ? "system" : updated.theme === "dark" ? "dark" : "light");
+                      })}>Toggle</Button>
+                      <Button variant="outline" onClick={() => window.confirm("Delete theme setting?") && withReload(() => deleteTheme(t.id))}>Delete</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
       {tab === "logs" && (
-        <section className={panelClass}>
-          <div className="flex items-center justify-between border-b border-[var(--border)] p-4"><h3 className="font-semibold">System Logs</h3><Button variant="outline" onClick={() => window.confirm("Clear all logs?") && withReload(() => clearLogs())}>Clear Logs</Button></div>
-          <div className="overflow-auto p-4"><table className="min-w-full text-sm"><thead><tr className="border-b"><th className="pb-2 text-left">Method</th><th className="pb-2 text-left">Path</th><th className="pb-2 text-left">Status</th><th className="pb-2 text-left">Time</th><th /></tr></thead><tbody>{filteredLogs.map((log) => <tr key={log.id} className="border-b last:border-0"><td className="py-2">{log.method}</td><td>{log.path}</td><td>{log.status_code}</td><td>{log.created_at}</td><td className="text-right"><Button variant="outline" onClick={() => window.confirm("Delete log?") && withReload(() => deleteLog(log.id))}>Delete</Button></td></tr>)}</tbody></table></div>
+        <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
+          <div className={panelClass}>
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
+              <h3 className="font-semibold">System Logs</h3>
+              <p className="text-xs text-[var(--muted)]">Read-only audit trail</p>
+            </div>
+            <div className="overflow-auto p-4">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="pb-2 text-left">Method</th>
+                    <th className="pb-2 text-left">Path</th>
+                    <th className="pb-2 text-left">Module</th>
+                    <th className="pb-2 text-left">Status</th>
+                    <th className="pb-2 text-left">Time</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLogs.map((log) => {
+                    const method = log.http_method ?? log.method;
+                    const path = log.endpoint ?? log.path;
+
+                    return (
+                      <tr key={log.id} className={`border-b last:border-0 ${selectedLog?.id === log.id ? "bg-[var(--border)]/20" : ""}`}>
+                        <td className="py-2">{method}</td>
+                        <td>{path}</td>
+                        <td>{log.module ?? "-"}</td>
+                        <td>{log.status_code}</td>
+                        <td>{log.created_at}</td>
+                        <td className="text-right">
+                          <Button variant="outline" onClick={() => setSelectedLogId(log.id)}>View</Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <aside className={`${panelClass} p-4 space-y-3`}>
+            <h4 className="font-semibold">Log Details</h4>
+            {selectedLog ? (
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Action</p>
+                  <p className="font-medium">{selectedLog.action ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Description</p>
+                  <p>{selectedLog.description ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Request</p>
+                  <p>{selectedLog.http_method ?? selectedLog.method} {selectedLog.endpoint ?? selectedLog.path}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Actor</p>
+                  <p>{selectedLog.user?.name ?? "System"}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Status</p>
+                  <p>{selectedLog.status_code}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Payload</p>
+                  <pre className="max-h-80 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">
+                    {typeof selectedLog.payload === "string"
+                      ? selectedLog.payload || "{}"
+                      : JSON.stringify(selectedLog.payload ?? {}, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">Select a log row to inspect the request payload and metadata.</p>
+            )}
+          </aside>
         </section>
       )}
     </div>

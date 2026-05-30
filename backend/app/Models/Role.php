@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Role extends Model
 {
@@ -17,6 +18,7 @@ class Role extends Model
     protected $fillable = [
         'company_id',
         'name',
+        'guard_name',
         'description',
         'is_system',
     ];
@@ -27,14 +29,13 @@ class Role extends Model
 
     public function permissions(): BelongsToMany
     {
-        return $this->belongsToMany(Permission::class, 'role_permissions')
+        return $this->belongsToMany(Permission::class, 'role_has_permissions')
             ->withTimestamps();
     }
 
-    public function users(): BelongsToMany
+    public function users(): MorphToMany
     {
-        return $this->belongsToMany(User::class, 'user_roles')
-            ->withPivot('scope')
+        return $this->morphedByMany(User::class, 'model', 'model_has_roles', 'role_id', 'model_id')
             ->withTimestamps();
     }
 }

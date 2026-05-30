@@ -1,20 +1,32 @@
 import { Menu } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useLayoutStore } from "@/store/layout-store";
 import { ThemeSwitcher } from "./theme-switcher";
 import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
-import { FormInput } from "@/components/forms/form-input";
 import { Button } from "@/components/ui/button";
 import { logoutRequest } from "@/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
+import { SearchBar } from "@/components/forms/search-bar";
 
 export function TopNavbar() {
   const toggle = useLayoutStore((s) => s.toggleSidebar);
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const [search, setSearch] = useState("");
 
   async function handleLogout() {
     await logoutRequest().catch(() => null);
     logout();
     window.location.href = "/auth/login";
+  }
+
+  function handleSearch(query: string) {
+    if (!query) {
+      return;
+    }
+
+    navigate(`/search?q=${encodeURIComponent(query)}`);
   }
 
   return (
@@ -26,7 +38,13 @@ export function TopNavbar() {
         <div className="hidden min-w-0 md:block">
           <div className="text-sm font-semibold">Enterprise HRMS</div>
         </div>
-        <FormInput placeholder="Search employees, payroll, reports..." className="ml-auto hidden max-w-md md:block" />
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          onSubmit={handleSearch}
+          placeholder="Search employees, payroll, reports..."
+          className="ml-auto hidden w-full max-w-md md:block"
+        />
         <div className="flex items-center gap-2">
           <NotificationDropdown />
           <ThemeSwitcher />

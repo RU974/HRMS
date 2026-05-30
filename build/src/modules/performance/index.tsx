@@ -1,267 +1,69 @@
-import { FormEvent, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormInput } from "@/components/forms/form-input";
-import { Modal } from "@/components/modals/modal";
+import { Link } from "react-router-dom";
+import { useQueries } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
-import { Button } from "@/components/ui/button";
-import { apiClient } from "@/services/api-client";
+import { Card } from "@/components/ui/card";
 import {
-  GoalStatus,
-  PerformanceAppraisal,
-  PerformanceAppraisalPayload,
-  PerformanceGoal,
-  PerformanceGoalPayload,
-  PerformanceKpi,
-  PerformanceKpiPayload,
-  PerformanceReview,
-  PerformanceReviewPayload,
-  createPerformanceAppraisal,
-  createPerformanceGoal,
-  createPerformanceKpi,
-  createPerformanceReview,
-  deletePerformanceAppraisal,
-  deletePerformanceGoal,
-  deletePerformanceKpi,
-  deletePerformanceReview,
   listPerformanceAppraisals,
   listPerformanceGoals,
   listPerformanceKpis,
   listPerformanceReviews,
-  updatePerformanceAppraisal,
-  updatePerformanceGoal,
-  updatePerformanceKpi,
-  updatePerformanceReview
 } from "@/services/performance-service";
-
-type TabKey = "reviews" | "kpis" | "goals" | "appraisals";
-
-type EmployeeOption = { id: number; label: string };
-
-const reviewDefaults: PerformanceReviewPayload = { employee_id: 0, reviewer_id: null, period: "", rating: 3, summary: "" };
-const kpiDefaults: PerformanceKpiPayload = { employee_id: 0, name: "", target_value: 0, current_value: 0, unit: "%" };
-const goalDefaults: PerformanceGoalPayload = { employee_id: 0, title: "", description: "", due_date: null, status: "not_started", progress: 0 };
-const appraisalDefaults: PerformanceAppraisalPayload = { employee_id: 0, reviewer_id: null, cycle: "", overall_score: 3, strengths: "", improvements: "" };
+import { performanceSections } from "./shared";
 
 export function PerformancePage() {
-  const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabKey>("reviews");
-  const [search, setSearch] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [editingReview, setEditingReview] = useState<PerformanceReview | null>(null);
-  const [editingKpi, setEditingKpi] = useState<PerformanceKpi | null>(null);
-  const [editingGoal, setEditingGoal] = useState<PerformanceGoal | null>(null);
-  const [editingAppraisal, setEditingAppraisal] = useState<PerformanceAppraisal | null>(null);
-
-  const [reviewForm, setReviewForm] = useState<PerformanceReviewPayload>(reviewDefaults);
-  const [kpiForm, setKpiForm] = useState<PerformanceKpiPayload>(kpiDefaults);
-  const [goalForm, setGoalForm] = useState<PerformanceGoalPayload>(goalDefaults);
-  const [appraisalForm, setAppraisalForm] = useState<PerformanceAppraisalPayload>(appraisalDefaults);
-
-  const employeesQuery = useQuery({
-    queryKey: ["performance", "employees"],
-    queryFn: async () => {
-      const res = await apiClient<Array<{ id: number; first_name?: string; last_name?: string; name?: string; employee_code?: string }>>("/performance/meta/employees");
-      return (res ?? []).map((emp) => ({
-        id: emp.id,
-        label: `${(emp.first_name ?? emp.name ?? "").trim()} ${(emp.last_name ?? "").trim()}`.trim() + (emp.employee_code ? ` (${emp.employee_code})` : "")
-      })) as EmployeeOption[];
-    }
+  const [reviewsQuery, kpisQuery, goalsQuery, appraisalsQuery] = useQueries({
+    queries: [
+      { queryKey: ["performance", "reviews", "overview"], queryFn: () => listPerformanceReviews(), staleTime: 30_000 },
+      { queryKey: ["performance", "kpis", "overview"], queryFn: () => listPerformanceKpis(), staleTime: 30_000 },
+      { queryKey: ["performance", "goals", "overview"], queryFn: () => listPerformanceGoals(), staleTime: 30_000 },
+      { queryKey: ["performance", "appraisals", "overview"], queryFn: () => listPerformanceAppraisals(), staleTime: 30_000 },
+    ],
   });
 
-  const reviewsQuery = useQuery({ queryKey: ["performance", "reviews", search], queryFn: () => listPerformanceReviews(search) });
-  const kpisQuery = useQuery({ queryKey: ["performance", "kpis", search], queryFn: () => listPerformanceKpis(search) });
-  const goalsQuery = useQuery({ queryKey: ["performance", "goals", search], queryFn: () => listPerformanceGoals(search) });
-  const appraisalsQuery = useQuery({ queryKey: ["performance", "appraisals", search], queryFn: () => listPerformanceAppraisals(search) });
-
-  const createReviewMutation = useMutation({ mutationFn: createPerformanceReview, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "reviews"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const updateReviewMutation = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceReviewPayload> }) => updatePerformanceReview(id, payload), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "reviews"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const deleteReviewMutation = useMutation({ mutationFn: deletePerformanceReview, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "reviews"] }); }, onError: (e: Error) => setError(e.message) });
-
-  const createKpiMutation = useMutation({ mutationFn: createPerformanceKpi, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "kpis"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const updateKpiMutation = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceKpiPayload> }) => updatePerformanceKpi(id, payload), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "kpis"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const deleteKpiMutation = useMutation({ mutationFn: deletePerformanceKpi, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "kpis"] }); }, onError: (e: Error) => setError(e.message) });
-
-  const createGoalMutation = useMutation({ mutationFn: createPerformanceGoal, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "goals"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const updateGoalMutation = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceGoalPayload> }) => updatePerformanceGoal(id, payload), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "goals"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const deleteGoalMutation = useMutation({ mutationFn: deletePerformanceGoal, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "goals"] }); }, onError: (e: Error) => setError(e.message) });
-
-  const createAppraisalMutation = useMutation({ mutationFn: createPerformanceAppraisal, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const updateAppraisalMutation = useMutation({ mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceAppraisalPayload> }) => updatePerformanceAppraisal(id, payload), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] }); closeModal(); }, onError: (e: Error) => setError(e.message) });
-  const deleteAppraisalMutation = useMutation({ mutationFn: deletePerformanceAppraisal, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] }); }, onError: (e: Error) => setError(e.message) });
-
-  const activeData = useMemo(() => {
-    if (activeTab === "reviews") return reviewsQuery.data ?? [];
-    if (activeTab === "kpis") return kpisQuery.data ?? [];
-    if (activeTab === "goals") return goalsQuery.data ?? [];
-    return appraisalsQuery.data ?? [];
-  }, [activeTab, reviewsQuery.data, kpisQuery.data, goalsQuery.data, appraisalsQuery.data]);
-
-  function closeModal() {
-    setModalOpen(false);
-    setError(null);
-    setEditingReview(null);
-    setEditingKpi(null);
-    setEditingGoal(null);
-    setEditingAppraisal(null);
-    setReviewForm(reviewDefaults);
-    setKpiForm(kpiDefaults);
-    setGoalForm(goalDefaults);
-    setAppraisalForm(appraisalDefaults);
-  }
-
-  function openCreate() {
-    closeModal();
-    setModalOpen(true);
-  }
-
-  function employeeName(item?: { first_name?: string | null; last_name?: string | null; name?: string | null; employee_code?: string | null; employee_number?: string | null } | null) {
-    if (!item) return "-";
-    const name = `${item.first_name ?? item.name ?? ""} ${item.last_name ?? ""}`.trim();
-    const employeeCode = item.employee_code ?? item.employee_number;
-    return employeeCode ? `${name} (${employeeCode})` : name;
-  }
-
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this record?")) return;
-    if (activeTab === "reviews") await deleteReviewMutation.mutateAsync(id);
-    if (activeTab === "kpis") await deleteKpiMutation.mutateAsync(id);
-    if (activeTab === "goals") await deleteGoalMutation.mutateAsync(id);
-    if (activeTab === "appraisals") await deleteAppraisalMutation.mutateAsync(id);
-  }
-
-  function submitForm(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
-    if (activeTab === "reviews") {
-      if (!reviewForm.employee_id || !reviewForm.period.trim()) return setError("Employee and period are required.");
-      if (editingReview) return void updateReviewMutation.mutate({ id: editingReview.id, payload: reviewForm });
-      return void createReviewMutation.mutate(reviewForm);
-    }
-
-    if (activeTab === "kpis") {
-      if (!kpiForm.employee_id || !kpiForm.name.trim()) return setError("Employee and KPI name are required.");
-      if (editingKpi) return void updateKpiMutation.mutate({ id: editingKpi.id, payload: kpiForm });
-      return void createKpiMutation.mutate(kpiForm);
-    }
-
-    if (activeTab === "goals") {
-      if (!goalForm.employee_id || !goalForm.title.trim()) return setError("Employee and goal title are required.");
-      if (editingGoal) return void updateGoalMutation.mutate({ id: editingGoal.id, payload: goalForm });
-      return void createGoalMutation.mutate(goalForm);
-    }
-
-    if (!appraisalForm.employee_id || !appraisalForm.cycle.trim()) return setError("Employee and cycle are required.");
-    if (editingAppraisal) return void updateAppraisalMutation.mutate({ id: editingAppraisal.id, payload: appraisalForm });
-    return void createAppraisalMutation.mutate(appraisalForm);
-  }
+  const stats = [
+    { label: "Reviews", value: reviewsQuery.data?.length ?? 0 },
+    { label: "KPIs", value: kpisQuery.data?.length ?? 0 },
+    { label: "Goals", value: goalsQuery.data?.length ?? 0 },
+    { label: "Appraisals", value: appraisalsQuery.data?.length ?? 0 },
+  ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Performance" subtitle="Manage reviews, KPIs, goals, and appraisals." />
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <div className="mb-4 flex flex-wrap gap-2">
-          {(["reviews", "kpis", "goals", "appraisals"] as TabKey[]).map((tab) => (
-            <Button key={tab} variant={activeTab === tab ? "primary" : "outline"} onClick={() => setActiveTab(tab)}>{tab.toUpperCase()}</Button>
-          ))}
-          <FormInput className="ml-auto max-w-sm" placeholder="Search current tab..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          <Button onClick={openCreate}>New {activeTab.slice(0, -1)}</Button>
-        </div>
+      <PageHeader title="Performance" subtitle="Choose a focused page for reviews, KPIs, goals, or appraisals." />
 
-        {error && <div className="mb-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+          <Card className="border-[var(--border)]/70 bg-gradient-to-br from-[var(--card)] to-[var(--border)]/15">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Performance workspace</p>
+            <h2 className="mt-3 text-2xl font-semibold">Dedicated pages keep each performance workflow clean.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+              Reviews, KPIs, goals, and appraisals are now split into separate CRUD screens so users can move through each workflow without mixing data or losing context.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {performanceSections.map((section) => (
+                <Link
+                  key={section.key}
+                  to={section.path}
+                  className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[var(--primary)]/40 hover:shadow-sm"
+                >
+                  <p className="text-sm font-semibold">{section.title}</p>
+                  <p className="mt-2 text-sm text-[var(--muted)]">{section.description}</p>
+                </Link>
+              ))}
+            </div>
+          </Card>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              {activeTab === "reviews" && <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><th className="p-3">Employee</th><th className="p-3">Period</th><th className="p-3">Rating</th><th className="p-3">Summary</th><th className="p-3 text-right">Actions</th></tr>}
-              {activeTab === "kpis" && <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><th className="p-3">Employee</th><th className="p-3">KPI</th><th className="p-3">Target</th><th className="p-3">Current</th><th className="p-3">Unit</th><th className="p-3 text-right">Actions</th></tr>}
-              {activeTab === "goals" && <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><th className="p-3">Employee</th><th className="p-3">Goal</th><th className="p-3">Status</th><th className="p-3">Progress</th><th className="p-3">Due Date</th><th className="p-3 text-right">Actions</th></tr>}
-              {activeTab === "appraisals" && <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><th className="p-3">Employee</th><th className="p-3">Cycle</th><th className="p-3">Score</th><th className="p-3">Strengths</th><th className="p-3">Improvements</th><th className="p-3 text-right">Actions</th></tr>}
-            </thead>
-            <tbody>
-              {activeTab === "reviews" && (activeData as PerformanceReview[]).map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{employeeName(item.employee)}</td><td className="p-3">{item.period}</td><td className="p-3">{item.rating}/5</td><td className="p-3">{item.summary ?? "-"}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setEditingReview(item); setReviewForm({ employee_id: item.employee_id, reviewer_id: item.reviewer_id, period: item.period, rating: item.rating, summary: item.summary ?? "" }); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void onDelete(item.id)}>Delete</Button></div></td></tr>)}
-              {activeTab === "kpis" && (activeData as PerformanceKpi[]).map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{employeeName(item.employee)}</td><td className="p-3">{item.name}</td><td className="p-3">{item.target_value}</td><td className="p-3">{item.current_value}</td><td className="p-3">{item.unit}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setEditingKpi(item); setKpiForm({ employee_id: item.employee_id, name: item.name, target_value: Number(item.target_value), current_value: Number(item.current_value), unit: item.unit }); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void onDelete(item.id)}>Delete</Button></div></td></tr>)}
-              {activeTab === "goals" && (activeData as PerformanceGoal[]).map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{employeeName(item.employee)}</td><td className="p-3">{item.title}</td><td className="p-3">{item.status.replace("_", " ")}</td><td className="p-3">{item.progress}%</td><td className="p-3">{item.due_date ?? "-"}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setEditingGoal(item); setGoalForm({ employee_id: item.employee_id, title: item.title, description: item.description ?? "", due_date: item.due_date, status: item.status, progress: item.progress }); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void onDelete(item.id)}>Delete</Button></div></td></tr>)}
-              {activeTab === "appraisals" && (activeData as PerformanceAppraisal[]).map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{employeeName(item.employee)}</td><td className="p-3">{item.cycle}</td><td className="p-3">{item.overall_score}/5</td><td className="p-3">{item.strengths ?? "-"}</td><td className="p-3">{item.improvements ?? "-"}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setEditingAppraisal(item); setAppraisalForm({ employee_id: item.employee_id, reviewer_id: item.reviewer_id, cycle: item.cycle, overall_score: item.overall_score, strengths: item.strengths ?? "", improvements: item.improvements ?? "" }); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void onDelete(item.id)}>Delete</Button></div></td></tr>)}
-              {activeData.length === 0 && <tr><td className="p-6 text-center text-sm text-[var(--muted)]" colSpan={6}>No records found.</td></tr>}
-            </tbody>
-          </table>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            {stats.map((item) => (
+              <Card key={item.label} className="border-[var(--border)]/70">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{item.label}</p>
+                <p className="mt-2 text-3xl font-semibold">{item.value}</p>
+                <p className="mt-2 text-sm text-[var(--muted)]">Loaded from the live CRUD endpoint.</p>
+              </Card>
+            ))}
+          </div>
         </div>
       </section>
-
-      {modalOpen && (
-        <Modal title={`${editingReview || editingKpi || editingGoal || editingAppraisal ? "Edit" : "Create"} ${activeTab.slice(0, -1)}`} onClose={closeModal}>
-          <form className="space-y-4" onSubmit={submitForm}>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Employee</label>
-              <select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={activeTab === "reviews" ? reviewForm.employee_id : activeTab === "kpis" ? kpiForm.employee_id : activeTab === "goals" ? goalForm.employee_id : appraisalForm.employee_id} onChange={(e) => {
-                const value = Number(e.target.value);
-                if (activeTab === "reviews") setReviewForm((prev) => ({ ...prev, employee_id: value }));
-                if (activeTab === "kpis") setKpiForm((prev) => ({ ...prev, employee_id: value }));
-                if (activeTab === "goals") setGoalForm((prev) => ({ ...prev, employee_id: value }));
-                if (activeTab === "appraisals") setAppraisalForm((prev) => ({ ...prev, employee_id: value }));
-              }}>
-                <option value={0}>Select employee</option>
-                {(employeesQuery.data ?? []).map((emp) => <option key={emp.id} value={emp.id}>{emp.label}</option>)}
-              </select>
-            </div>
-
-            {activeTab === "reviews" && (
-              <>
-                <FormField label="Review Period"><FormInput value={reviewForm.period} onChange={(e) => setReviewForm((prev) => ({ ...prev, period: e.target.value }))} /></FormField>
-                <FormField label="Rating (1-5)"><FormInput type="number" min={1} max={5} value={reviewForm.rating} onChange={(e) => setReviewForm((prev) => ({ ...prev, rating: Number(e.target.value) }))} /></FormField>
-                <FormField label="Summary"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={reviewForm.summary ?? ""} onChange={(e) => setReviewForm((prev) => ({ ...prev, summary: e.target.value }))} /></FormField>
-              </>
-            )}
-
-            {activeTab === "kpis" && (
-              <>
-                <FormField label="KPI Name"><FormInput value={kpiForm.name} onChange={(e) => setKpiForm((prev) => ({ ...prev, name: e.target.value }))} /></FormField>
-                <FormField label="Target Value"><FormInput type="number" step="0.01" min={0} value={kpiForm.target_value} onChange={(e) => setKpiForm((prev) => ({ ...prev, target_value: Number(e.target.value) }))} /></FormField>
-                <FormField label="Current Value"><FormInput type="number" step="0.01" min={0} value={kpiForm.current_value} onChange={(e) => setKpiForm((prev) => ({ ...prev, current_value: Number(e.target.value) }))} /></FormField>
-                <FormField label="Unit"><FormInput value={kpiForm.unit} onChange={(e) => setKpiForm((prev) => ({ ...prev, unit: e.target.value }))} /></FormField>
-              </>
-            )}
-
-            {activeTab === "goals" && (
-              <>
-                <FormField label="Goal Title"><FormInput value={goalForm.title} onChange={(e) => setGoalForm((prev) => ({ ...prev, title: e.target.value }))} /></FormField>
-                <FormField label="Description"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={goalForm.description ?? ""} onChange={(e) => setGoalForm((prev) => ({ ...prev, description: e.target.value }))} /></FormField>
-                <FormField label="Due Date"><FormInput type="date" value={goalForm.due_date ?? ""} onChange={(e) => setGoalForm((prev) => ({ ...prev, due_date: e.target.value || null }))} /></FormField>
-                <FormField label="Status"><select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={goalForm.status} onChange={(e) => setGoalForm((prev) => ({ ...prev, status: e.target.value as GoalStatus }))}><option value="not_started">Not Started</option><option value="in_progress">In Progress</option><option value="completed">Completed</option><option value="on_hold">On Hold</option></select></FormField>
-                <FormField label="Progress %"><FormInput type="number" min={0} max={100} value={goalForm.progress} onChange={(e) => setGoalForm((prev) => ({ ...prev, progress: Number(e.target.value) }))} /></FormField>
-              </>
-            )}
-
-            {activeTab === "appraisals" && (
-              <>
-                <FormField label="Cycle"><FormInput value={appraisalForm.cycle} onChange={(e) => setAppraisalForm((prev) => ({ ...prev, cycle: e.target.value }))} /></FormField>
-                <FormField label="Overall Score (1-5)"><FormInput type="number" min={1} max={5} value={appraisalForm.overall_score} onChange={(e) => setAppraisalForm((prev) => ({ ...prev, overall_score: Number(e.target.value) }))} /></FormField>
-                <FormField label="Strengths"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={appraisalForm.strengths ?? ""} onChange={(e) => setAppraisalForm((prev) => ({ ...prev, strengths: e.target.value }))} /></FormField>
-                <FormField label="Improvements"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={appraisalForm.improvements ?? ""} onChange={(e) => setAppraisalForm((prev) => ({ ...prev, improvements: e.target.value }))} /></FormField>
-              </>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
-              <Button type="submit">Save</Button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 }
-
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="mb-1 block text-sm font-medium">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-

@@ -9,13 +9,6 @@ use Illuminate\Http\Request;
 
 class DesignationController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-    ];
-
     public function index()
     {
         return $this->ok(Designation::orderBy('name')->get());
@@ -28,14 +21,14 @@ class DesignationController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $validated = $request->validate(['name' => 'required|string|max:255|unique:designations,name']);
         return $this->ok(Designation::create($validated), 'Designation created successfully', 201);
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $designation = Designation::findOrFail($id);
         $validated = $request->validate(['name' => 'required|string|max:255|unique:designations,name,' . $id]);
         $designation->update($validated);
@@ -44,7 +37,7 @@ class DesignationController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage settings');
         $designation = Designation::findOrFail($id);
         $inUse = Employee::where('designation_id', $designation->id)->count();
         if ($inUse > 0) {

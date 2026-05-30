@@ -16,8 +16,8 @@ class LeaveApiTest extends TestCase
 
     public function test_employee_can_create_own_leave_and_manager_can_approve(): void
     {
-        $manager = User::factory()->create(['role' => User::ROLE_HR_MANAGER]);
-        $employeeUser = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $manager = $this->createUserWithRole(User::ROLE_HR_MANAGER);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Engineering']);
         $employee = Employee::create([
             'user_id' => $employeeUser->id,
@@ -48,8 +48,8 @@ class LeaveApiTest extends TestCase
 
     public function test_employee_cannot_create_leave_for_other_employee(): void
     {
-        $employeeUserA = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
-        $employeeUserB = User::factory()->create(['role' => User::ROLE_EMPLOYEE]);
+        $employeeUserA = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $employeeUserB = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         $department = Department::create(['name' => 'Operations']);
 
         Employee::create([

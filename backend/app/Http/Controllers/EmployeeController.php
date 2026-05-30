@@ -17,16 +17,9 @@ use Illuminate\Validation\ValidationException;
 
 class EmployeeController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-    ];
-
     public function index(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'view employees');
 
         $query = Employee::with(['department', 'designationRef', 'user']);
         if ($request->filled('status')) {
@@ -67,7 +60,7 @@ class EmployeeController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'create employees');
         $validated = $request->validate([
             'user_id' => ['nullable', 'exists:users,id', Rule::unique('employees', 'user_id')],
             'name' => 'nullable|string|max:255',
@@ -95,7 +88,7 @@ class EmployeeController extends Controller
             'status' => 'nullable|in:active,inactive',
             'create_user' => 'nullable|boolean',
             'password' => 'nullable|string|min:8',
-            'role' => 'nullable|string|in:' . implode(',', User::roles()),
+            'role' => 'nullable|string|in:' . implode(',', User::availableRoles()),
         ]);
 
         $name = $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
@@ -114,10 +107,9 @@ class EmployeeController extends Controller
                         'email' => $validated['email'],
                         'username' => $validated['username'] ?? explode('@', $validated['email'])[0],
                         'password' => Hash::make($validated['password'] ?? Str::password(12)),
-                        'role' => $validated['role'] ?? User::ROLE_EMPLOYEE,
-                    ]);
-                    $linkedUserId = $linkedUser->id;
-                }
+                ]);
+                $linkedUserId = $linkedUser->id;
+            }
             }
 
             if (!$linkedUserId) {
@@ -171,7 +163,7 @@ class EmployeeController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'edit employees');
         $employee = Employee::findOrFail($id);
         $validated = $request->validate([
             'user_id' => ['sometimes', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($id)],
@@ -227,14 +219,14 @@ class EmployeeController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'delete employees');
         Employee::findOrFail($id)->delete();
         return $this->ok(null, 'Employee deleted successfully');
     }
 
     public function getByDepartment(Request $request, $departmentId)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'view employees');
 
         return $this->ok(Employee::with(['department', 'designationRef', 'user'])
             ->where('department_id', $departmentId)
@@ -243,7 +235,7 @@ class EmployeeController extends Controller
 
     public function search(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'view employees');
 
         $term = $request->input('q', '');
         return $this->ok(Employee::where('name', 'like', "%$term%")
@@ -255,7 +247,7 @@ class EmployeeController extends Controller
 
     public function setUserPassword(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'edit employees');
         $employee = Employee::with('user')->findOrFail($id);
         $validated = $request->validate(['password' => 'required|string|min:8|confirmed']);
 
@@ -269,7 +261,7 @@ class EmployeeController extends Controller
 
     public function bulkAction(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'delete employees');
         $validated = $request->validate([
             'action' => 'required|in:activate,deactivate,delete',
             'employee_ids' => 'required|array|min:1',
@@ -290,7 +282,7 @@ class EmployeeController extends Controller
 
     public function export(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'export employees');
 
         $rows = Employee::query()
             ->with(['department', 'designationRef'])
@@ -329,11 +321,10 @@ class EmployeeController extends Controller
 
     private function authorizeEmployeeRead(Request $request, Employee $employee): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('view employees')) {
             return;
         }
-        if ($role === User::ROLE_EMPLOYEE && $request->user()?->id === $employee->user_id) {
+        if ($request->user()?->id === $employee->user_id) {
             return;
         }
         abort(403, 'You are not authorized to access this employee.');
@@ -358,8 +349,6 @@ class EmployeeController extends Controller
             return;
         }
 
-        $user->rolesRelation()->syncWithoutDetaching([
-            $role->id => ['scope' => json_encode(new \stdClass())],
-        ]);
+        $user->assignRole($role);
     }
 }

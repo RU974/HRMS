@@ -21,6 +21,15 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - `backend/`: Laravel API backend.
 - `SETTINGS_AUDIT_REPORT.md`: reference for settings and audit behavior.
 
+## Current App Surface
+
+- Global search lives at `/search` in the frontend and uses `build/src/modules/search/index.tsx`.
+- The navbar search input is controlled and submits to the global search route from `build/src/components/navbar/top-navbar.tsx`.
+- The shared search input component is `build/src/components/forms/search-bar.tsx`.
+- The frontend search API wrapper is `build/src/services/search-service.ts`.
+- The backend global search endpoint is `GET /api/v1/search` handled by `backend/app/Http/Controllers/SearchController.php`.
+- Keep global search results aligned with existing module routes, permissions, and payload shapes.
+
 ## Shared Rules
 
 - Do not edit generated or dependency directories manually.
@@ -51,7 +60,9 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - `build/src/app/routes/app-routes.tsx`: route map.
 - `build/src/app/layouts/app-layout.tsx`: authenticated shell.
 - `build/src/modules/`: feature modules and pages.
+- `build/src/modules/search/`: global search results page.
 - `build/src/components/`: reusable UI primitives.
+- `build/src/components/forms/search-bar.tsx`: shared controlled search input.
 - `build/src/services/`: API-facing services and contracts.
 - `build/src/store/`: Zustand stores.
 - `build/src/styles/theme.css`: theme tokens.
@@ -65,6 +76,8 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - Keep role-sensitive UI behavior consistent with backend permissions.
 - Avoid dead routes, duplicate service layers, and unnecessary state duplication.
 - Prefer responsive implementations that work at desktop and mobile widths.
+- Keep global search results grouped by domain and link to the correct module route.
+- Keep the navbar search submit-only and route users to `/search?q=...` instead of silently filtering local lists.
 
 ### Frontend Verification
 
@@ -100,6 +113,7 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - Eager-load the relations needed by frontend tables and forms.
 - Keep pagination, filter, and sort contracts explicit and stable.
 - Group `orWhere` clauses inside closures to prevent query leakage.
+- When adding search endpoints, validate the query, scope results by permission, and return the standard `{ success, message, data }` response shape.
 
 ### API Contract
 
@@ -155,6 +169,7 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - Do not use manager-only or admin-only endpoints for employee self-service flows.
 - For cross-role dropdown or reference data, prefer narrow meta endpoints such as `performance/meta/employees`.
 - Keep settings and role-management routes behind existing permission middleware.
+- For global search, only return records the current user can access or infer from self-service scope.
 
 ## Recommended Commands
 

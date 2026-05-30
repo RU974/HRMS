@@ -21,7 +21,7 @@ class PermissionMiddleware
             abort(401, 'Unauthenticated.');
         }
 
-        if (!$this->permissionService->hasPermission($user, $requiredPermission)) {
+        if (!$user->can($requiredPermission) && !$this->permissionService->hasPermission($user, $requiredPermission)) {
             abort(403, 'You do not have the required permission: ' . $requiredPermission);
         }
 

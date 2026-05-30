@@ -10,13 +10,20 @@ class PerformanceGoalController extends Controller
 {
     public function index(Request $request)
     {
+        $this->authorizePermission($request, 'view performance');
         $query = PerformanceGoal::query()->with('employee:id,first_name,last_name,employee_number');
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
             $query->where(function ($builder) use ($search) {
                 $builder->where('title', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('description', 'like', "%{$search}%")
+                    ->orWhereHas('employee', function ($employeeQuery) use ($search) {
+                        $employeeQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('employee_number', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -29,6 +36,7 @@ class PerformanceGoalController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizePermission($request, 'manage performance');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'title' => 'required|string|max:255',
@@ -47,13 +55,15 @@ class PerformanceGoalController extends Controller
         return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance goal created successfully', 201);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $this->authorizePermission($request, 'view performance');
         return $this->ok(PerformanceGoal::with('employee:id,first_name,last_name,employee_number')->findOrFail($id));
     }
 
     public function update(Request $request, $id)
     {
+        $this->authorizePermission($request, 'edit performance');
         $item = PerformanceGoal::findOrFail($id);
         $validated = $request->validate([
             'employee_id' => 'sometimes|exists:employees,id',
@@ -68,8 +78,9 @@ class PerformanceGoalController extends Controller
         return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance goal updated successfully');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->authorizePermission($request, 'manage performance');
         PerformanceGoal::findOrFail($id)->delete();
         return $this->ok(null, 'Performance goal deleted successfully');
     }

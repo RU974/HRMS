@@ -7,15 +7,11 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DesignationController;
 use App\Http\Controllers\AttendanceController;
-use App\Http\Controllers\CandidateController;
 use App\Http\Controllers\EmployeeDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HolidayController;
-use App\Http\Controllers\InterviewController;
-use App\Http\Controllers\JobOpeningController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveTypeController;
-use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollProcessingController;
 use App\Http\Controllers\PayslipController;
@@ -26,6 +22,7 @@ use App\Http\Controllers\PerformanceGoalController;
 use App\Http\Controllers\PerformanceKpiController;
 use App\Http\Controllers\PerformanceMetaController;
 use App\Http\Controllers\PerformanceReviewController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\RolePermissionController;
@@ -38,6 +35,10 @@ use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ChatMessageController;
+use App\Http\Controllers\Recruitment\CandidateController as RecruitmentCandidateController;
+use App\Http\Controllers\Recruitment\InterviewController as RecruitmentInterviewController;
+use App\Http\Controllers\Recruitment\JobOpeningController as RecruitmentJobOpeningController;
+use App\Http\Controllers\Recruitment\OnboardingController as RecruitmentOnboardingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,10 +54,10 @@ use App\Http\Controllers\ChatMessageController;
 $registerRoutes = function (): void {
     // Public authentication routes
     Route::prefix('auth')->group(function () {
-        Route::post('/register', [AuthController::class, 'register']);
-        Route::post('/login', [AuthController::class, 'login']);
-        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+        Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
+        Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
+        Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth');
+        Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth');
     });
 
     // Protected routes - require authentication
@@ -71,6 +72,7 @@ $registerRoutes = function (): void {
         // Dashboard + reports
         Route::get('dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('dashboard/insights', [DashboardController::class, 'insights']);
+        Route::get('search', [SearchController::class, 'index']);
         Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
         Route::prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
@@ -81,13 +83,16 @@ $registerRoutes = function (): void {
         });
         Route::apiResource('reports', ReportController::class);
 
-        Route::middleware('permission:role.manage')->group(function () {
+        Route::middleware('permission:manage roles')->group(function () {
             Route::get('permissions', [RolePermissionController::class, 'permissions']);
             Route::get('roles', [RolePermissionController::class, 'roles']);
             Route::post('roles', [RolePermissionController::class, 'storeRole']);
             Route::put('roles/{id}', [RolePermissionController::class, 'updateRole']);
             Route::delete('roles/{id}', [RolePermissionController::class, 'deleteRole']);
             Route::get('users/{id}/roles', [UserRoleController::class, 'getUserRoles']);
+            Route::post('users/{id}/roles/assign', [UserRoleController::class, 'assignRole']);
+            Route::delete('users/{id}/roles/remove', [UserRoleController::class, 'removeRole']);
+            Route::put('users/{id}/roles/sync', [UserRoleController::class, 'syncRoles']);
             Route::put('users/{id}/roles', [UserRoleController::class, 'updateUserRoles']);
         });
 
@@ -96,10 +101,8 @@ $registerRoutes = function (): void {
             Route::apiResource('settings/companies', CompanySettingsController::class);
             Route::apiResource('settings/branches', BranchController::class);
             Route::apiResource('settings/themes', ThemeSettingsController::class);
-            Route::get('settings/system-logs', [SystemLogController::class, 'index']);
-            Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
-            Route::delete('settings/system-logs/{id}', [SystemLogController::class, 'destroy']);
-            Route::delete('settings/system-logs', [SystemLogController::class, 'clear']);
+            Route::get('settings/system-logs', [SystemLogController::class, 'index'])->middleware('permission:view audit logs');
+            Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show'])->middleware('permission:view audit logs');
         });
 
         // Employee routes
@@ -159,11 +162,11 @@ $registerRoutes = function (): void {
 
         // Recruitment routes
         Route::middleware('permission:recruitment.view')->group(function () {
-            Route::get('recruitment/pipeline-summary', [CandidateController::class, 'pipelineSummary']);
-            Route::apiResource('job-openings', JobOpeningController::class);
-            Route::apiResource('candidates', CandidateController::class);
-            Route::apiResource('interviews', InterviewController::class);
-            Route::apiResource('onboarding', OnboardingController::class);
+            Route::get('recruitment/pipeline-summary', [RecruitmentCandidateController::class, 'pipelineSummary']);
+            Route::apiResource('job-openings', RecruitmentJobOpeningController::class);
+            Route::apiResource('candidates', RecruitmentCandidateController::class);
+            Route::apiResource('interviews', RecruitmentInterviewController::class);
+            Route::apiResource('onboarding', RecruitmentOnboardingController::class);
         });
 
         // Communication routes

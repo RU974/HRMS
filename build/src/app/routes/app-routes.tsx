@@ -7,12 +7,20 @@ import { EmployeeFormPage } from "@/modules/employees/employee-form-page";
 import { AttendancePage } from "@/modules/attendance";
 import { PayrollPage } from "@/modules/payroll";
 import { RecruitmentPage } from "@/modules/recruitment";
+import { CandidatesPage } from "@/modules/recruitment/candidates-page";
+import { InterviewsPage } from "@/modules/recruitment/interviews-page";
+import { JobsPage } from "@/modules/recruitment/jobs-page";
+import { OnboardingPage } from "@/modules/recruitment/onboarding-page";
 import { LeavesPage } from "@/modules/leaves";
 import { DepartmentsPage } from "@/modules/departments";
 import { DesignationsPage } from "@/modules/designations";
 import { ShiftsPage } from "@/modules/shifts";
 import { HolidaysPage } from "@/modules/holidays";
 import { PerformancePage } from "@/modules/performance";
+import { PerformanceReviewsPage } from "@/modules/performance/reviews-page";
+import { PerformanceKpisPage } from "@/modules/performance/kpis-page";
+import { PerformanceGoalsPage } from "@/modules/performance/goals-page";
+import { PerformanceAppraisalsPage } from "@/modules/performance/appraisals-page";
 import { AnnouncementsPage } from "@/modules/announcements";
 import { NotificationsPage } from "@/modules/notifications";
 import { ChatPage } from "@/modules/chat";
@@ -21,6 +29,7 @@ import { AttendanceReportsPage } from "@/modules/reports/attendance-reports-page
 import { EmployeeReportsPage } from "@/modules/reports/employee-reports-page";
 import { PayrollReportsPage } from "@/modules/reports/payroll-reports-page";
 import { AnalyticsReportsPage } from "@/modules/reports/analytics-reports-page";
+import { SearchPage } from "@/modules/search";
 import { SettingsPage } from "@/modules/settings";
 import { AuthLayout } from "@/modules/auth/auth-layout";
 import { LoginPage } from "@/modules/auth/login-page";
@@ -39,12 +48,20 @@ export const appRouter = createBrowserRouter([
       { path: "attendance", element: <AttendancePage /> },
       { path: "payroll", element: <PayrollPage /> },
       { path: "recruitment", element: <RecruitmentPage /> },
+      { path: "recruitment/jobs", element: <JobsPage /> },
+      { path: "recruitment/candidates", element: <CandidatesPage /> },
+      { path: "recruitment/interviews", element: <InterviewsPage /> },
+      { path: "recruitment/onboarding", element: <OnboardingPage /> },
       { path: "leaves", element: <LeavesPage /> },
       { path: "departments", element: <DepartmentsPage /> },
       { path: "designations", element: <DesignationsPage /> },
       { path: "shifts", element: <ShiftsPage /> },
       { path: "holidays", element: <HolidaysPage /> },
       { path: "performance", element: <PerformancePage /> },
+      { path: "performance/reviews", element: <PerformanceReviewsPage /> },
+      { path: "performance/kpis", element: <PerformanceKpisPage /> },
+      { path: "performance/goals", element: <PerformanceGoalsPage /> },
+      { path: "performance/appraisals", element: <PerformanceAppraisalsPage /> },
       { path: "announcements", element: <AnnouncementsPage /> },
       { path: "notifications", element: <NotificationsPage /> },
       { path: "chat", element: <ChatPage /> },
@@ -53,6 +70,7 @@ export const appRouter = createBrowserRouter([
       { path: "reports/employees", element: <EmployeeReportsPage /> },
       { path: "reports/payroll", element: <PayrollReportsPage /> },
       { path: "reports/analytics", element: <AnalyticsReportsPage /> },
+      { path: "search", element: <SearchPage /> },
       { path: "settings", element: <SettingsPage /> }
     ]
   },

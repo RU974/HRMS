@@ -18,6 +18,7 @@ class PerformanceGoal extends Model
 
     protected $casts = [
         'due_date' => 'date',
+        'progress' => 'integer',
     ];
 
     public function employee(): BelongsTo
@@ -25,4 +26,3 @@ class PerformanceGoal extends Model
         return $this->belongsTo(Employee::class);
     }
 }
-

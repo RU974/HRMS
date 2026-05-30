@@ -3,9 +3,9 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Concerns\HasRoles;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -13,7 +13,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable;
 
     public const ROLE_SUPER_ADMIN = 'Super Admin';
     public const ROLE_COMPANY_ADMIN = 'Company Admin';
@@ -38,7 +38,6 @@ class User extends Authenticatable
         'email',
         'username',
         'password',
-        'role',
     ];
 
 
@@ -67,61 +66,7 @@ class User extends Authenticatable
         ];
     }
 
-    protected ?string $legacyRoleName = null;
-
-    protected static function booted(): void
-    {
-        static::created(function (self $user): void {
-            $user->syncLegacyRoleAssignment();
-        });
-    }
-
-    public function setRoleAttribute(?string $value): void
-    {
-        $this->legacyRoleName = $value !== null ? trim($value) : null;
-    }
-
-    private function syncLegacyRoleAssignment(): void
-    {
-        if (!$this->legacyRoleName) {
-            return;
-        }
-
-        $role = null;
-        if ($this->company_id) {
-            $role = Role::query()
-                ->where('name', $this->legacyRoleName)
-                ->where('company_id', $this->company_id)
-                ->first();
-        }
-
-        if (!$role) {
-            $role = Role::query()
-                ->where('name', $this->legacyRoleName)
-                ->whereNull('company_id')
-                ->first();
-        }
-
-        if (!$role) {
-            return;
-        }
-
-        $this->rolesRelation()->syncWithoutDetaching([
-            $role->id => ['scope' => json_encode(new \stdClass())],
-        ]);
-
-        $this->loadMissing('rolesRelation.permissions');
-    }
-
-    public function rolesRelation(): BelongsToMany
-    {
-        return $this->belongsToMany(Role::class, 'user_roles')
-            ->using(UserRole::class)
-            ->withPivot('scope')
-            ->withTimestamps();
-    }
-
-    public static function roles(): array
+    public static function availableRoles(): array
     {
         return [
             self::ROLE_SUPER_ADMIN,
@@ -135,27 +80,5 @@ class User extends Authenticatable
             self::ROLE_IT_SUPPORT,
             self::ROLE_EMPLOYEE,
         ];
-    }
-
-    public function hasPermission(string $permissionKey): bool
-    {
-        return app(\App\Services\PermissionService::class)->hasPermission($this, $permissionKey);
-    }
-
-    public function hasAnyPermission(array $permissionKeys): bool
-    {
-        foreach ($permissionKeys as $permissionKey) {
-            if ($this->hasPermission($permissionKey)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public function getRoleAttribute(): ?string
-    {
-        $this->loadMissing('rolesRelation');
-        return $this->rolesRelation->pluck('name')->first();
     }
 }

@@ -11,26 +11,18 @@ use Illuminate\Http\Request;
 
 class AttendanceController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-        User::ROLE_ATTENDANCE_MANAGER,
-    ];
-
     public function index(Request $request)
     {
-        $role = $request->user()?->role;
+        $user = $request->user();
         $query = Attendance::with('employee');
 
         if ($request->has('employee_id')) {
             $employeeId = (int) $request->employee_id;
-            if (!in_array($role, self::MANAGER_ROLES, true)) {
+            if (!$user?->can('manage attendance')) {
                 $this->authorizeAttendanceAccess($request, $employeeId);
             }
             $query->where('employee_id', $employeeId);
-        } elseif (!in_array($role, self::MANAGER_ROLES, true)) {
+        } elseif (!$user?->can('manage attendance')) {
             $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
             $query->where('employee_id', $employee->id);
         }
@@ -56,7 +48,7 @@ class AttendanceController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage attendance');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'date' => 'required|date',
@@ -90,7 +82,7 @@ class AttendanceController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'approve attendance');
         $attendance = Attendance::findOrFail($id);
         $validated = $request->validate([
             'date' => 'sometimes|date',
@@ -120,7 +112,7 @@ class AttendanceController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage attendance');
         Attendance::findOrFail($id)->delete();
         return $this->ok(null, 'Attendance deleted successfully');
     }
@@ -195,7 +187,7 @@ class AttendanceController extends Controller
 
     public function companyMonthlySummary(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'view attendance');
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000',
@@ -220,13 +212,13 @@ class AttendanceController extends Controller
 
     public function getPolicy(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage attendance');
         return $this->ok(AttendancePolicy::query()->first());
     }
 
     public function updatePolicy(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage attendance');
         $validated = $request->validate([
             'late_after_time' => 'required|date_format:H:i',
             'allow_manual_status_override' => 'required|boolean',
@@ -257,8 +249,7 @@ class AttendanceController extends Controller
 
     private function authorizeAttendanceAccess(Request $request, int $employeeId): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('manage attendance')) {
             return;
         }
 

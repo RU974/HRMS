@@ -11,13 +11,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class EmployeeDocumentController extends Controller
 {
-    private const HR_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-    ];
-
     public function index(Request $request)
     {
         $query = EmployeeDocument::with(['employee', 'versions']);
@@ -39,7 +32,7 @@ class EmployeeDocumentController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::HR_ROLES);
+        $this->authorizePermission($request, 'manage employee documents');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'title' => 'required|string|max:255',
@@ -61,7 +54,7 @@ class EmployeeDocumentController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::HR_ROLES);
+        $this->authorizePermission($request, 'manage employee documents');
         $document = EmployeeDocument::findOrFail($id);
         $validated = $request->validate([
             'employee_id' => 'sometimes|exists:employees,id',
@@ -91,7 +84,7 @@ class EmployeeDocumentController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizeRoles($request, self::HR_ROLES);
+        $this->authorizePermission($request, 'manage employee documents');
         $document = EmployeeDocument::with('versions')->findOrFail($id);
 
         if (!empty($document->file_path) && Storage::disk('public')->exists($document->file_path)) {
@@ -141,15 +134,15 @@ class EmployeeDocumentController extends Controller
 
     private function canAccess(Request $request, EmployeeDocument $document): bool
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::HR_ROLES, true)) {
+        $user = $request->user();
+        if ($user?->can('manage employee documents')) {
             return true;
         }
         if ($document->visibility === 'manager_only') {
-            return in_array($role, [User::ROLE_DEPARTMENT_MANAGER, User::ROLE_ATTENDANCE_MANAGER], true);
+            return $user?->can('view employees') || $user?->can('view attendance');
         }
         if ($document->visibility === 'employee_self') {
-            return $role === User::ROLE_EMPLOYEE && $request->user()?->id === $document->employee?->user_id;
+            return $user?->id === $document->employee?->user_id;
         }
         return false;
     }

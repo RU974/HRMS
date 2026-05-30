@@ -16,6 +16,10 @@ class PerformanceAppraisal extends Model
         'improvements',
     ];
 
+    protected $casts = [
+        'overall_score' => 'integer',
+    ];
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
@@ -26,4 +30,3 @@ class PerformanceAppraisal extends Model
         return $this->belongsTo(User::class, 'reviewer_id');
     }
 }
-

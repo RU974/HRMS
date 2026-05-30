@@ -28,9 +28,7 @@ class ThemeSettingsController extends Controller
     public function show(Request $request, int $id)
     {
         $setting = ThemeSetting::findOrFail($id);
-        if ($setting->user_id !== null && $setting->user_id !== $request->user()->id) {
-            abort(403, 'Unauthorized.');
-        }
+        $this->assertAccessible($request, $setting);
         return $this->ok($setting);
     }
 
@@ -41,6 +39,10 @@ class ThemeSettingsController extends Controller
             'preferences' => 'nullable|array',
             'company_scope' => 'nullable|boolean',
         ]);
+
+        if ($request->boolean('company_scope') && !$request->user()?->company_id) {
+            return $this->fail('Company-scoped theme settings require a company assignment.', 422);
+        }
 
         $setting = $this->service->upsert(
             $request->boolean('company_scope') ? $request->user()->company_id : null,
@@ -54,9 +56,7 @@ class ThemeSettingsController extends Controller
     public function update(Request $request, int $id)
     {
         $setting = ThemeSetting::findOrFail($id);
-        if ($setting->user_id !== null && $setting->user_id !== $request->user()->id) {
-            abort(403, 'Unauthorized.');
-        }
+        $this->assertAccessible($request, $setting);
 
         $validated = $request->validate([
             'theme' => 'sometimes|required|string|in:light,dark,system',
@@ -70,10 +70,31 @@ class ThemeSettingsController extends Controller
     public function destroy(Request $request, int $id)
     {
         $setting = ThemeSetting::findOrFail($id);
-        if ($setting->user_id !== null && $setting->user_id !== $request->user()->id) {
-            abort(403, 'Unauthorized.');
-        }
+        $this->assertAccessible($request, $setting);
         $setting->delete();
         return $this->ok(null, 'Theme setting deleted successfully');
+    }
+
+    private function assertAccessible(Request $request, ThemeSetting $setting): void
+    {
+        $user = $request->user();
+
+        if ($setting->user_id !== null) {
+            if (!$user || $setting->user_id !== $user->id) {
+                abort(403, 'Unauthorized.');
+            }
+
+            return;
+        }
+
+        if ($setting->company_id !== null) {
+            if (!$user || !$user->company_id || $setting->company_id !== $user->company_id) {
+                abort(403, 'Unauthorized.');
+            }
+
+            return;
+        }
+
+        abort(403, 'Unauthorized.');
     }
 }

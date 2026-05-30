@@ -63,6 +63,7 @@ class RolePermissionController extends Controller
             $role = Role::create([
                 'company_id' => $companyId,
                 'name' => $validated['name'],
+                'guard_name' => 'web',
                 'description' => $validated['description'] ?? null,
                 'is_system' => false,
             ]);
@@ -136,6 +137,7 @@ class RolePermissionController extends Controller
 
         return $this->ok([
             'permissions' => $permissions,
+            'roles' => $request->user()?->loadMissing('roles.permissions')->roles,
         ]);
     }
 }

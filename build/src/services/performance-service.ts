@@ -93,8 +93,11 @@ export function deletePerformanceKpi(id: number) {
   return apiClient<null>(`/performance-kpis/${id}`, { method: "DELETE" });
 }
 
-export function listPerformanceGoals(q = "") {
-  const suffix = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+export function listPerformanceGoals(q = "", status = "") {
+  const params = new URLSearchParams();
+  if (q.trim()) params.set("q", q.trim());
+  if (status.trim()) params.set("status", status.trim());
+  const suffix = params.toString() ? `?${params.toString()}` : "";
   return apiClient<PerformanceGoal[]>(`/performance-goals${suffix}`);
 }
 export function createPerformanceGoal(payload: PerformanceGoalPayload) {

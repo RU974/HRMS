@@ -38,7 +38,7 @@ class DatabaseSeeder extends Seeder
 
         $superAdminRole = Role::where('name', User::ROLE_SUPER_ADMIN)->whereNull('company_id')->first();
         if ($superAdminRole) {
-            $admin->rolesRelation()->syncWithoutDetaching([$superAdminRole->id => ['scope' => json_encode(new \stdClass())]]);
+            $admin->assignRole($superAdminRole);
         }
     }
 }

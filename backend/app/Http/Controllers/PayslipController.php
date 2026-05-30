@@ -11,20 +11,12 @@ use Illuminate\Http\Request;
 
 class PayslipController extends Controller
 {
-    private const MANAGER_ROLES = [
-        User::ROLE_SUPER_ADMIN,
-        User::ROLE_COMPANY_ADMIN,
-        User::ROLE_HR_MANAGER,
-        User::ROLE_HR_EXECUTIVE,
-        User::ROLE_PAYROLL_MANAGER,
-    ];
-
     public function index(Request $request)
     {
         $this->authorizeRead($request);
         $query = Payslip::with(['employee', 'payroll']);
 
-        if ($request->user()?->role === User::ROLE_EMPLOYEE) {
+        if (!$request->user()?->can('manage payroll')) {
             $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
             $query->where('employee_id', $employee->id);
         }
@@ -43,7 +35,7 @@ class PayslipController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage payroll');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'payroll_id' => 'required|exists:payrolls,id',
@@ -79,7 +71,7 @@ class PayslipController extends Controller
 
     public function update(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage payroll');
         $item = Payslip::findOrFail($id);
         $validated = $request->validate([
             'status' => 'sometimes|in:draft,issued,cancelled',
@@ -93,14 +85,14 @@ class PayslipController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage payroll');
         Payslip::findOrFail($id)->delete();
         return $this->ok(null, 'Payslip deleted successfully');
     }
 
     public function createFromPayroll(Request $request)
     {
-        $this->authorizeRoles($request, self::MANAGER_ROLES);
+        $this->authorizePermission($request, 'manage payroll');
         $validated = $request->validate([
             'payroll_id' => 'required|exists:payrolls,id',
             'issue_date' => 'required|date',
@@ -142,8 +134,7 @@ class PayslipController extends Controller
 
     private function authorizeRead(Request $request): void
     {
-        $role = $request->user()?->role;
-        if (in_array($role, self::MANAGER_ROLES, true) || $role === User::ROLE_EMPLOYEE) {
+        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll') || $request->user()?->can('view own payroll')) {
             return;
         }
         abort(403, 'You are not authorized to access payslips.');
@@ -151,11 +142,11 @@ class PayslipController extends Controller
 
     private function authorizeRecordAccess(Request $request, int $employeeId): void
     {
-        if (in_array($request->user()?->role, self::MANAGER_ROLES, true)) {
+        if ($request->user()?->can('manage payroll')) {
             return;
         }
         $employee = Employee::where('user_id', $request->user()?->id)->first();
-        if ($request->user()?->role === User::ROLE_EMPLOYEE && $employee && (int) $employee->id === $employeeId) {
+        if ($request->user()?->can('view own payroll') && $employee && (int) $employee->id === $employeeId) {
             return;
         }
         abort(403, 'You are not authorized to access this payslip.');
