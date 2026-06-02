@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
+import { useAuthStore } from "@/store/auth-store";
 import {
   BranchItem,
   CompanyItem,
@@ -34,16 +35,17 @@ import {
   LogItem,
 } from "@/services/settings-service";
 import { useThemeStore } from "@/store/theme-store";
+import { hasAllPermissions } from "@/utils/permissions";
 
 type SettingsTab = "users" | "roles" | "company" | "branches" | "theme" | "logs";
 
-const tabs: Array<{ key: SettingsTab; label: string }> = [
-  { key: "users", label: "Users" },
-  { key: "roles", label: "Roles & Permissions" },
-  { key: "company", label: "Company" },
-  { key: "branches", label: "Branches" },
-  { key: "theme", label: "Theme" },
-  { key: "logs", label: "System Logs" },
+const tabs: Array<{ key: SettingsTab; label: string; permissions: string[]; requireAllPermissions?: boolean }> = [
+  { key: "users", label: "Users", permissions: ["user.manage"] },
+  { key: "roles", label: "Roles & Permissions", permissions: ["manage roles"] },
+  { key: "company", label: "Company", permissions: ["manage settings"] },
+  { key: "branches", label: "Branches", permissions: ["manage settings"] },
+  { key: "theme", label: "Theme", permissions: ["manage settings"] },
+  { key: "logs", label: "System Logs", permissions: ["manage settings", "view audit logs"], requireAllPermissions: true },
 ];
 
 const fieldClass = "w-full rounded-xl border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none transition focus:border-[var(--primary)]";
@@ -51,6 +53,8 @@ const panelClass = "rounded-2xl border border-[var(--border)] bg-white/95 shadow
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useAuthStore((state) => state.user);
+  const hasPermission = useAuthStore((state) => state.hasPermission);
   const initialTab = (searchParams.get("tab") as SettingsTab | null) ?? "users";
   const [tab, setTab] = useState<SettingsTab>(tabs.some((item) => item.key === initialTab) ? initialTab : "users");
   const setTheme = useThemeStore((state) => state.setTheme);
@@ -82,6 +86,11 @@ export function SettingsPage() {
 
   const [themeForm, setThemeForm] = useState({ theme: "light", company_scope: false });
 
+  const visibleTabs = useMemo(
+    () =>
+      tabs.filter((item) => (item.requireAllPermissions ? hasAllPermissions(user, item.permissions) : item.permissions.some((permission) => hasPermission(permission)))),
+    [hasPermission, user]
+  );
   const allPermissions = useMemo(() => permissions.flatMap((group) => group.permissions), [permissions]);
 
   const filteredUsers = useMemo(() => users.filter((item) => `${item.name} ${item.email}`.toLowerCase().includes(query.toLowerCase())), [users, query]);
@@ -94,12 +103,24 @@ export function SettingsPage() {
     return `${method} ${path} ${item.module ?? ""} ${item.action ?? ""} ${item.description ?? ""} ${item.status_code}`.toLowerCase().includes(query.toLowerCase());
   }), [logs, query]);
   const selectedLog = useMemo(() => filteredLogs.find((item) => item.id === selectedLogId) ?? filteredLogs[0] ?? null, [filteredLogs, selectedLogId]);
+  const canManageUsers = hasPermission("user.manage");
+  const canManageRoles = hasPermission("manage roles");
+  const canManageSettings = hasPermission("manage settings");
+  const canViewLogs = hasAllPermissions(user, ["manage settings", "view audit logs"]);
 
   async function loadAll() {
     setBusy(true);
     setError(null);
     try {
-      const [u, r, p, c, b, t, l] = await Promise.all([listUsers(), listRoles(), listPermissions(), listCompanies(), listBranches(), listThemes(), listLogs()]);
+      const [u, r, p, c, b, t, l] = await Promise.all([
+        canManageUsers ? listUsers() : Promise.resolve([] as UserItem[]),
+        canManageRoles ? listRoles() : Promise.resolve([] as RoleItem[]),
+        canManageRoles ? listPermissions() : Promise.resolve([] as PermissionGroup[]),
+        canManageSettings ? listCompanies() : Promise.resolve([] as CompanyItem[]),
+        canManageSettings ? listBranches() : Promise.resolve([] as BranchItem[]),
+        canManageSettings ? listThemes() : Promise.resolve([] as ThemeItem[]),
+        canViewLogs ? listLogs() : Promise.resolve([] as LogItem[])
+      ]);
       setUsers(u);
       setRoles(r);
       setPermissions(p);
@@ -139,7 +160,7 @@ export function SettingsPage() {
   }
 
   function getUserRoles(user: UserItem) {
-    return user.rolesRelation ?? user.roles_relation ?? [];
+    return user.roles ?? user.rolesRelation ?? user.roles_relation ?? [];
   }
 
   function getUserRoleIds(user: UserItem) {
@@ -178,6 +199,18 @@ export function SettingsPage() {
     setBranchForm({ company_id: companies[0]?.id ?? "", name: "", code: "", email: "", phone: "", address: "", is_active: true });
   }
 
+  useEffect(() => {
+    if (visibleTabs.length === 0) {
+      return;
+    }
+
+    if (!visibleTabs.some((item) => item.key === tab)) {
+      const fallbackTab = visibleTabs[0].key;
+      setTab(fallbackTab);
+      setSearchParams({ tab: fallbackTab });
+    }
+  }, [setSearchParams, tab, visibleTabs]);
+
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" subtitle="Modern admin controls for users, access, and system configuration." />
@@ -191,13 +224,19 @@ export function SettingsPage() {
 
       <section className="rounded-2xl border border-[var(--border)] bg-white p-2">
         <div className="flex flex-wrap gap-2">
-          {tabs.map((item) => (
+          {visibleTabs.map((item) => (
             <Button key={item.key} variant={tab === item.key ? "primary" : "outline"} onClick={() => { setTab(item.key); setSearchParams({ tab: item.key }); }}>
               {item.label}
             </Button>
           ))}
         </div>
       </section>
+
+      {visibleTabs.length === 0 && (
+        <section className="rounded-2xl border border-[var(--border)] bg-white p-6 text-sm text-[var(--muted)]">
+          You do not have access to administrative settings.
+        </section>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <input className={`${fieldClass} max-w-md`} placeholder="Search current section..." value={query} onChange={(e) => setQuery(e.target.value)} />

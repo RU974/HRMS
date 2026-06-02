@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import {
   createEmployee,
-  getDepartments,
-  getDesignations,
   getEmployees,
-  getShifts,
   type Employee,
 } from "@/services/employee-service";
+import {
+  listDepartments,
+  listDesignations,
+  listShifts,
+} from "@/services/hr-management-service";
 
 const genderOptions = [
   { value: "male", label: "Male" },
@@ -67,9 +69,9 @@ export function EmployeeFormPage() {
     role: "Employee",
   });
 
-  const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: getDepartments, retry: false });
-  const designationsQuery = useQuery({ queryKey: ["designations"], queryFn: getDesignations, retry: false });
-  const shiftsQuery = useQuery({ queryKey: ["shifts"], queryFn: getShifts, retry: false });
+  const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: listDepartments, retry: false });
+  const designationsQuery = useQuery({ queryKey: ["designations"], queryFn: listDesignations, retry: false });
+  const shiftsQuery = useQuery({ queryKey: ["shifts"], queryFn: listShifts, retry: false });
   const managersQuery = useQuery({ queryKey: ["employees", "managers"], queryFn: () => getEmployees(), retry: false });
 
   const mutation = useMutation({

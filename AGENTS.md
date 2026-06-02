@@ -27,6 +27,7 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - The navbar search input is controlled and submits to the global search route from `build/src/components/navbar/top-navbar.tsx`.
 - The shared search input component is `build/src/components/forms/search-bar.tsx`.
 - The frontend search API wrapper is `build/src/services/search-service.ts`.
+- Frontend permission checks live in `build/src/utils/permissions.ts` and the route-level guard is `build/src/app/guards/permission-guard.tsx`.
 - The backend global search endpoint is `GET /api/v1/search` handled by `backend/app/Http/Controllers/SearchController.php`.
 - Keep global search results aligned with existing module routes, permissions, and payload shapes.
 
@@ -73,7 +74,7 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - Reuse existing UI primitives before adding new patterns.
 - Use React Query for server state, cache keys, and invalidation.
 - Keep list, filter, and form behavior deterministic.
-- Keep role-sensitive UI behavior consistent with backend permissions.
+- Keep role-sensitive UI behavior consistent with backend permissions and the shared frontend permission helpers.
 - Avoid dead routes, duplicate service layers, and unnecessary state duplication.
 - Prefer responsive implementations that work at desktop and mobile widths.
 - Keep global search results grouped by domain and link to the correct module route.
@@ -169,6 +170,8 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - Do not use manager-only or admin-only endpoints for employee self-service flows.
 - For cross-role dropdown or reference data, prefer narrow meta endpoints such as `performance/meta/employees`.
 - Keep settings and role-management routes behind existing permission middleware.
+- Mirror backend permission checks in the frontend with `build/src/utils/permissions.ts` and `build/src/app/guards/permission-guard.tsx` instead of duplicating ad hoc checks.
+- Normalize permission keys consistently; treat `:` and `.` variants as the same logical permission.
 - For global search, only return records the current user can access or infer from self-service scope.
 
 ## Recommended Commands

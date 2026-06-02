@@ -7,6 +7,7 @@ export type UserItem = {
   name: string;
   email: string;
   role?: string | null;
+  roles?: { id: string; name: string }[];
   rolesRelation?: { id: string; name: string }[];
   roles_relation?: { id: string; name: string }[];
   company_id?: string | null;

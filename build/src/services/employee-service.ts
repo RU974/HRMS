@@ -52,18 +52,6 @@ export function getEmployees() {
   return apiClient<PaginatedResponse<Employee>>("/employees?per_page=10");
 }
 
-export function getDepartments() {
-  return apiClient<Department[]>("/departments");
-}
-
-export function getDesignations() {
-  return apiClient<Designation[]>("/designations");
-}
-
-export function getShifts() {
-  return apiClient<Shift[]>("/shifts");
-}
-
 export function createEmployee(formData: FormData) {
   return apiClient<Employee>("/employees", {
     method: "POST",

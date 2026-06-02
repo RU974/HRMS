@@ -98,11 +98,16 @@ $registerRoutes = function (): void {
 
         Route::middleware('permission:user.manage')->group(function () {
             Route::apiResource('settings/users', UserManagementController::class);
+        });
+
+        Route::middleware('permission:manage settings')->group(function () {
             Route::apiResource('settings/companies', CompanySettingsController::class);
             Route::apiResource('settings/branches', BranchController::class);
             Route::apiResource('settings/themes', ThemeSettingsController::class);
-            Route::get('settings/system-logs', [SystemLogController::class, 'index'])->middleware('permission:view audit logs');
-            Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show'])->middleware('permission:view audit logs');
+            Route::middleware('permission:view audit logs')->group(function () {
+                Route::get('settings/system-logs', [SystemLogController::class, 'index']);
+                Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
+            });
         });
 
         // Employee routes
@@ -144,7 +149,6 @@ $registerRoutes = function (): void {
         Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
         Route::apiResource('payroll', PayrollController::class);
         Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
-        Route::apiResource('salary-slips', PayslipController::class);
         Route::apiResource('payroll-processings', PayrollProcessingController::class);
         Route::apiResource('payslips', PayslipController::class);
         Route::apiResource('bonuses', BonusController::class);

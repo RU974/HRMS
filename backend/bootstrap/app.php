@@ -5,8 +5,10 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Validation\ValidationException;
 use App\Services\AuditLogService;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -62,6 +64,40 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'You are not authorized to perform this action.',
                     'errors' => null,
                 ], 403);
+            }
+
+            return null;
+        });
+
+        $exceptions->render(function (ValidationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                app(AuditLogService::class)->recordRequest(
+                    $request,
+                    'validation_failed',
+                    'validation',
+                    'Request validation failed',
+                    null,
+                    ['errors' => $e->errors()],
+                    422
+                );
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The given data was invalid.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+
+            return null;
+        });
+
+        $exceptions->render(function (HttpExceptionInterface $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage() ?: 'Request failed.',
+                    'errors' => null,
+                ], $e->getStatusCode());
             }
 
             return null;

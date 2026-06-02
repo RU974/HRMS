@@ -3,8 +3,14 @@ import { useState } from "react";
 import { cn } from "@/utils/cn";
 import { logoutRequest } from "@/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
+import { hasAllPermissions, hasAnyPermission } from "@/utils/permissions";
 
-type MenuItem = readonly [string, string];
+type MenuItem = {
+  label: string;
+  path: string;
+  permissions?: string[];
+  requireAllPermissions?: boolean;
+};
 type MenuGroup = {
   title: string;
   items: readonly MenuItem[];
@@ -12,18 +18,63 @@ type MenuGroup = {
 };
 
 const menu: readonly MenuGroup[] = [
-  { title: "Workspace", items: [["Dashboard", "/"]] },
-  { title: "HR Management", items: [["Employees", "/employees"], ["Departments", "/departments"], ["Designations", "/designations"], ["Attendance", "/attendance"], ["Leaves", "/leaves"], ["Shifts", "/shifts"], ["Holidays", "/holidays"]] },
+  { title: "Workspace", items: [{ label: "Dashboard", path: "/" }] },
+  {
+    title: "HR Management",
+    items: [
+      { label: "Employees", path: "/employees" },
+      { label: "Departments", path: "/departments", permissions: ["manage settings"] },
+      { label: "Designations", path: "/designations", permissions: ["manage settings"] },
+      { label: "Attendance", path: "/attendance" },
+      { label: "Leaves", path: "/leaves" },
+      { label: "Shifts", path: "/shifts", permissions: ["attendance.edit"] },
+      { label: "Holidays", path: "/holidays", permissions: ["attendance.edit"] }
+    ]
+  },
   {
     title: "Payroll",
     dropdown: true,
-    items: [["Salary Structure", "/payroll?tab=salary-structure"], ["Payroll Processing", "/payroll?tab=payroll-processing"], ["Payslips", "/payroll?tab=payslips"], ["Bonuses", "/payroll?tab=bonuses"], ["Deductions", "/payroll?tab=deductions"]]
+    items: [
+      { label: "Salary Structure", path: "/payroll?tab=salary-structure", permissions: ["manage payroll"] },
+      { label: "Payroll Processing", path: "/payroll?tab=payroll-processing", permissions: ["manage payroll"] },
+      { label: "Payslips", path: "/payroll?tab=payslips", permissions: ["manage payroll", "view payroll", "view own payroll"] },
+      { label: "Bonuses", path: "/payroll?tab=bonuses", permissions: ["manage payroll", "view payroll", "view own payroll"] },
+      { label: "Deductions", path: "/payroll?tab=deductions", permissions: ["manage payroll", "view payroll", "view own payroll"] }
+    ]
   },
-  { title: "Recruitment", items: [["Overview", "/recruitment"], ["Jobs", "/recruitment/jobs"], ["Candidates", "/recruitment/candidates"], ["Interviews", "/recruitment/interviews"], ["Onboarding", "/recruitment/onboarding"]] },
-  { title: "Performance", items: [["Overview", "/performance"], ["Reviews", "/performance/reviews"], ["KPIs", "/performance/kpis"], ["Goals", "/performance/goals"], ["Appraisals", "/performance/appraisals"]] },
-  { title: "Communication", items: [["Announcements", "/announcements"], ["Notifications", "/notifications"], ["Chat", "/chat"]] },
-  { title: "Reports", items: [["Attendance Reports", "/reports/attendance"], ["Employee Reports", "/reports/employees"], ["Payroll Reports", "/reports/payroll"], ["Analytics", "/reports/analytics"]] },
-  { title: "Settings", items: [["User Management", "/settings?tab=users"], ["Roles & Permissions", "/settings?tab=roles"], ["Company Settings", "/settings?tab=company"], ["Branches", "/settings?tab=branches"], ["Themes", "/settings?tab=theme"], ["System Logs", "/settings?tab=logs"]] }
+  {
+    title: "Recruitment",
+    items: [
+      { label: "Overview", path: "/recruitment", permissions: ["recruitment.view"] },
+      { label: "Jobs", path: "/recruitment/jobs", permissions: ["recruitment.view"] },
+      { label: "Candidates", path: "/recruitment/candidates", permissions: ["recruitment.view"] },
+      { label: "Interviews", path: "/recruitment/interviews", permissions: ["recruitment.view"] },
+      { label: "Onboarding", path: "/recruitment/onboarding", permissions: ["recruitment.view"] }
+    ]
+  },
+  {
+    title: "Performance",
+    items: [
+      { label: "Overview", path: "/performance", permissions: ["view performance", "manage performance"] },
+      { label: "Reviews", path: "/performance/reviews", permissions: ["view performance", "manage performance"] },
+      { label: "KPIs", path: "/performance/kpis", permissions: ["view performance", "manage performance"] },
+      { label: "Goals", path: "/performance/goals", permissions: ["view performance", "manage performance"] },
+      { label: "Appraisals", path: "/performance/appraisals", permissions: ["view performance", "manage performance"] }
+    ]
+  },
+  { title: "Communication", items: [{ label: "Announcements", path: "/announcements" }, { label: "Notifications", path: "/notifications" }, { label: "Chat", path: "/chat" }] },
+  { title: "Reports", items: [{ label: "Attendance Reports", path: "/reports/attendance" }, { label: "Employee Reports", path: "/reports/employees" }, { label: "Payroll Reports", path: "/reports/payroll" }, { label: "Analytics", path: "/reports/analytics" }] },
+  {
+    title: "Settings",
+    items: [
+      { label: "User Management", path: "/settings?tab=users", permissions: ["user.manage"] },
+      { label: "Roles & Permissions", path: "/settings?tab=roles", permissions: ["manage roles"] },
+      { label: "Company Settings", path: "/settings?tab=company", permissions: ["user.manage"] },
+      { label: "Branches", path: "/settings?tab=branches", permissions: ["user.manage"] },
+      { label: "Themes", path: "/settings?tab=theme", permissions: ["user.manage"] },
+      { label: "System Logs", path: "/settings?tab=logs", permissions: ["manage settings", "view audit logs"], requireAllPermissions: true }
+    ]
+  }
 ] as const;
 
 export function SidebarMenu() {
@@ -32,6 +83,7 @@ export function SidebarMenu() {
     Object.fromEntries(menu.map((group) => [group.title, group.items.length > 1])) as Record<string, boolean>
   );
   const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
 
   async function handleLogout() {
     await logoutRequest().catch(() => null);
@@ -39,9 +91,22 @@ export function SidebarMenu() {
     window.location.href = "/auth/login";
   }
 
+  const visibleMenu = menu
+    .map((group) => {
+      const items = group.items.filter((item) => {
+        if (!item.permissions) {
+          return true;
+        }
+
+        return item.requireAllPermissions ? hasAllPermissions(user, item.permissions) : hasAnyPermission(user, item.permissions);
+      });
+      return { ...group, items };
+    })
+    .filter((group) => group.items.length > 0);
+
   return (
     <nav className="space-y-5">
-      {menu.map((group) => {
+      {visibleMenu.map((group) => {
         const isDropdown = group.items.length > 1;
         const isOpen = openSections[group.title];
 
@@ -61,7 +126,7 @@ export function SidebarMenu() {
             )}
             {(isDropdown ? isOpen : true) && (
               <div className={cn("space-y-1", isDropdown ? "pl-3" : "")}>
-                {group.items.map(([label, path]) => (
+                {group.items.map(({ label, path }) => (
                   <Link
                     key={`${group.title}-${label}`}
                     to={path}

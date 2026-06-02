@@ -1,6 +1,8 @@
 import { createBrowserRouter } from "react-router-dom";
+import type { ReactNode } from "react";
 import { AppLayout } from "@/app/layouts/app-layout";
 import { AuthGuard } from "@/app/guards/auth-guard";
+import { PermissionGuard } from "@/app/guards/permission-guard";
 import { DashboardPage } from "@/modules/dashboard/dashboard-page";
 import { EmployeesPage } from "@/modules/employees";
 import { EmployeeFormPage } from "@/modules/employees/employee-form-page";
@@ -37,41 +39,45 @@ import { RegisterPage } from "@/modules/auth/register-page";
 import { ForgotPasswordPage } from "@/modules/auth/forgot-password-page";
 import { ResetPasswordPage } from "@/modules/auth/reset-password-page";
 
+function withPermission(element: ReactNode, permissions: string[]) {
+  return <PermissionGuard permissions={permissions}>{element}</PermissionGuard>;
+}
+
 export const appRouter = createBrowserRouter([
   {
     path: "/",
     element: <AuthGuard><AppLayout /></AuthGuard>,
     children: [
       { index: true, element: <DashboardPage /> },
-      { path: "employees", element: <EmployeesPage /> },
-      { path: "employees/new", element: <EmployeeFormPage /> },
-      { path: "attendance", element: <AttendancePage /> },
-      { path: "payroll", element: <PayrollPage /> },
-      { path: "recruitment", element: <RecruitmentPage /> },
-      { path: "recruitment/jobs", element: <JobsPage /> },
-      { path: "recruitment/candidates", element: <CandidatesPage /> },
-      { path: "recruitment/interviews", element: <InterviewsPage /> },
-      { path: "recruitment/onboarding", element: <OnboardingPage /> },
-      { path: "leaves", element: <LeavesPage /> },
-      { path: "departments", element: <DepartmentsPage /> },
-      { path: "designations", element: <DesignationsPage /> },
-      { path: "shifts", element: <ShiftsPage /> },
-      { path: "holidays", element: <HolidaysPage /> },
-      { path: "performance", element: <PerformancePage /> },
-      { path: "performance/reviews", element: <PerformanceReviewsPage /> },
-      { path: "performance/kpis", element: <PerformanceKpisPage /> },
-      { path: "performance/goals", element: <PerformanceGoalsPage /> },
-      { path: "performance/appraisals", element: <PerformanceAppraisalsPage /> },
+      { path: "employees", element: withPermission(<EmployeesPage />, ["view employees", "manage employees"]) },
+      { path: "employees/new", element: withPermission(<EmployeeFormPage />, ["manage employees"]) },
+      { path: "attendance", element: withPermission(<AttendancePage />, ["view attendance", "manage attendance"]) },
+      { path: "payroll", element: withPermission(<PayrollPage />, ["manage payroll", "view payroll", "view own payroll"]) },
+      { path: "recruitment", element: withPermission(<RecruitmentPage />, ["recruitment.view"]) },
+      { path: "recruitment/jobs", element: withPermission(<JobsPage />, ["recruitment.view"]) },
+      { path: "recruitment/candidates", element: withPermission(<CandidatesPage />, ["recruitment.view"]) },
+      { path: "recruitment/interviews", element: withPermission(<InterviewsPage />, ["recruitment.view"]) },
+      { path: "recruitment/onboarding", element: withPermission(<OnboardingPage />, ["recruitment.view"]) },
+      { path: "leaves", element: withPermission(<LeavesPage />, ["view leaves", "approve leaves", "request own leave"]) },
+      { path: "departments", element: withPermission(<DepartmentsPage />, ["manage settings"]) },
+      { path: "designations", element: withPermission(<DesignationsPage />, ["manage settings"]) },
+      { path: "shifts", element: withPermission(<ShiftsPage />, ["attendance.edit"]) },
+      { path: "holidays", element: withPermission(<HolidaysPage />, ["attendance.edit"]) },
+      { path: "performance", element: withPermission(<PerformancePage />, ["view performance", "manage performance"]) },
+      { path: "performance/reviews", element: withPermission(<PerformanceReviewsPage />, ["view performance", "manage performance"]) },
+      { path: "performance/kpis", element: withPermission(<PerformanceKpisPage />, ["view performance", "manage performance"]) },
+      { path: "performance/goals", element: withPermission(<PerformanceGoalsPage />, ["view performance", "manage performance"]) },
+      { path: "performance/appraisals", element: withPermission(<PerformanceAppraisalsPage />, ["view performance", "manage performance"]) },
       { path: "announcements", element: <AnnouncementsPage /> },
       { path: "notifications", element: <NotificationsPage /> },
       { path: "chat", element: <ChatPage /> },
-      { path: "reports", element: <ReportsPage /> },
-      { path: "reports/attendance", element: <AttendanceReportsPage /> },
-      { path: "reports/employees", element: <EmployeeReportsPage /> },
-      { path: "reports/payroll", element: <PayrollReportsPage /> },
-      { path: "reports/analytics", element: <AnalyticsReportsPage /> },
+      { path: "reports", element: withPermission(<ReportsPage />, ["view employees", "view attendance", "view payroll", "view performance", "manage payroll", "manage performance", "recruitment.view"]) },
+      { path: "reports/attendance", element: withPermission(<AttendanceReportsPage />, ["view attendance", "manage attendance"]) },
+      { path: "reports/employees", element: withPermission(<EmployeeReportsPage />, ["view employees", "manage employees"]) },
+      { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["manage payroll", "view payroll", "view own payroll"]) },
+      { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view employees", "view attendance", "manage payroll", "manage performance", "recruitment.view"]) },
       { path: "search", element: <SearchPage /> },
-      { path: "settings", element: <SettingsPage /> }
+      { path: "settings", element: withPermission(<SettingsPage />, ["user.manage", "manage roles", "manage settings"]) }
     ]
   },
   {

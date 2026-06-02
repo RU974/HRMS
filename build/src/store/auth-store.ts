@@ -1,9 +1,12 @@
 import { create } from "zustand";
+import { collectPermissionKeys, hasPermission as userHasPermission } from "@/utils/permissions";
 
 export interface AuthUser {
   id: number;
   name: string;
   email: string;
+  permissions?: Array<{ id: string; key?: string; name?: string; module?: string; action?: string }>;
+  roles?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
   rolesRelation?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
   roles_relation?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
 }
@@ -18,13 +21,28 @@ interface AuthState {
   logout: () => void;
 }
 
-const storedToken = localStorage.getItem("hrms_token");
-const storedUser = localStorage.getItem("hrms_user");
+function readStoredSession() {
+  const storedToken = localStorage.getItem("hrms_token");
+  const storedUser = localStorage.getItem("hrms_user");
+
+  let parsedUser: AuthUser | null = null;
+  if (storedUser) {
+    try {
+      parsedUser = JSON.parse(storedUser) as AuthUser;
+    } catch {
+      localStorage.removeItem("hrms_user");
+    }
+  }
+
+  return { storedToken, parsedUser };
+}
+
+const { storedToken, parsedUser } = readStoredSession();
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: Boolean(storedToken),
   token: storedToken,
-  user: storedUser ? JSON.parse(storedUser) as AuthUser : null,
+  user: parsedUser,
   setSession: (token, user) => {
     localStorage.setItem("hrms_token", token);
     localStorage.setItem("hrms_user", JSON.stringify(user));
@@ -35,10 +53,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user, isAuthenticated: true });
   },
   hasPermission: (permission) => {
-    const state = get();
-    const roles = state.user?.rolesRelation ?? state.user?.roles_relation ?? [];
-    const keys = roles.flatMap((r) => (r.permissions ?? []).map((p) => p.key));
-    return keys.includes("*.*") || keys.includes(permission);
+    return userHasPermission(get().user, permission);
   },
   logout: () => {
     localStorage.removeItem("hrms_token");
@@ -46,5 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isAuthenticated: false, token: null, user: null });
   }
 }));
+
+export const getCurrentPermissionKeys = () => collectPermissionKeys(useAuthStore.getState().user);
 
 
