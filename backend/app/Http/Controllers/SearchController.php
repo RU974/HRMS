@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\Candidate;
-use App\Models\ChatMessage;
 use App\Models\Department;
 use App\Models\Designation;
 use App\Models\Employee;
@@ -13,7 +12,6 @@ use App\Models\Holiday;
 use App\Models\Interview;
 use App\Models\JobOpening;
 use App\Models\Leave;
-use App\Models\NotificationItem;
 use App\Models\Payroll;
 use App\Models\PerformanceAppraisal;
 use App\Models\PerformanceGoal;
@@ -21,17 +19,28 @@ use App\Models\PerformanceKpi;
 use App\Models\PerformanceReview;
 use App\Models\Report;
 use App\Models\Shift;
+use App\Services\Search\AnnouncementSearchService;
+use App\Services\Search\ChatSearchService;
+use App\Services\Search\NotificationSearchService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class SearchController extends Controller
 {
+    public function __construct(
+        private readonly AnnouncementSearchService $announcementSearchService,
+        private readonly NotificationSearchService $notificationSearchService,
+        private readonly ChatSearchService $chatSearchService,
+    ) {
+    }
+
     public function index(Request $request)
     {
         $validated = $request->validate([
             'q' => 'required|string|max:100',
         ]);
 
-        $query = trim($validated['q']);
+        $query = $this->sanitizeQuery($validated['q']);
         if ($query === '') {
             return $this->ok([
                 'query' => '',
@@ -44,17 +53,17 @@ class SearchController extends Controller
         $categories = [];
 
         $this->appendCategory($categories, 'employees', 'Employees', $this->searchEmployees($request, $query, $employee?->id));
-        $this->appendCategory($categories, 'departments', 'Departments', $this->searchDepartments($query));
-        $this->appendCategory($categories, 'designations', 'Designations', $this->searchDesignations($query));
-        $this->appendCategory($categories, 'shifts', 'Shifts', $this->searchShifts($query));
-        $this->appendCategory($categories, 'holidays', 'Holidays', $this->searchHolidays($query));
+        $this->appendCategory($categories, 'departments', 'Departments', $this->searchDepartments($query), $request->user()?->can('manage settings'));
+        $this->appendCategory($categories, 'designations', 'Designations', $this->searchDesignations($query), $request->user()?->can('manage settings'));
+        $this->appendCategory($categories, 'shifts', 'Shifts', $this->searchShifts($query), $request->user()?->can('attendance.edit') || $request->user()?->can('manage settings'));
+        $this->appendCategory($categories, 'holidays', 'Holidays', $this->searchHolidays($query), $request->user()?->can('attendance.edit') || $request->user()?->can('manage settings'));
         $this->appendCategory($categories, 'attendance', 'Attendance', $this->searchAttendance($request, $query, $employee?->id));
         $this->appendCategory($categories, 'leaves', 'Leaves', $this->searchLeaves($request, $query, $employee?->id));
         $this->appendCategory($categories, 'payroll', 'Payroll', $this->searchPayroll($request, $query, $employee?->id));
-        $this->appendCategory($categories, 'reports', 'Reports', $this->searchReports($query));
-        $this->appendCategory($categories, 'announcements', 'Announcements', $this->searchAnnouncements($query));
-        $this->appendCategory($categories, 'notifications', 'Notifications', $this->searchNotifications($query));
-        $this->appendCategory($categories, 'chat', 'Chat Messages', $this->searchChatMessages($query));
+        $this->appendCategory($categories, 'reports', 'Reports', $this->searchReports($query), $request->user()?->can('view reports') || $request->user()?->can('export reports') || $request->user()?->can('manage payroll') || $request->user()?->can('manage performance') || $request->user()?->can('view performance') || $request->user()?->can('recruitment.view'));
+        $this->appendCategory($categories, 'announcements', 'Announcements', $this->searchAnnouncements($request, $query));
+        $this->appendCategory($categories, 'notifications', 'Notifications', $this->searchNotifications($request, $query));
+        $this->appendCategory($categories, 'chat', 'Chat Messages', $this->searchChatMessages($request, $query));
         $this->appendCategory($categories, 'recruitment_jobs', 'Job Openings', $this->searchJobOpenings($request, $query));
         $this->appendCategory($categories, 'recruitment_candidates', 'Candidates', $this->searchCandidates($request, $query));
         $this->appendCategory($categories, 'recruitment_interviews', 'Interviews', $this->searchInterviews($request, $query));
@@ -77,9 +86,9 @@ class SearchController extends Controller
         ]);
     }
 
-    private function appendCategory(array &$categories, string $key, string $label, array $items): void
+    private function appendCategory(array &$categories, string $key, string $label, array $items, bool $allowed = true): void
     {
-        if (empty($items)) {
+        if (!$allowed || empty($items)) {
             return;
         }
 
@@ -361,69 +370,19 @@ class SearchController extends Controller
             ->all();
     }
 
-    private function searchAnnouncements(string $query): array
+    private function searchAnnouncements(Request $request, string $query): array
     {
-        $like = '%' . $query . '%';
-        return Announcement::query()
-            ->where(function ($builder) use ($like): void {
-                $builder->where('title', 'like', $like)
-                    ->orWhere('body', 'like', $like);
-            })
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(fn (Announcement $announcement): array => [
-                'id' => $announcement->id,
-                'title' => $announcement->title,
-                'subtitle' => $announcement->is_published ? 'Published announcement' : 'Draft announcement',
-                'detail' => str($announcement->body)->limit(120)->toString(),
-                'path' => '/announcements',
-            ])
-            ->all();
+        return $this->announcementSearchService->search($request->user(), $query);
     }
 
-    private function searchNotifications(string $query): array
+    private function searchNotifications(Request $request, string $query): array
     {
-        $like = '%' . $query . '%';
-        return NotificationItem::query()
-            ->where(function ($builder) use ($like): void {
-                $builder->where('title', 'like', $like)
-                    ->orWhere('message', 'like', $like);
-            })
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(fn (NotificationItem $notification): array => [
-                'id' => $notification->id,
-                'title' => $notification->title,
-                'subtitle' => ucfirst((string) $notification->type) . ' notification',
-                'detail' => str($notification->message)->limit(120)->toString(),
-                'path' => '/notifications',
-            ])
-            ->all();
+        return $this->notificationSearchService->search($request->user(), $query);
     }
 
-    private function searchChatMessages(string $query): array
+    private function searchChatMessages(Request $request, string $query): array
     {
-        $like = '%' . $query . '%';
-        return ChatMessage::query()
-            ->with(['sender:id,name,email', 'receiver:id,name,email'])
-            ->where('message', 'like', $like)
-            ->latest()
-            ->limit(5)
-            ->get()
-            ->map(function (ChatMessage $message): array {
-                $participants = trim(($message->sender?->name ?? 'Unknown sender') . ' to ' . ($message->receiver?->name ?? 'Unknown receiver'));
-
-                return [
-                    'id' => $message->id,
-                    'title' => $participants,
-                    'subtitle' => 'Chat message',
-                    'detail' => str($message->message)->limit(120)->toString(),
-                    'path' => '/chat',
-                ];
-            })
-            ->all();
+        return $this->chatSearchService->search($request->user(), $query);
     }
 
     private function searchJobOpenings(Request $request, string $query): array
@@ -675,5 +634,10 @@ class SearchController extends Controller
                 'path' => '/performance/appraisals',
             ])
             ->all();
+    }
+
+    private function sanitizeQuery(string $query): string
+    {
+        return trim(preg_replace('/\s+/u', ' ', strip_tags($query)) ?? $query);
     }
 }

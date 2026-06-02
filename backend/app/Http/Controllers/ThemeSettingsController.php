@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ThemeSetting;
 use App\Services\ThemeSettingsService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ThemeSettingsController extends Controller
 {
@@ -14,15 +15,17 @@ class ThemeSettingsController extends Controller
 
     public function index(Request $request)
     {
-        return $this->ok(
-            ThemeSetting::query()
-                ->where('user_id', $request->user()->id)
-                ->orWhere(function ($q) use ($request) {
-                    $q->whereNull('user_id')->where('company_id', $request->user()->company_id);
-                })
-                ->orderByDesc('updated_at')
-                ->get()
-        );
+        return $this->ok($this->service->listVisibleThemes($request->user()));
+    }
+
+    public function current(Request $request)
+    {
+        return $this->ok($this->service->resolveCurrent($request->user()));
+    }
+
+    public function company(Request $request)
+    {
+        return $this->ok($this->service->companyTheme($request->user()));
     }
 
     public function show(Request $request, int $id)
@@ -35,7 +38,7 @@ class ThemeSettingsController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'theme' => 'required|string|in:light,dark,system',
+            'theme' => ['required', 'string', Rule::in(['light', 'dark', 'system'])],
             'preferences' => 'nullable|array',
             'company_scope' => 'nullable|boolean',
         ]);
@@ -44,11 +47,9 @@ class ThemeSettingsController extends Controller
             return $this->fail('Company-scoped theme settings require a company assignment.', 422);
         }
 
-        $setting = $this->service->upsert(
-            $request->boolean('company_scope') ? $request->user()->company_id : null,
-            $request->boolean('company_scope') ? null : $request->user()->id,
-            $validated
-        );
+        $setting = $request->boolean('company_scope')
+            ? $this->service->saveCompanyTheme($request->user(), $validated)
+            : $this->service->saveUserTheme($request->user(), $validated);
 
         return $this->ok($setting, 'Theme settings saved successfully', 201);
     }
@@ -59,7 +60,7 @@ class ThemeSettingsController extends Controller
         $this->assertAccessible($request, $setting);
 
         $validated = $request->validate([
-            'theme' => 'sometimes|required|string|in:light,dark,system',
+            'theme' => ['sometimes', 'required', 'string', Rule::in(['light', 'dark', 'system'])],
             'preferences' => 'nullable|array',
         ]);
         $setting->update($validated);
@@ -73,6 +74,25 @@ class ThemeSettingsController extends Controller
         $this->assertAccessible($request, $setting);
         $setting->delete();
         return $this->ok(null, 'Theme setting deleted successfully');
+    }
+
+    public function saveCurrent(Request $request)
+    {
+        $validated = $request->validate([
+            'theme' => ['required', 'string', Rule::in(['light', 'dark', 'system'])],
+            'preferences' => 'nullable|array',
+        ]);
+
+        $setting = $this->service->saveUserTheme($request->user(), $validated);
+
+        return $this->ok($this->service->resolveCurrent($request->user()), 'Theme settings saved successfully');
+    }
+
+    public function resetCurrent(Request $request)
+    {
+        $this->service->resetUserTheme($request->user());
+
+        return $this->ok($this->service->resolveCurrent($request->user()), 'Theme settings reset successfully');
     }
 
     private function assertAccessible(Request $request, ThemeSetting $setting): void

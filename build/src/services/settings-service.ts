@@ -1,17 +1,20 @@
 import { apiClient } from "@/services/api-client";
 
-export type RoleItem = { id: string; name: string; description?: string | null; permissions?: { id: string; key: string }[] };
+export type RoleItem = { id: string; name: string; description?: string | null; is_system?: boolean; permissions?: { id: string; key: string }[] };
 export type PermissionGroup = { module: string; permissions: { id: string; key: string }[] };
 export type UserItem = {
   id: number;
   name: string;
   email: string;
   role?: string | null;
+  role_ids?: string[];
   roles?: { id: string; name: string }[];
   rolesRelation?: { id: string; name: string }[];
   roles_relation?: { id: string; name: string }[];
   company_id?: string | null;
   branch_id?: string | null;
+  company?: { id: string; name: string } | null;
+  branch?: { id: string; name: string } | null;
 };
 export type CompanyItem = {
   id: string;
@@ -22,6 +25,8 @@ export type CompanyItem = {
   address?: string | null;
   timezone?: string | null;
   is_active?: boolean;
+  branches_count?: number;
+  users_count?: number;
 };
 export type BranchItem = {
   id: string;
@@ -32,6 +37,7 @@ export type BranchItem = {
   phone?: string | null;
   address?: string | null;
   is_active?: boolean;
+  users_count?: number;
   company?: { id: string; name: string } | null;
 };
 export type ThemeItem = {

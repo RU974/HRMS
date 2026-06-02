@@ -1,58 +1,65 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { listThemes } from "@/services/settings-service";
+import { getTheme } from "@/services/theme-service";
 import { useAuthStore } from "@/store/auth-store";
-import { useThemeStore } from "@/store/theme-store";
+import { getResolvedTheme, useThemeStore } from "@/store/theme-store";
 
 const queryClient = new QueryClient();
 
+function applyDocumentTheme(theme: "light" | "dark") {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
+
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token);
-  const canManageUsers = useAuthStore((state) => state.hasPermission("manage users"));
-  const setTheme = useThemeStore((state) => state.setTheme);
-  const theme = useThemeStore((s) => s.theme);
+  const hydrateTheme = useThemeStore((state) => state.hydrateTheme);
+  const theme = useThemeStore((state) => state.theme);
+  const source = useThemeStore((state) => state.source);
 
   useEffect(() => {
     let active = true;
 
-    if (!token || !canManageUsers) {
+    if (!token) {
+      applyDocumentTheme(getResolvedTheme(theme));
       return () => {
         active = false;
       };
     }
 
-    void listThemes()
-      .then((themes) => {
+    void getTheme()
+      .then((currentTheme) => {
         if (!active) {
           return;
         }
 
-        const preferredTheme = themes[0]?.theme;
-        if (preferredTheme === "light" || preferredTheme === "dark" || preferredTheme === "system") {
-          setTheme(preferredTheme);
-        }
+        hydrateTheme(currentTheme.theme, currentTheme.source);
       })
       .catch(() => {
-        // Theme preferences are optional; keep the current client-side value on failure.
+        if (!active) {
+          return;
+        }
+
+        hydrateTheme(theme, source);
       });
 
     return () => {
       active = false;
     };
-  }, [canManageUsers, setTheme, token]);
+  }, [hydrateTheme, source, theme, token]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const resolveTheme = () => {
-      const resolvedTheme = theme === "system" ? (mediaQuery.matches ? "dark" : "light") : theme;
-      document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
-    };
-
-    resolveTheme();
+    applyDocumentTheme(getResolvedTheme(theme));
 
     if (theme !== "system") {
       return;
     }
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const resolveTheme = () => applyDocumentTheme(getResolvedTheme(theme));
 
     mediaQuery.addEventListener("change", resolveTheme);
     return () => {
@@ -60,7 +67,27 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     };
   }, [theme]);
 
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== "hrms_theme_snapshot" || !event.newValue) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(event.newValue) as { theme?: "light" | "dark" | "system"; source?: "user" | "company" | "system" };
+        if (parsed.theme) {
+          hydrateTheme(parsed.theme, parsed.source ?? "system");
+        }
+      } catch {
+        // Ignore malformed theme sync payloads.
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [hydrateTheme]);
+
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
-
-

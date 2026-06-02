@@ -18,12 +18,9 @@ class UserManagementService
         unset($data['role_ids']);
         $data['password'] = Hash::make($data['password']);
         $user = User::create($data);
-        if (!empty($roleIds)) {
-            $validRoleIds = $this->resolveAssignableRoleIds($roleIds, $actor);
-            $user->syncRoles($validRoleIds);
-            $this->permissionService->flushUserPermissionCache($user);
-        }
-        return $user->fresh('roles.permissions');
+        $this->syncAssignableRoles($user, $roleIds, $actor);
+
+        return $user->fresh(['company', 'branch', 'roles.permissions', 'permissions']);
     }
 
     public function update(User $user, array $data, ?User $actor = null): User
@@ -38,12 +35,36 @@ class UserManagementService
 
         $user->update($data);
         if (is_array($roleIds)) {
-            $validRoleIds = $this->resolveAssignableRoleIds($roleIds, $actor);
-            $user->syncRoles($validRoleIds);
-            $this->permissionService->flushUserPermissionCache($user);
+            $this->syncAssignableRoles($user, $roleIds, $actor);
         }
 
-        return $user->fresh('roles.permissions');
+        return $user->fresh(['company', 'branch', 'roles.permissions', 'permissions']);
+    }
+
+    /**
+     * @param  array<int, string>  $roleIds
+     */
+    private function syncAssignableRoles(User $user, array $roleIds, ?User $actor): void
+    {
+        $requestedRoleIds = collect($roleIds)
+            ->filter(fn ($roleId) => filled($roleId))
+            ->map(fn ($roleId) => trim((string) $roleId))
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($requestedRoleIds)) {
+            return;
+        }
+
+        $validRoleIds = $this->resolveAssignableRoleIds($requestedRoleIds, $actor);
+
+        if (count($validRoleIds) !== count($requestedRoleIds)) {
+            abort(422, 'One or more selected roles could not be assigned.');
+        }
+
+        $user->syncRoles($validRoleIds);
+        $this->permissionService->flushUserPermissionCache($user);
     }
 
     private function resolveAssignableRoleIds(array $roleIds, ?User $actor): array

@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AppLayout } from "@/app/layouts/app-layout";
 import { AuthGuard } from "@/app/guards/auth-guard";
@@ -32,6 +32,7 @@ import { EmployeeReportsPage } from "@/modules/reports/employee-reports-page";
 import { PayrollReportsPage } from "@/modules/reports/payroll-reports-page";
 import { AnalyticsReportsPage } from "@/modules/reports/analytics-reports-page";
 import { SearchPage } from "@/modules/search";
+import { ProfilePage } from "@/modules/profile";
 import { SettingsPage } from "@/modules/settings";
 import { AuthLayout } from "@/modules/auth/auth-layout";
 import { LoginPage } from "@/modules/auth/login-page";
@@ -48,7 +49,9 @@ export const appRouter = createBrowserRouter([
     path: "/",
     element: <AuthGuard><AppLayout /></AuthGuard>,
     children: [
-      { index: true, element: <DashboardPage /> },
+      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { path: "dashboard", element: <DashboardPage /> },
+      { path: "profile", element: <ProfilePage /> },
       { path: "employees", element: withPermission(<EmployeesPage />, ["view employees", "manage employees"]) },
       { path: "employees/new", element: withPermission(<EmployeeFormPage />, ["manage employees"]) },
       { path: "attendance", element: withPermission(<AttendancePage />, ["view attendance", "manage attendance"]) },
@@ -77,7 +80,7 @@ export const appRouter = createBrowserRouter([
       { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["manage payroll", "view payroll", "view own payroll"]) },
       { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view employees", "view attendance", "manage payroll", "manage performance", "recruitment.view"]) },
       { path: "search", element: <SearchPage /> },
-      { path: "settings", element: withPermission(<SettingsPage />, ["user.manage", "manage roles", "manage settings"]) }
+      { path: "settings", element: withPermission(<SettingsPage />, ["manage users", "user.manage", "manage roles", "manage settings"]) }
     ]
   },
   {

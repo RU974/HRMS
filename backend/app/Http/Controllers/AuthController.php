@@ -57,7 +57,7 @@ class AuthController extends Controller
         );
 
         return $this->ok([
-            'user' => $user->fresh(['roles.permissions', 'permissions']),
+            'user' => $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']),
             'token' => $token,
         ], 'User registered successfully', 201);
     }
@@ -85,7 +85,7 @@ class AuthController extends Controller
             return $this->fail('Invalid credentials', 401);
         }
 
-        $user->loadMissing(['roles.permissions', 'permissions']);
+        $user->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $this->auditLogService->recordRequest(
@@ -98,7 +98,7 @@ class AuthController extends Controller
             200
         );
 
-        return $this->ok(['user' => $user, 'token' => $token], 'Login successful');
+        return $this->ok(['user' => $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']), 'token' => $token], 'Login successful');
     }
 
     /**
@@ -126,7 +126,7 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        return $this->ok($request->user()?->loadMissing(['roles.permissions', 'permissions']));
+        return $this->ok($request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']));
     }
 
     /**

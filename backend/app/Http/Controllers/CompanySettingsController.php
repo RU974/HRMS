@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
-use App\Models\User;
 use App\Services\CompanySettingsService;
 use Illuminate\Http\Request;
 
@@ -16,13 +15,13 @@ class CompanySettingsController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'manage settings');
-        return $this->ok(Company::query()->orderBy('name')->get());
+        return $this->ok(Company::query()->withCount(['branches', 'users'])->orderBy('name')->get());
     }
 
     public function show(Request $request, string $id)
     {
         $this->authorizePermission($request, 'manage settings');
-        return $this->ok(Company::findOrFail($id));
+        return $this->ok(Company::withCount(['branches', 'users'])->findOrFail($id));
     }
 
     public function store(Request $request)
@@ -60,7 +59,13 @@ class CompanySettingsController extends Controller
     public function destroy(Request $request, string $id)
     {
         $this->authorizePermission($request, 'manage settings');
-        Company::findOrFail($id)->delete();
+        $company = Company::withCount(['branches', 'users'])->findOrFail($id);
+
+        if ($company->branches_count > 0 || $company->users_count > 0) {
+            return $this->fail('Move or remove related users and branches before deleting the company.', 422);
+        }
+
+        $company->delete();
         return $this->ok(null, 'Company deleted successfully');
     }
 }

@@ -4,9 +4,9 @@ Operational guidance for coding agents working in `D:\HRMS`.
 
 ## Priority Order
 
-- Follow direct user instructions first.
-- Follow this file next.
-- Preserve existing repo conventions when neither of the above is explicit.
+1. Follow direct user instructions first.
+2. Follow this file next.
+3. Preserve existing repository conventions when neither of the above is explicit.
 
 ## Scope
 

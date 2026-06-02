@@ -97,15 +97,24 @@ export function EmployeeFormPage() {
 
     try {
       const payload = new FormData();
+      const name = [form.first_name.trim(), form.last_name.trim()].filter(Boolean).join(" ");
+      const basicSalary = Number.parseFloat(form.basic_salary);
+      const allowances = Number.parseFloat(form.allowances || "0");
+
+      if (name) {
+        payload.append("name", name);
+      }
+
       Object.entries(form).forEach(([key, value]) => {
         if (value !== "") {
           payload.append(key, value);
         }
       });
 
-      const basicSalary = Number(form.basic_salary || 0);
-      const allowances = Number(form.allowances || 0);
-      payload.append("salary", String(basicSalary + allowances));
+      payload.append(
+        "salary",
+        String((Number.isFinite(basicSalary) ? basicSalary : 0) + (Number.isFinite(allowances) ? allowances : 0)),
+      );
 
       if (profileImage) {
         payload.append("profile_image", profileImage);

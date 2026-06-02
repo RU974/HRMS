@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
 use App\Services\UserManagementService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,7 +16,7 @@ class UserManagementController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'manage users');
-        $q = \App\Models\User::query()->with(['roles.permissions', 'permissions']);
+        $q = \App\Models\User::query()->with(['company', 'branch', 'roles.permissions', 'permissions']);
         if ($request->filled('search')) {
             $search = (string) $request->input('search');
             $q->where(function ($w) use ($search) {
@@ -28,7 +29,7 @@ class UserManagementController extends Controller
     public function show(Request $request, int $id)
     {
         $this->authorizePermission($request, 'manage users');
-        return $this->ok(\App\Models\User::with(['roles.permissions', 'permissions'])->findOrFail($id));
+        return $this->ok(\App\Models\User::with(['company', 'branch', 'roles.permissions', 'permissions'])->findOrFail($id));
     }
 
     public function store(Request $request)
@@ -52,6 +53,8 @@ class UserManagementController extends Controller
             'company_id' => 'nullable|uuid|exists:companies,id',
             'branch_id' => 'nullable|uuid|exists:branches,id',
         ]);
+
+        $this->assertBranchMatchesCompany($validated);
 
         $user = $this->service->create($validated, $request->user());
         return $this->ok($user, 'User created successfully', 201);
@@ -80,6 +83,8 @@ class UserManagementController extends Controller
             'branch_id' => 'nullable|uuid|exists:branches,id',
         ]);
 
+        $this->assertBranchMatchesCompany($validated, $user->company_id);
+
         return $this->ok($this->service->update($user, $validated, $request->user()), 'User updated successfully');
     }
 
@@ -92,5 +97,29 @@ class UserManagementController extends Controller
         }
         $user->delete();
         return $this->ok(null, 'User deleted successfully');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function assertBranchMatchesCompany(array $validated, ?string $fallbackCompanyId = null): void
+    {
+        if (empty($validated['branch_id'])) {
+            return;
+        }
+
+        $companyId = $validated['company_id'] ?? $fallbackCompanyId ?? null;
+        if (!$companyId) {
+            abort(422, 'Select a company before assigning a branch.');
+        }
+
+        $branchExists = Branch::query()
+            ->whereKey($validated['branch_id'])
+            ->where('company_id', $companyId)
+            ->exists();
+
+        if (!$branchExists) {
+            abort(422, 'Selected branch does not belong to the selected company.');
+        }
     }
 }

@@ -334,19 +334,29 @@ class EmployeeController extends Controller
     {
         $resolvedRoleName = $roleName ?: User::ROLE_EMPLOYEE;
 
-        $role = Role::query()
-            ->where('name', $resolvedRoleName)
-            ->where(function ($query) use ($user): void {
-                $query->whereNull('company_id');
+        if ($resolvedRoleName === User::ROLE_EMPLOYEE) {
+            $role = Role::firstOrCreate(
+                ['name' => User::ROLE_EMPLOYEE, 'company_id' => null],
+                ['guard_name' => 'web', 'description' => 'Default employee role', 'is_system' => true]
+            );
+        } else {
+            $role = Role::query()
+                ->where('name', $resolvedRoleName)
+                ->where('guard_name', 'web')
+                ->where(function ($query) use ($user): void {
+                    $query->whereNull('company_id');
 
-                if ($user->company_id) {
-                    $query->orWhere('company_id', $user->company_id);
-                }
-            })
-            ->first();
+                    if ($user->company_id) {
+                        $query->orWhere('company_id', $user->company_id);
+                    }
+                })
+                ->first();
+        }
 
         if (!$role) {
-            return;
+            throw ValidationException::withMessages([
+                'role' => ['Selected role could not be assigned to the employee account.'],
+            ]);
         }
 
         $user->assignRole($role);

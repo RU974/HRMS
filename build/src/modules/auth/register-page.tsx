@@ -21,7 +21,7 @@ export function RegisterPage() {
     try {
       const session = await register(name, email, password, passwordConfirmation);
       setSession(session.token, session.user);
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to register");
     } finally {

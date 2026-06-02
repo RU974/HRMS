@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Branch;
-use App\Models\User;
 use App\Services\BranchService;
 use Illuminate\Http\Request;
 
@@ -16,7 +15,7 @@ class BranchController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'manage settings');
-        $q = Branch::query()->with('company')->orderBy('name');
+        $q = Branch::query()->with('company')->withCount('users')->orderBy('name');
         if ($request->filled('company_id')) {
             $q->where('company_id', (string) $request->input('company_id'));
         }
@@ -26,7 +25,7 @@ class BranchController extends Controller
     public function show(Request $request, string $id)
     {
         $this->authorizePermission($request, 'manage settings');
-        return $this->ok(Branch::with('company')->findOrFail($id));
+        return $this->ok(Branch::with('company')->withCount('users')->findOrFail($id));
     }
 
     public function store(Request $request)
@@ -65,7 +64,13 @@ class BranchController extends Controller
     public function destroy(Request $request, string $id)
     {
         $this->authorizePermission($request, 'manage settings');
-        Branch::findOrFail($id)->delete();
+        $branch = Branch::withCount('users')->findOrFail($id);
+
+        if ($branch->users_count > 0) {
+            return $this->fail('Move or remove users assigned to this branch before deleting it.', 422);
+        }
+
+        $branch->delete();
         return $this->ok(null, 'Branch deleted successfully');
     }
 }

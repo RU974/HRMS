@@ -4,13 +4,37 @@ namespace App\Http\Controllers;
 
 use App\Models\Announcement;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AnnouncementController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Announcement::query()->with('creator:id,name,email');
+        $this->authorize('viewAny', Announcement::class);
+
+        $user = $request->user()->loadMissing('company');
+        if (!$user->company_id) {
+            return $this->ok([]);
+        }
+
+        $query = Announcement::query()->with(['creator:id,name,email,company_id', 'company:id,name']);
+
+        $query->where(function ($builder) use ($user): void {
+            if ($this->supportsCompanyScope()) {
+                $builder->where('company_id', $user->company_id)
+                    ->orWhere(function ($legacyQuery) use ($user): void {
+                        $legacyQuery->whereNull('company_id')
+                            ->whereHas('creator', function ($creatorQuery) use ($user): void {
+                                $creatorQuery->where('company_id', $user->company_id);
+                            });
+                    });
+            } else {
+                $builder->whereHas('creator', function ($creatorQuery) use ($user): void {
+                    $creatorQuery->where('company_id', $user->company_id);
+                });
+            }
+        });
 
         if ($request->filled('published')) {
             $published = filter_var($request->query('published'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
@@ -20,10 +44,10 @@ class AnnouncementController extends Controller
         }
 
         if ($request->filled('q')) {
-            $search = trim((string) $request->query('q'));
-            $query->where(function ($builder) use ($search) {
-                $builder->where('title', 'like', "%{$search}%")
-                    ->orWhere('body', 'like', "%{$search}%");
+            $search = $this->sanitizeQuery((string) $request->query('q'));
+            $query->where(function ($builder) use ($search): void {
+                $builder->where('title', 'like', '%' . $search . '%')
+                    ->orWhere('body', 'like', '%' . $search . '%');
             });
         }
 
@@ -32,6 +56,8 @@ class AnnouncementController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorize('create', Announcement::class);
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'body' => 'required|string|max:10000',
@@ -47,26 +73,36 @@ class AnnouncementController extends Controller
             $publishedAt = now();
         }
 
-        $announcement = Announcement::create([
+        $payload = [
             'title' => $validated['title'],
             'body' => $validated['body'],
             'target' => $validated['target'] ?? 'all',
             'is_published' => $isPublished,
             'published_at' => $isPublished ? $publishedAt : null,
             'created_by' => $request->user()?->id,
-        ]);
+        ];
 
-        return $this->ok($announcement->load('creator:id,name,email'), 'Announcement created successfully', 201);
+        if ($this->supportsCompanyScope()) {
+            $payload['company_id'] = $request->user()?->company_id;
+        }
+
+        $announcement = Announcement::create($payload);
+
+        return $this->ok($announcement->load(['creator:id,name,email,company_id', 'company:id,name']), 'Announcement created successfully', 201);
     }
 
-    public function show($id)
+    public function show(Request $request, int $id)
     {
-        return $this->ok(Announcement::with('creator:id,name,email')->findOrFail($id));
+        $announcement = Announcement::with(['creator:id,name,email,company_id', 'company:id,name'])->findOrFail($id);
+        $this->authorize('view', $announcement);
+
+        return $this->ok($announcement);
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, int $id)
     {
-        $announcement = Announcement::findOrFail($id);
+        $announcement = Announcement::with(['creator:id,name,email,company_id', 'company:id,name'])->findOrFail($id);
+        $this->authorize('update', $announcement);
 
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
@@ -94,12 +130,25 @@ class AnnouncementController extends Controller
 
         $announcement->save();
 
-        return $this->ok($announcement->load('creator:id,name,email'), 'Announcement updated successfully');
+        return $this->ok($announcement->fresh(['creator:id,name,email,company_id', 'company:id,name']), 'Announcement updated successfully');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, int $id)
     {
-        Announcement::findOrFail($id)->delete();
+        $announcement = Announcement::with(['creator:id,name,email,company_id', 'company:id,name'])->findOrFail($id);
+        $this->authorize('delete', $announcement);
+        $announcement->delete();
+
         return $this->ok(null, 'Announcement deleted successfully');
+    }
+
+    private function sanitizeQuery(string $query): string
+    {
+        return trim(preg_replace('/\s+/u', ' ', strip_tags($query)) ?? $query);
+    }
+
+    private function supportsCompanyScope(): bool
+    {
+        return Schema::hasColumn('announcements', 'company_id');
     }
 }

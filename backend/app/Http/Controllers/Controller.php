@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 abstract class Controller
 {
+    use AuthorizesRequests;
+
     protected function ok(mixed $data = null, ?string $message = null, int $status = 200)
     {
         return response()->json([

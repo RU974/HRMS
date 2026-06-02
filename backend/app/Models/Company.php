@@ -32,4 +32,9 @@ class Company extends Model
     {
         return $this->hasMany(Branch::class);
     }
+
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
+    }
 }

@@ -38,7 +38,19 @@ export async function apiClient<T>(path: string, options: RequestOptions = {}): 
   const payload = await response.json().catch(() => null) as ApiResponse<T> | null;
 
   if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message ?? `Request failed with status ${response.status}`);
+    const validationDetails =
+      payload && typeof payload.errors === "object" && payload.errors !== null
+        ? Object.values(payload.errors as Record<string, unknown>)
+            .flatMap((error) => (Array.isArray(error) ? error : [error]))
+            .filter((error): error is string => typeof error === "string" && error.trim().length > 0)
+            .join(" ")
+        : "";
+
+    const messageParts = [payload?.message, validationDetails].filter(
+      (part): part is string => typeof part === "string" && part.trim().length > 0,
+    );
+
+    throw new Error(messageParts.length > 0 ? messageParts.join(" ") : `Request failed with status ${response.status}`);
   }
 
   return payload?.data as T;

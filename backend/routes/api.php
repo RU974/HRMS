@@ -72,8 +72,13 @@ $registerRoutes = function (): void {
         // Dashboard + reports
         Route::get('dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('dashboard/insights', [DashboardController::class, 'insights']);
-        Route::get('search', [SearchController::class, 'index']);
+        Route::get('dashboard/workspace', [DashboardController::class, 'workspace']);
+        Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search');
         Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
+        Route::get('settings/themes/current', [ThemeSettingsController::class, 'current']);
+        Route::get('settings/themes/company', [ThemeSettingsController::class, 'company']);
+        Route::put('settings/themes/current', [ThemeSettingsController::class, 'saveCurrent']);
+        Route::delete('settings/themes/current', [ThemeSettingsController::class, 'resetCurrent']);
         Route::prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
             Route::get('/attendance', [ReportController::class, 'attendance']);
@@ -174,10 +179,12 @@ $registerRoutes = function (): void {
         });
 
         // Communication routes
-        Route::apiResource('announcements', AnnouncementController::class);
-        Route::apiResource('notifications', NotificationController::class);
-        Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
-        Route::apiResource('chat-messages', ChatMessageController::class);
+        Route::middleware('throttle:communication')->group(function () {
+            Route::apiResource('announcements', AnnouncementController::class);
+            Route::apiResource('notifications', NotificationController::class);
+            Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
+            Route::apiResource('chat-messages', ChatMessageController::class);
+        });
 
         // Performance routes
         Route::apiResource('performance-reviews', PerformanceReviewController::class);

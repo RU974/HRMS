@@ -34,7 +34,7 @@ export function PermissionGuard({
       title={title}
       description={description}
       action={(
-        <Link to="/" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold transition hover:bg-[var(--border)]/35">
+        <Link to="/dashboard" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold transition hover:bg-[var(--border)]/35">
           Back to dashboard
         </Link>
       )}

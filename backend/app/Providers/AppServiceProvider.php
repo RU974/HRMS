@@ -27,6 +27,18 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by(sprintf('%s|%s', (string) $request->ip(), (string) $request->input('email')));
         });
 
+        RateLimiter::for('search', function (Request $request): Limit {
+            $userId = $request->user()?->id ?? 'guest';
+
+            return Limit::perMinute(30)->by(sprintf('%s|%s', (string) $request->ip(), (string) $userId));
+        });
+
+        RateLimiter::for('communication', function (Request $request): Limit {
+            $userId = $request->user()?->id ?? 'guest';
+
+            return Limit::perMinute(60)->by(sprintf('%s|%s', (string) $request->ip(), (string) $userId));
+        });
+
         ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
             $frontendUrl = rtrim((string) config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
             $email = urlencode((string) $notifiable->getEmailForPasswordReset());

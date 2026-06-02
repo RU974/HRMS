@@ -22,7 +22,7 @@ export function LoginPage() {
     try {
       const session = await login(email, password);
       setSession(session.token, session.user);
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in");
     } finally {

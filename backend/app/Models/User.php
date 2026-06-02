@@ -6,6 +6,8 @@ namespace App\Models;
 use App\Models\Concerns\HasRoles;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -51,6 +53,10 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = [
+        'role_ids',
+    ];
+
     /**
      * Get the attributes that should be cast.
      *
@@ -64,6 +70,29 @@ class User extends Authenticatable
             'company_id' => 'string',
             'branch_id' => 'string',
         ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function employee(): HasOne
+    {
+        return $this->hasOne(Employee::class);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getRoleIdsAttribute(): array
+    {
+        return $this->roles()->pluck('id')->values()->all();
     }
 
     public static function availableRoles(): array

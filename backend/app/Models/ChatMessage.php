@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ChatMessage extends Model
 {
     protected $fillable = [
+        'company_id',
         'sender_id',
         'receiver_id',
         'message',
@@ -26,5 +27,10 @@ class ChatMessage extends Model
     public function receiver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'receiver_id');
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 }

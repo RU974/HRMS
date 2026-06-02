@@ -6,6 +6,7 @@ export * from "./chat-service";
 export * from "./dashboard-service";
 export * from "./employee-service";
 export * from "./settings-service";
+export * from "./theme-service";
 export * from "./performance-service";
 export * from "./recruitment-service";
 export * from "./payroll-service";
