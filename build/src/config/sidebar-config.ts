@@ -11,6 +11,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   MessageCircleMore,
+  Megaphone,
   ShieldCheck,
   Settings2,
   Users2,
@@ -40,6 +41,7 @@ export interface SidebarSectionConfig {
 }
 
 const employeeRoleOnly: RoleKey[] = ["employee"];
+const superAdminRoleOnly: RoleKey[] = ["super_admin"];
 
 export const sidebarSections: SidebarSectionConfig[] = [
   {
@@ -66,8 +68,14 @@ export const sidebarSections: SidebarSectionConfig[] = [
         roles: employeeRoleOnly,
         permissions: ["view leaves", "approve leaves", "request own leave", "manage leaves"],
       },
-      { label: "Notifications", path: "/notifications", icon: Bell, roles: employeeRoleOnly },
-      { label: "Support", path: "/chat", icon: MessageCircleMore, roles: employeeRoleOnly },
+    ],
+  },
+  {
+    title: "Communication",
+    items: [
+      { label: "Announcements", path: "/announcements", icon: Megaphone, roles: superAdminRoleOnly },
+      { label: "Notifications", path: "/notifications", icon: Bell, roles: superAdminRoleOnly },
+      { label: "Chat", path: "/chat", icon: MessageCircleMore },
     ],
   },
   {

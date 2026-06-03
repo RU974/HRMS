@@ -63,6 +63,10 @@ export function isEmployeeRole(user?: AuthUser | null): boolean {
   return getUserRoleKeys(user).includes("employee");
 }
 
+export function isSuperAdminRole(user?: AuthUser | null): boolean {
+  return getUserRoleKeys(user).includes("super_admin");
+}
+
 export function getUserPermissionKeys(user?: AuthUser | null): string[] {
   return collectPermissionKeys(user);
 }

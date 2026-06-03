@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { getWorkspaceDashboard } from "@/services/dashboard-service";
+import { isSuperAdminRole } from "@/config/rbac";
+import { useAuthStore } from "@/store/auth-store";
 import { SummaryCard, ChartCard, ActivityFeed, AttendanceWidget, AnnouncementWidget, NotificationWidget, TableWidget } from "./dashboard-widgets";
 
 function formatClock(value?: string | null) {
@@ -12,7 +14,21 @@ function formatClock(value?: string | null) {
   return value.length >= 16 ? value.slice(11, 16) : value;
 }
 
+function formatCurrency(value?: number | string | null) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  const amount = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(amount)) {
+    return String(value);
+  }
+
+  return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
 export function EmployeeDashboard() {
+  const user = useAuthStore((state) => state.user);
   const workspaceQuery = useQuery({
     queryKey: ["dashboard", "workspace"],
     queryFn: getWorkspaceDashboard,
@@ -23,13 +39,16 @@ export function EmployeeDashboard() {
   const totalRemainingLeave = data?.leave.balances.reduce((acc, item) => acc + item.remaining_days, 0) ?? 0;
   const unreadNotifications = data?.notifications.filter((item) => !item.is_read).length ?? 0;
   const latestPayslip = data?.payroll.latest_payslip;
+  const todayLabel = data?.attendance.today?.date ?? new Date().toISOString().slice(0, 10);
+  const departmentName = data?.employee?.department?.name ?? "your team";
+  const showRestrictedCommunicationLinks = isSuperAdminRole(user);
 
   const quickActions = [
     { label: "View Profile", to: "/profile" },
     { label: "Attendance", to: "/attendance" },
     { label: "Request Leave", to: "/leaves" },
     { label: "Payroll", to: "/payroll?tab=payslips" },
-    { label: "Notifications", to: "/notifications" },
+    ...(showRestrictedCommunicationLinks ? [{ label: "Notifications", to: "/notifications" }] : []),
     { label: "Support", to: "/chat" },
   ];
 
@@ -37,74 +56,117 @@ export function EmployeeDashboard() {
     <div className="space-y-6">
       <PageHeader
         title={data?.employee?.name ?? "Employee Dashboard"}
-        subtitle={`Self-service workspace for ${data?.role_name ?? "Employee"}${data?.employee?.department?.name ? ` in ${data.employee.department.name}` : ""}.`}
+        subtitle={`Self-service workspace for ${data?.role_name ?? "Employee"} in ${departmentName}.`}
       />
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
+        <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-lg shadow-slate-900/10">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(34,197,94,0.14),transparent_35%)]" />
+          <div className="relative">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+              <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">Employee workspace</span>
+              <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">{todayLabel}</span>
+            </div>
+            <div className="mt-5 max-w-2xl">
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                Welcome back, {data?.employee?.name ?? "Employee"}.
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+                Your day at a glance: attendance, leave balance, payroll status, and the latest team updates are grouped below for quick action.
+              </p>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3 text-sm">
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">Department</p>
+                <p className="mt-1 font-medium">{departmentName}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">Current status</p>
+                <p className="mt-1 font-medium capitalize">{data?.attendance.today?.status ?? "No record"}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">Unread notices</p>
+                <p className="mt-1 font-medium">{unreadNotifications}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <ChartCard
+          title="Quick Actions"
+          subtitle="Jump straight to the most used employee tasks."
+          className="border-white/70 bg-white/85 shadow-sm"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            {quickActions.map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className="group flex min-h-14 items-center justify-center rounded-2xl border border-[var(--border)] bg-white/85 px-3 py-3 text-center text-sm font-medium text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[var(--primary)]/25 hover:bg-[var(--primary)]/6 hover:shadow-sm"
+              >
+                {action.label}
+              </Link>
+            ))}
+          </div>
+        </ChartCard>
+      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Today"
           value={data?.attendance.today?.status ?? "No record"}
           hint={`${formatClock(data?.attendance.today?.check_in)} in / ${formatClock(data?.attendance.today?.check_out)} out`}
-          tone="from-cyan-50 to-white"
+          tone="from-cyan-50 via-white to-white"
         />
         <SummaryCard
           title="Leave balance"
           value={String(totalRemainingLeave)}
           hint={`${data?.leave.balances.length ?? 0} leave types tracked`}
-          tone="from-emerald-50 to-white"
+          tone="from-emerald-50 via-white to-white"
         />
         <SummaryCard
           title="Unread notices"
           value={String(unreadNotifications)}
           hint="Notifications waiting in your inbox"
-          tone="from-amber-50 to-white"
+          tone="from-amber-50 via-white to-white"
         />
         <SummaryCard
           title="Latest payslip"
-          value={latestPayslip ? `${latestPayslip.payroll?.net_salary ?? "0"}` : "Unavailable"}
+          value={latestPayslip ? formatCurrency(latestPayslip.payroll?.net_salary) : "Unavailable"}
           hint={latestPayslip ? `Issued ${latestPayslip.issue_date}` : "No issued payslip yet"}
-          tone="from-sky-50 to-white"
+          tone="from-sky-50 via-white to-white"
         />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2">
+      <section className="grid gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-7">
           <AttendanceWidget
             title="Attendance snapshot"
             today={data?.attendance.today ?? null}
             recent={data?.attendance.recent ?? []}
           />
         </div>
-        <div className="space-y-4">
-          <ChartCard title="Quick Actions" subtitle="Jump straight to the most used employee tasks.">
-            <div className="grid grid-cols-2 gap-2">
-              {quickActions.map((action) => (
-                <Link key={action.to} to={action.to} className="rounded-2xl border border-[var(--border)] bg-white/70 px-3 py-3 text-center text-sm font-medium text-[var(--text)] transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/5">
-                  {action.label}
-                </Link>
-              ))}
-            </div>
-          </ChartCard>
+        <div className="space-y-4 xl:col-span-5">
           <ChartCard title="Latest Payslip" subtitle="Your most recent payroll statement.">
             {latestPayslip ? (
               <div className="space-y-3 text-sm">
-                <div className="rounded-2xl border border-[var(--border)] bg-white/70 p-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Slip number</p>
                   <p className="mt-1 font-medium">{latestPayslip.slip_number}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-[var(--border)] bg-white/70 p-3">
+                  <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Issue date</p>
                     <p className="mt-1 font-medium">{latestPayslip.issue_date}</p>
                   </div>
-                  <div className="rounded-2xl border border-[var(--border)] bg-white/70 p-3">
+                  <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Status</p>
                     <p className="mt-1 font-medium">{latestPayslip.status}</p>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-white/70 p-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Net salary</p>
-                  <p className="mt-1 text-lg font-semibold">{latestPayslip.payroll?.net_salary ?? "-"}</p>
+                  <p className="mt-1 text-lg font-semibold">{formatCurrency(latestPayslip.payroll?.net_salary)}</p>
                 </div>
                 {latestPayslip.file_url ? (
                   <a href={latestPayslip.file_url} target="_blank" rel="noreferrer" className="inline-flex rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">

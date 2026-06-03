@@ -7,6 +7,7 @@ import { logoutRequest } from "@/services/auth-service";
 import { checkInAttendance, checkOutAttendance } from "@/services/hr-management-service";
 import { useAuthStore } from "@/store/auth-store";
 import { getVisibleSidebarSections } from "@/config/sidebar-config";
+import { isSuperAdminRole } from "@/config/rbac";
 
 function isActivePath(currentPath: string, currentSearch: string, target?: string) {
   if (!target) {
@@ -146,6 +147,7 @@ function EmployeeShortcuts() {
 
   const leaveLinkVisible = hasPermission("request own leave") || hasPermission("view leaves") || hasPermission("approve leaves") || hasPermission("manage leaves");
   const payrollLinkVisible = hasPermission("view own payroll") || hasPermission("view payroll") || hasPermission("manage payroll");
+  const showCommunicationsLink = isSuperAdminRole(user);
 
   if (!employeeId) {
     return null;
@@ -203,10 +205,12 @@ function EmployeeShortcuts() {
           <span>Payroll</span>
         </Link>
       ) : null}
-      <Link to="/notifications" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
-        <Bell className="h-4 w-4 shrink-0" />
-        <span>Notifications</span>
-      </Link>
+      {showCommunicationsLink ? (
+        <Link to="/notifications" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
+          <Bell className="h-4 w-4 shrink-0" />
+          <span>Notifications</span>
+        </Link>
+      ) : null}
       <Link to="/chat" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
         <MessageCircleMore className="h-4 w-4 shrink-0" />
         <span>Support</span>

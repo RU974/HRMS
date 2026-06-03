@@ -2,7 +2,7 @@
 
 Operational guidance for coding agents working in `D:\HRMS`.
 
-## Priority Order
+## Priority
 
 1. Follow direct user instructions first.
 2. Follow this file next.
@@ -11,7 +11,7 @@ Operational guidance for coding agents working in `D:\HRMS`.
 ## Scope
 
 - This file applies to the entire repository rooted at `D:\HRMS`.
-- Keep edits scoped to the target app (`build/` or `backend/`) unless the task requires integration work.
+- Keep edits scoped to the relevant app (`build/` or `backend/`) unless the task requires integration work.
 - Prefer incremental, reviewable changes over broad refactors.
 - Preserve existing API contracts, route names, and payload shapes unless the task explicitly includes coordinated contract updates.
 
@@ -27,7 +27,8 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - The navbar search input is controlled and submits to the global search route from `build/src/components/navbar/top-navbar.tsx`.
 - The shared search input component is `build/src/components/forms/search-bar.tsx`.
 - The frontend search API wrapper is `build/src/services/search-service.ts`.
-- Frontend permission checks live in `build/src/utils/permissions.ts` and the route-level guard is `build/src/app/guards/permission-guard.tsx`.
+- Frontend permission checks live in `build/src/utils/permissions.ts`.
+- The route-level guard is `build/src/app/guards/permission-guard.tsx`.
 - The backend global search endpoint is `GET /api/v1/search` handled by `backend/app/Http/Controllers/SearchController.php`.
 - Keep global search results aligned with existing module routes, permissions, and payload shapes.
 
@@ -39,6 +40,7 @@ Operational guidance for coding agents working in `D:\HRMS`.
 - Do not revert unrelated user changes.
 - Keep changes minimal, direct, and consistent with surrounding code.
 - Use existing primitives, services, and helpers before introducing new abstractions.
+- If you encounter unexpected repository changes, assume they may be user-authored or generated and avoid overwriting them unless they block the task.
 
 ## Frontend (`build/`)
 

@@ -14,10 +14,11 @@ export function SummaryCard({
   tone?: string;
 }) {
   return (
-    <Card className={cn("border-white/60 bg-gradient-to-br", tone)}>
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{title}</p>
-      <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{value}</p>
-      {hint ? <p className="mt-2 text-sm text-[var(--muted)]">{hint}</p> : null}
+    <Card className={cn("relative overflow-hidden border-white/70 bg-gradient-to-br p-6 shadow-sm", tone)}>
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[var(--primary)]/30 via-[var(--primary)] to-transparent" />
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{title}</p>
+      <p className="mt-4 text-3xl font-semibold tracking-tight text-[var(--text)]">{value}</p>
+      {hint ? <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{hint}</p> : null}
     </Card>
   );
 }
@@ -26,18 +27,20 @@ export function ChartCard({
   title,
   subtitle,
   children,
+  className,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <Card className="h-full">
+    <Card className={cn("flex h-full flex-col", className)}>
       <div className="mb-4">
-        <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
-        {subtitle ? <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p> : null}
+        <h3 className="text-base font-semibold tracking-tight text-[var(--text)]">{title}</h3>
+        {subtitle ? <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{subtitle}</p> : null}
       </div>
-      {children}
+      <div className="flex-1">{children}</div>
     </Card>
   );
 }
@@ -50,8 +53,8 @@ export function ActivityFeed({
   items: Array<{ id: string | number; label: string; description: string; time?: string; status?: string }>;
 }) {
   return (
-    <Card className="h-full">
-      <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
+    <Card className="flex h-full flex-col">
+      <h3 className="text-base font-semibold tracking-tight text-[var(--text)]">{title}</h3>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? <p className="text-sm text-[var(--muted)]">No items to show.</p> : null}
         {items.map((item) => (
@@ -79,13 +82,13 @@ export function AttendanceWidget({
   title: string;
   today: { status: string; check_in?: string | null; check_out?: string | null; date?: string } | null;
   recent: Array<{ date: string; status: string; check_in?: string | null; check_out?: string | null }>;
-}) {
+  }) {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
-          <p className="mt-1 text-sm text-[var(--muted)]">Current day status and recent history.</p>
+          <h3 className="text-base font-semibold tracking-tight text-[var(--text)]">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-[var(--muted)]">Current day status and recent history.</p>
         </div>
         {today ? <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600">{today.status}</span> : null}
       </div>
@@ -138,10 +141,10 @@ export function AnnouncementWidget({
 }: {
   title: string;
   announcements: Array<{ id: number; title: string; body: string; published_at: string; target: string }>;
-}) {
+  }) {
   return (
-    <Card className="h-full">
-      <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
+    <Card className="flex h-full flex-col">
+      <h3 className="text-base font-semibold tracking-tight text-[var(--text)]">{title}</h3>
       <div className="mt-4 space-y-3">
         {announcements.length === 0 ? <p className="text-sm text-[var(--muted)]">No announcements available.</p> : null}
         {announcements.map((item) => (
@@ -162,10 +165,10 @@ export function NotificationWidget({
 }: {
   title: string;
   notifications: Array<{ id: number; title: string; message: string; type: string; is_read: boolean; created_at: string }>;
-}) {
+  }) {
   return (
-    <Card className="h-full">
-      <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
+    <Card className="flex h-full flex-col">
+      <h3 className="text-base font-semibold tracking-tight text-[var(--text)]">{title}</h3>
       <div className="mt-4 space-y-3">
         {notifications.length === 0 ? <p className="text-sm text-[var(--muted)]">No notifications yet.</p> : null}
         {notifications.map((item) => (
@@ -193,10 +196,10 @@ export function TableWidget({
   title: string;
   headers: string[];
   rows: ReactNode[][];
-}) {
+  }) {
   return (
-    <Card className="h-full">
-      <h3 className="text-base font-semibold text-[var(--text)]">{title}</h3>
+    <Card className="flex h-full flex-col">
+      <h3 className="text-base font-semibold tracking-tight text-[var(--text)]">{title}</h3>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="text-[var(--muted)]">

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\NotificationItem;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
@@ -55,6 +57,7 @@ class NotificationController extends Controller
     {
         $this->authorize('create', NotificationItem::class);
 
+        $user = $request->user();
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'message' => 'required|string|max:5000',
@@ -63,26 +66,37 @@ class NotificationController extends Controller
             'user_id' => 'nullable|exists:users,id',
         ]);
 
-        $targetUserId = $validated['user_id'] ?? $request->user()?->id;
+        $targetUserId = $validated['user_id'] ?? $user?->id;
+        $isSuperAdmin = $user?->hasRole(User::ROLE_SUPER_ADMIN) ?? false;
 
-        if ($targetUserId !== null) {
-            if (!$request->user()->can('manage notifications') && (int) $targetUserId !== (int) $request->user()->id) {
+        if ($targetUserId !== null && !$isSuperAdmin) {
+            if (!$user->can('manage notifications') && (int) $targetUserId !== (int) $user->id) {
                 abort(403, 'You can only create notifications for yourself.');
             }
 
             $this->assertSameCompanyUser($request, (int) $targetUserId);
         }
 
+        if ($isSuperAdmin && ($validated['user_id'] ?? null) === null) {
+            $item = $this->broadcastNotification($user, $validated);
+
+            return $this->ok($item, 'Notification created successfully', 201);
+        }
+
+        $targetUser = $targetUserId !== null
+            ? User::query()->select(['id', 'company_id'])->findOrFail($targetUserId)
+            : null;
+
         $payload = [
             ...$validated,
             'user_id' => $targetUserId,
             'type' => $validated['type'] ?? 'info',
             'is_read' => (bool) ($validated['is_read'] ?? false),
-            'created_by' => $request->user()?->id,
+            'created_by' => $user?->id,
         ];
 
         if ($this->supportsCompanyScope()) {
-            $payload['company_id'] = $request->user()?->company_id;
+            $payload['company_id'] = $targetUser?->company_id ?? $user?->company_id;
         }
 
         $item = NotificationItem::create($payload);
@@ -134,11 +148,45 @@ class NotificationController extends Controller
 
     private function assertSameCompanyUser(Request $request, int $userId): void
     {
+        if ($request->user()?->hasRole(User::ROLE_SUPER_ADMIN)) {
+            return;
+        }
+
         $targetUser = \App\Models\User::query()->select(['id', 'company_id'])->findOrFail($userId);
 
         if ((string) ($targetUser->company_id ?? '') !== (string) ($request->user()?->company_id ?? '')) {
             abort(403, 'You cannot assign notifications outside your company.');
         }
+    }
+
+    private function broadcastNotification(?User $creator, array $validated): NotificationItem
+    {
+        $now = now()->toDateTimeString();
+        $users = User::query()->select(['id', 'company_id'])->get();
+        $rows = $users->map(fn (User $recipient) => [
+            'title' => $validated['title'],
+            'message' => $validated['message'],
+            'type' => $validated['type'] ?? 'info',
+            'is_read' => false,
+            'user_id' => $recipient->id,
+            'created_by' => $creator?->id,
+            'company_id' => $this->supportsCompanyScope() ? $recipient->company_id : null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all();
+
+        if (!empty($rows)) {
+            DB::transaction(static fn () => NotificationItem::query()->insert($rows));
+        }
+
+        return NotificationItem::query()
+            ->with(['user:id,name,email,company_id', 'creator:id,name,email,company_id'])
+            ->where('user_id', $creator?->id)
+            ->where('created_by', $creator?->id)
+            ->where('title', $validated['title'])
+            ->where('message', $validated['message'])
+            ->latest('id')
+            ->firstOrFail();
     }
 
     private function sanitizeQuery(string $query): string

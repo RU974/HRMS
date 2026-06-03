@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AppLayout } from "@/app/layouts/app-layout";
 import { AuthGuard } from "@/app/guards/auth-guard";
 import { PermissionGuard } from "@/app/guards/permission-guard";
+import { SuperAdminGuard } from "@/app/guards/role-guard";
 import { DashboardPage } from "@/modules/dashboard/dashboard-page";
 import { EmployeesPage } from "@/modules/employees";
 import { EmployeeFormPage } from "@/modules/employees/employee-form-page";
@@ -71,8 +72,8 @@ export const appRouter = createBrowserRouter([
       { path: "performance/kpis", element: withPermission(<PerformanceKpisPage />, ["view performance", "manage performance"]) },
       { path: "performance/goals", element: withPermission(<PerformanceGoalsPage />, ["view performance", "manage performance"]) },
       { path: "performance/appraisals", element: withPermission(<PerformanceAppraisalsPage />, ["view performance", "manage performance"]) },
-      { path: "announcements", element: <AnnouncementsPage /> },
-      { path: "notifications", element: <NotificationsPage /> },
+      { path: "announcements", element: <SuperAdminGuard><AnnouncementsPage /></SuperAdminGuard> },
+      { path: "notifications", element: <SuperAdminGuard><NotificationsPage /></SuperAdminGuard> },
       { path: "chat", element: <ChatPage /> },
       { path: "reports", element: withPermission(<ReportsPage />, ["view employees", "view attendance", "view payroll", "view performance", "manage payroll", "manage performance", "recruitment.view"]) },
       { path: "reports/attendance", element: withPermission(<AttendanceReportsPage />, ["view attendance", "manage attendance"]) },

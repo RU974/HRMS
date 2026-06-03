@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Announcement;
+use App\Models\NotificationItem;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
@@ -88,6 +91,10 @@ class AnnouncementController extends Controller
 
         $announcement = Announcement::create($payload);
 
+        if ($announcement->is_published) {
+            $this->broadcastAnnouncement($announcement, $request->user());
+        }
+
         return $this->ok($announcement->load(['creator:id,name,email,company_id', 'company:id,name']), 'Announcement created successfully', 201);
     }
 
@@ -150,5 +157,83 @@ class AnnouncementController extends Controller
     private function supportsCompanyScope(): bool
     {
         return Schema::hasColumn('announcements', 'company_id');
+    }
+
+    private function broadcastAnnouncement(Announcement $announcement, ?User $creator): void
+    {
+        $audienceQuery = User::query()->select(['id', 'company_id']);
+
+        if ($creator?->company_id) {
+            $audienceQuery->where('company_id', $creator->company_id);
+        }
+
+        $audienceQuery->where(function ($builder) use ($announcement): void {
+            if ($announcement->target === 'all') {
+                return;
+            }
+
+            if ($announcement->target === 'hr') {
+                $builder->whereHas('roles', function ($roleQuery): void {
+                    $roleQuery->whereIn('name', [
+                        User::ROLE_HR_MANAGER,
+                        User::ROLE_HR_EXECUTIVE,
+                        User::ROLE_COMPANY_ADMIN,
+                        User::ROLE_SUPER_ADMIN,
+                    ]);
+                });
+
+                return;
+            }
+
+            if ($announcement->target === 'managers') {
+                $builder->whereHas('roles', function ($roleQuery): void {
+                    $roleQuery->whereIn('name', [
+                        User::ROLE_DEPARTMENT_MANAGER,
+                        User::ROLE_HR_MANAGER,
+                        User::ROLE_COMPANY_ADMIN,
+                        User::ROLE_SUPER_ADMIN,
+                    ]);
+                });
+
+                return;
+            }
+
+            $builder->whereHas('roles', function ($roleQuery): void {
+                $roleQuery->where('name', User::ROLE_EMPLOYEE);
+            });
+        });
+
+        $recipientIds = $audienceQuery
+            ->pluck('id')
+            ->merge([$creator?->id])
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($recipientIds->isEmpty()) {
+            return;
+        }
+
+        $users = User::query()
+            ->select(['id', 'company_id'])
+            ->whereIn('id', $recipientIds->all())
+            ->get();
+
+        $now = now()->toDateTimeString();
+        $rows = $users->map(fn (User $recipient) => [
+            'title' => $announcement->title,
+            'message' => $announcement->body,
+            'type' => 'info',
+            'is_read' => false,
+            'user_id' => $recipient->id,
+            'created_by' => $creator?->id,
+            'company_id' => $this->supportsCompanyScope() ? $recipient->company_id : null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ])->all();
+
+        if (!empty($rows)) {
+            DB::transaction(static fn () => NotificationItem::query()->insert($rows));
+        }
     }
 }

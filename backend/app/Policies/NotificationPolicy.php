@@ -20,7 +20,7 @@ class NotificationPolicy
 
     public function create(User $user): bool
     {
-        return true;
+        return $this->canManage($user);
     }
 
     public function update(User $user, NotificationItem $notification): bool
@@ -37,7 +37,7 @@ class NotificationPolicy
 
     private function canManage(User $user): bool
     {
-        return $user->can('manage notifications');
+        return $user->hasRole(User::ROLE_SUPER_ADMIN);
     }
 
     private function isOwnedByUser(User $user, NotificationItem $notification): bool

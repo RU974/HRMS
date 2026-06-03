@@ -40,14 +40,7 @@ class AnnouncementPolicy
 
     private function canManage(User $user): bool
     {
-        return $user->can('manage announcements')
-            || $user->can('manage settings')
-            || $user->hasAnyRole([
-                User::ROLE_SUPER_ADMIN,
-                User::ROLE_COMPANY_ADMIN,
-                User::ROLE_HR_MANAGER,
-                User::ROLE_HR_EXECUTIVE,
-            ]);
+        return $user->hasRole(User::ROLE_SUPER_ADMIN);
     }
 
     private function sameCompany(User $user, Announcement $announcement): bool

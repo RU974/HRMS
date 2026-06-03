@@ -3,12 +3,13 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { useAuthStore } from "@/store/auth-store";
 import { getCurrentPermissionKeys } from "@/store/auth-store";
-import { getUserRoleKeys } from "@/config/rbac";
+import { getUserRoleKeys, isSuperAdminRole } from "@/config/rbac";
 
 export function ProfilePage() {
   const user = useAuthStore((state) => state.user);
   const roles = getUserRoleKeys(user);
   const permissions = getCurrentPermissionKeys();
+  const showRestrictedCommunicationLinks = isSuperAdminRole(user);
 
   return (
     <div className="space-y-6">
@@ -64,7 +65,9 @@ export function ProfilePage() {
           <h3 className="text-base font-semibold">Shortcuts</h3>
           <div className="mt-4 space-y-2">
             <Link to="/dashboard" className="block rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--border)]/35">Back to dashboard</Link>
-            <Link to="/notifications" className="block rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--border)]/35">Notifications</Link>
+            {showRestrictedCommunicationLinks ? (
+              <Link to="/notifications" className="block rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--border)]/35">Notifications</Link>
+            ) : null}
             <Link to="/leaves" className="block rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--border)]/35">Leave requests</Link>
           </div>
         </Card>

@@ -32,6 +32,118 @@ class CommunicationModuleTest extends TestCase
         $response->assertCreated()->assertJsonPath('success', true);
     }
 
+    public function test_super_admin_broadcasts_notifications_to_all_users(): void
+    {
+        $companyA = Company::create(['name' => 'Acme HR']);
+        $companyB = Company::create(['name' => 'Globex HR']);
+        $superAdmin = $this->createUserWithRole(User::ROLE_SUPER_ADMIN, [
+            'email' => 'superadmin@hrms.test',
+        ]);
+        $employeeA = $this->createUserWithRole(User::ROLE_EMPLOYEE, [
+            'company_id' => $companyA->id,
+            'email' => 'employee-a@acme.test',
+        ]);
+        $employeeB = $this->createUserWithRole(User::ROLE_EMPLOYEE, [
+            'company_id' => $companyB->id,
+            'email' => 'employee-b@globex.test',
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->postJson('/api/v1/notifications', [
+            'title' => 'Global Notice',
+            'message' => 'HRMS maintenance will start at 10 PM.',
+            'type' => 'info',
+            'is_read' => false,
+        ]);
+
+        $response->assertCreated()->assertJsonPath('success', true);
+
+        $this->assertDatabaseCount('notifications', 3);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Global Notice',
+            'user_id' => $superAdmin->id,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Global Notice',
+            'user_id' => $employeeA->id,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Global Notice',
+            'user_id' => $employeeB->id,
+        ]);
+
+        Sanctum::actingAs($employeeA);
+        $this->getJson('/api/v1/notifications?read=false')
+            ->assertOk()
+            ->assertJsonFragment(['title' => 'Global Notice', 'user_id' => $employeeA->id]);
+
+        Sanctum::actingAs($employeeB);
+        $this->getJson('/api/v1/notifications?read=false')
+            ->assertOk()
+            ->assertJsonFragment(['title' => 'Global Notice', 'user_id' => $employeeB->id]);
+    }
+
+    public function test_super_admin_announcement_creates_bell_notifications_for_all_users(): void
+    {
+        $companyA = Company::create(['name' => 'Acme HR']);
+        $companyB = Company::create(['name' => 'Globex HR']);
+        $superAdmin = $this->createUserWithRole(User::ROLE_SUPER_ADMIN, [
+            'email' => 'superadmin@hrms.test',
+        ]);
+        $hrManager = $this->createUserWithRole(User::ROLE_HR_MANAGER, [
+            'company_id' => $companyA->id,
+            'email' => 'hr@acme.test',
+        ]);
+        $employeeA = $this->createUserWithRole(User::ROLE_EMPLOYEE, [
+            'company_id' => $companyA->id,
+            'email' => 'employee-a@acme.test',
+        ]);
+        $employeeB = $this->createUserWithRole(User::ROLE_EMPLOYEE, [
+            'company_id' => $companyB->id,
+            'email' => 'employee-b@globex.test',
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $response = $this->postJson('/api/v1/announcements', [
+            'title' => 'Policy Update',
+            'body' => 'Please review the updated leave policy.',
+            'target' => 'all',
+            'is_published' => true,
+        ]);
+
+        $response->assertCreated()->assertJsonPath('success', true);
+
+        $this->assertDatabaseCount('notifications', 4);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Policy Update',
+            'user_id' => $superAdmin->id,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Policy Update',
+            'user_id' => $hrManager->id,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Policy Update',
+            'user_id' => $employeeA->id,
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'title' => 'Policy Update',
+            'user_id' => $employeeB->id,
+        ]);
+
+        Sanctum::actingAs($hrManager);
+        $this->getJson('/api/v1/notifications?read=false')
+            ->assertOk()
+            ->assertJsonFragment(['title' => 'Policy Update', 'user_id' => $hrManager->id]);
+
+        Sanctum::actingAs($employeeB);
+        $this->getJson('/api/v1/notifications?read=false')
+            ->assertOk()
+            ->assertJsonFragment(['title' => 'Policy Update', 'user_id' => $employeeB->id]);
+    }
+
     public function test_user_can_create_own_notification_without_explicit_recipient(): void
     {
         $company = Company::create(['name' => 'Acme HR']);
