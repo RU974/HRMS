@@ -81,6 +81,16 @@ export const createAttendance = (payload: { employee_id: number; date: string; c
 export const updateAttendance = (id: number, payload: { date?: string; check_in?: string | null; check_out?: string | null; status?: AttendanceItem["status"]; notes?: string | null }) =>
   apiClient<AttendanceItem>(`/attendance/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 export const deleteAttendance = (id: number) => apiClient<null>(`/attendance/${id}`, { method: "DELETE" });
+export const checkInAttendance = (employeeId: number) =>
+  apiClient<AttendanceItem>("/attendance/check-in", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: employeeId }),
+  });
+export const checkOutAttendance = (employeeId: number) =>
+  apiClient<AttendanceItem>("/attendance/check-out", {
+    method: "POST",
+    body: JSON.stringify({ employee_id: employeeId }),
+  });
 
 export const listLeaves = () => apiClient<PaginatedResponse<LeaveItem>>("/leaves?per_page=50");
 export const createLeave = (payload: { employee_id: number; type: string; from_date: string; to_date: string; status?: LeaveItem["status"] }) =>

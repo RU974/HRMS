@@ -1,8 +1,26 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { getDashboardInsights, getDashboardSummary } from "@/services/dashboard-service";
 import { SummaryCard, ChartCard, TableWidget } from "./dashboard-widgets";
+
+const CURRENCY_OPTIONS = [
+  { code: "USD", symbol: "$", label: "USD - US Dollar" },
+  { code: "PKR", symbol: "Rs", label: "PKR - Pakistani Rupee" },
+  { code: "EUR", symbol: "€", label: "EUR - Euro" },
+  { code: "GBP", symbol: "£", label: "GBP - British Pound" },
+  { code: "SAR", symbol: "﷼", label: "SAR - Saudi Riyal" },
+  { code: "AED", symbol: "د.إ", label: "AED - UAE Dirham" },
+  { code: "INR", symbol: "₹", label: "INR - Indian Rupee" },
+] as const;
+
+type CurrencyCode = (typeof CURRENCY_OPTIONS)[number]["code"];
+
+function formatMonthlyPayroll(amount: number, currency: CurrencyCode) {
+  const option = CURRENCY_OPTIONS.find((item) => item.code === currency);
+  return `${option?.symbol ?? currency} ${Number(amount).toLocaleString()}`;
+}
 
 function LineChart({ points }: { points: Array<{ label: string; rate: number }> }) {
   if (!points.length) return <p className="text-sm text-[var(--muted)]">No attendance data yet.</p>;
@@ -83,6 +101,12 @@ function PieChart({ items }: { items: Array<{ label: string; value: number }> })
 }
 
 export function ManagementDashboard({ roleName }: { roleName: string }) {
+  const [currency] = useState<CurrencyCode>(() => {
+    if (typeof window === "undefined") return "USD";
+    const stored = window.localStorage.getItem("dashboard-currency");
+    return CURRENCY_OPTIONS.some((item) => item.code === stored) ? (stored as CurrencyCode) : "USD";
+  });
+
   const { data: summary, isLoading, error } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: getDashboardSummary,
@@ -117,7 +141,12 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
         <SummaryCard title="Present Today" value={isLoading ? "..." : `${summary?.attendance_rate ?? 0}%`} hint="Attendance rate" tone="from-cyan-50 to-white" />
         <SummaryCard title="Pending Leaves" value={isLoading ? "..." : String(summary?.pending_leaves ?? 0)} hint="Awaiting approval" tone="from-amber-50 to-white" />
         <SummaryCard title="Payroll Status" value={isLoading ? "..." : String(summary?.pending_payrolls ?? 0)} hint="Pending payrolls" tone="from-rose-50 to-white" />
-        <SummaryCard title="Monthly Payroll" value={isLoading ? "..." : `$${Number(summary?.monthly_payroll ?? 0).toLocaleString()}`} hint={`${summary?.month ?? "-"} / ${summary?.year ?? "-"}`} tone="from-emerald-50 to-white" />
+        <SummaryCard
+          title="Monthly Payroll"
+          value={isLoading ? "..." : formatMonthlyPayroll(Number(summary?.monthly_payroll ?? 0), currency)}
+          hint={`${summary?.month ?? "-"} / ${summary?.year ?? "-"}`}
+          tone="from-emerald-50 to-white"
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">

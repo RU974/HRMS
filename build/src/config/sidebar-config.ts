@@ -66,16 +66,6 @@ export const sidebarSections: SidebarSectionConfig[] = [
         roles: employeeRoleOnly,
         permissions: ["view leaves", "approve leaves", "request own leave", "manage leaves"],
       },
-      {
-        label: "Payroll",
-        icon: WalletCards,
-        roles: employeeRoleOnly,
-        permissions: ["manage payroll", "view payroll", "view own payroll"],
-        children: [
-          { label: "My Payslips", path: "/payroll?tab=payslips", icon: FileText, permissions: ["manage payroll", "view payroll", "view own payroll"] },
-          { label: "Payroll Summary", path: "/payroll", icon: WalletCards, permissions: ["manage payroll", "view payroll"] },
-        ],
-      },
       { label: "Notifications", path: "/notifications", icon: Bell, roles: employeeRoleOnly },
       { label: "Support", path: "/chat", icon: MessageCircleMore, roles: employeeRoleOnly },
     ],

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type ComponentType } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bell, CalendarRange, ChevronDown, ChevronRight, LogIn, LogOut, MessageCircleMore, WalletCards } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/utils/cn";
 import { logoutRequest } from "@/services/auth-service";
+import { checkInAttendance, checkOutAttendance } from "@/services/hr-management-service";
 import { useAuthStore } from "@/store/auth-store";
 import { getVisibleSidebarSections } from "@/config/sidebar-config";
 
@@ -41,6 +43,7 @@ function SectionItem({
   search: string;
 }) {
   const hasChildren = (children?.length ?? 0) > 0;
+  const childItems = children ?? [];
 
   return (
     <div className="space-y-1">
@@ -67,7 +70,7 @@ function SectionItem({
 
       {hasChildren && open ? (
         <div className="ml-6 space-y-1 border-l border-[var(--border)] pl-3">
-          {children.map((child) => {
+          {childItems.map((child) => {
             const childActive = isActivePath(pathname, search, child.path);
             return child.path ? (
               <Link
@@ -85,6 +88,129 @@ function SectionItem({
           })}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function EmployeeShortcuts() {
+  const user = useAuthStore((state) => state.user);
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const queryClient = useQueryClient();
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const employeeId = user?.employee?.id;
+
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [feedback]);
+
+  const checkInMutation = useMutation({
+    mutationFn: async () => {
+      if (!employeeId) {
+        throw new Error("Employee profile is missing.");
+      }
+
+      return checkInAttendance(employeeId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "workspace"] });
+      await queryClient.invalidateQueries({ queryKey: ["hr", "attendance"] });
+      setFeedback({ type: "success", message: "Check-in recorded." });
+    },
+    onError: (error) => {
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Unable to record check-in." });
+    },
+  });
+
+  const checkOutMutation = useMutation({
+    mutationFn: async () => {
+      if (!employeeId) {
+        throw new Error("Employee profile is missing.");
+      }
+
+      return checkOutAttendance(employeeId);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "workspace"] });
+      await queryClient.invalidateQueries({ queryKey: ["hr", "attendance"] });
+      setFeedback({ type: "success", message: "Check-out recorded." });
+    },
+    onError: (error) => {
+      setFeedback({ type: "error", message: error instanceof Error ? error.message : "Unable to record check-out." });
+    },
+  });
+
+  const leaveLinkVisible = hasPermission("request own leave") || hasPermission("view leaves") || hasPermission("approve leaves") || hasPermission("manage leaves");
+  const payrollLinkVisible = hasPermission("view own payroll") || hasPermission("view payroll") || hasPermission("manage payroll");
+
+  if (!employeeId) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2 pt-1">
+      <div className="px-3">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">Quick Access</p>
+      </div>
+
+      {feedback ? (
+        <div className={cn("mx-3 rounded-lg px-3 py-2 text-xs font-medium", feedback.type === "success" ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-600")}>
+          {feedback.message}
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => void checkInMutation.mutateAsync()}
+        disabled={checkInMutation.isPending || checkOutMutation.isPending}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition",
+          "text-[var(--text)] hover:bg-[var(--border)]/35",
+          (checkInMutation.isPending || checkOutMutation.isPending) && "cursor-not-allowed opacity-60"
+        )}
+      >
+        <LogIn className="h-4 w-4 shrink-0" />
+        <span>{checkInMutation.isPending ? "Checking in..." : "Check In"}</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => void checkOutMutation.mutateAsync()}
+        disabled={checkInMutation.isPending || checkOutMutation.isPending}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition",
+          "text-[var(--text)] hover:bg-[var(--border)]/35",
+          (checkInMutation.isPending || checkOutMutation.isPending) && "cursor-not-allowed opacity-60"
+        )}
+      >
+        <LogOut className="h-4 w-4 shrink-0" />
+        <span>{checkOutMutation.isPending ? "Checking out..." : "Check Out"}</span>
+      </button>
+
+      {leaveLinkVisible ? (
+        <Link to="/leaves" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
+          <CalendarRange className="h-4 w-4 shrink-0" />
+          <span>Request Leave</span>
+        </Link>
+      ) : null}
+      {payrollLinkVisible ? (
+        <Link to="/payroll?tab=payslips" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
+          <WalletCards className="h-4 w-4 shrink-0" />
+          <span>Payroll</span>
+        </Link>
+      ) : null}
+      <Link to="/notifications" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
+        <Bell className="h-4 w-4 shrink-0" />
+        <span>Notifications</span>
+      </Link>
+      <Link to="/chat" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--border)]/35">
+        <MessageCircleMore className="h-4 w-4 shrink-0" />
+        <span>Support</span>
+      </Link>
     </div>
   );
 }
@@ -149,6 +275,8 @@ export function SidebarMenu() {
           </div>
         );
       })}
+
+      <EmployeeShortcuts />
 
       <div className="border-t border-[var(--border)] pt-4">
         <Link to="/profile" className="block rounded-lg px-3 py-2 text-sm hover:bg-[var(--border)]/35">
