@@ -103,13 +103,21 @@ class SearchController extends Controller
     {
         $user = $request->user();
         $canViewAll = (bool) $user?->can('view employees');
+        $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
         }
 
         $like = '%' . $query . '%';
-        return Employee::query()
+        $builder = Employee::query()
             ->with(['department:id,name', 'designationRef:id,name'])
+            ->when($companyId, function ($query) use ($companyId): void {
+                $query->whereHas('user', function ($userQuery) use ($companyId): void {
+                    $userQuery->where('company_id', $companyId);
+                });
+            });
+
+        return $builder
             ->where(function ($builder) use ($like, $employeeId, $canViewAll): void {
                 if ($canViewAll) {
                     $builder->where(function ($search) use ($like): void {
@@ -224,12 +232,18 @@ class SearchController extends Controller
     {
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('manage attendance') || $user?->can('view attendance'));
+        $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Attendance::query()->with('employee:id,name,employee_number');
+        if ($companyId) {
+            $builder->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
 
         if ($canViewAll) {
             $builder->where(function ($search) use ($like): void {
@@ -267,12 +281,18 @@ class SearchController extends Controller
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('view leaves') || $user?->can('approve leaves'));
         $canViewOwn = (bool) $user?->can('request own leave');
+        $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Leave::query()->with('employee:id,name,employee_number');
+        if ($companyId) {
+            $builder->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
 
         if ($canViewAll) {
             $builder->where(function ($search) use ($like): void {
@@ -309,12 +329,18 @@ class SearchController extends Controller
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('manage payroll') || $user?->can('view payroll'));
         $canViewOwn = (bool) $user?->can('view own payroll');
+        $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Payroll::query()->with('employee:id,name,employee_number');
+        if ($companyId) {
+            $builder->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
 
         if ($canViewAll) {
             $builder->where(function ($search) use ($like): void {
@@ -351,6 +377,12 @@ class SearchController extends Controller
         $like = '%' . $query . '%';
         return Report::query()
             ->with(['creator:id,name,email'])
+            ->when(request()?->user()?->company_id, function ($builder) {
+                $companyId = request()?->user()?->company_id;
+                $builder->whereHas('creator', function ($creatorQuery) use ($companyId): void {
+                    $creatorQuery->where('company_id', $companyId);
+                });
+            })
             ->where(function ($builder) use ($like): void {
                 $builder->where('name', 'like', $like)
                     ->orWhere('description', 'like', $like)
@@ -521,6 +553,11 @@ class SearchController extends Controller
         $like = '%' . $query . '%';
         return PerformanceReview::query()
             ->with('employee:id,name,employee_number')
+            ->when($request->user()?->company_id, function ($builder) use ($request): void {
+                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->where(function ($builder) use ($like): void {
                 $builder->where('period', 'like', $like)
                     ->orWhere('summary', 'like', $like)
@@ -552,6 +589,11 @@ class SearchController extends Controller
         $like = '%' . $query . '%';
         return PerformanceKpi::query()
             ->with('employee:id,name,employee_number')
+            ->when($request->user()?->company_id, function ($builder) use ($request): void {
+                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->where(function ($builder) use ($like): void {
                 $builder->where('name', 'like', $like)
                     ->orWhere('unit', 'like', $like)
@@ -582,6 +624,11 @@ class SearchController extends Controller
         $like = '%' . $query . '%';
         return PerformanceGoal::query()
             ->with('employee:id,name,employee_number')
+            ->when($request->user()?->company_id, function ($builder) use ($request): void {
+                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->where(function ($builder) use ($like): void {
                 $builder->where('title', 'like', $like)
                     ->orWhere('description', 'like', $like)
@@ -613,6 +660,11 @@ class SearchController extends Controller
         $like = '%' . $query . '%';
         return PerformanceAppraisal::query()
             ->with('employee:id,name,employee_number')
+            ->when($request->user()?->company_id, function ($builder) use ($request): void {
+                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->where(function ($builder) use ($like): void {
                 $builder->where('cycle', 'like', $like)
                     ->orWhere('strengths', 'like', $like)

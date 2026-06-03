@@ -16,14 +16,31 @@ class PayrollController extends Controller
     public function index(Request $request)
     {
         $this->authorizeRead($request);
+        $user = $request->user();
         $query = Payroll::with('employee');
-        if (!$request->user()?->can('manage payroll')) {
-            $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
-            $query->where('employee_id', $employee->id);
-        }
+        $this->scopePayrollQueryToCompany($request, $query);
+
+        $ownEmployeeId = $this->ownEmployeeId($user);
+        $viewOwnOnly = $this->viewOwnOnly($user);
 
         if ($request->has('employee_id')) {
-            $query->where('employee_id', $request->employee_id);
+            $employeeId = (int) $request->employee_id;
+            if ($viewOwnOnly) {
+                if ($ownEmployeeId === null) {
+                    abort(403, 'You are not authorized to access payroll data.');
+                }
+
+                $employeeId = $ownEmployeeId;
+            }
+
+            $this->assertEmployeeInActorCompany($request, $employeeId);
+            $query->where('employee_id', $employeeId);
+        } elseif ($viewOwnOnly) {
+            if ($ownEmployeeId === null) {
+                abort(403, 'You are not authorized to access payroll data.');
+            }
+
+            $query->where('employee_id', $ownEmployeeId);
         }
 
         if ($request->has('status')) {
@@ -72,6 +89,7 @@ class PayrollController extends Controller
             'payment_date' => 'required|date',
             'status' => 'required|in:pending,processed,paid,cancelled',
         ]);
+        $this->assertEmployeeInActorCompany($request, (int) $validated['employee_id']);
 
         $payroll = Payroll::create($validated);
 
@@ -85,6 +103,7 @@ class PayrollController extends Controller
     {
         $this->authorizePermission($request, 'manage payroll');
         $payroll = Payroll::findOrFail($id);
+        $this->assertPayrollInActorCompany($request, $payroll);
 
         $validated = $request->validate([
             'bonus' => 'nullable|numeric|min:0',
@@ -107,6 +126,7 @@ class PayrollController extends Controller
     {
         $this->authorizePermission(request(), 'manage payroll');
         $payroll = Payroll::findOrFail($id);
+        $this->assertPayrollInActorCompany(request(), $payroll);
         $payroll->delete();
 
         return $this->ok(null, 'Payroll record deleted successfully');
@@ -118,7 +138,9 @@ class PayrollController extends Controller
     public function getByEmployee($employeeId, Request $request)
     {
         $this->authorizeEmployeeScopedAccess($request, (int) $employeeId);
+        $this->assertEmployeeInActorCompany($request, (int) $employeeId);
         $query = Payroll::where('employee_id', $employeeId);
+        $this->scopePayrollQueryToCompany($request, $query);
 
         if ($request->has('year')) {
             $query->whereYear('payment_date', $request->year);
@@ -144,6 +166,11 @@ class PayrollController extends Controller
         $employees = Employee::when($request->has('department_id'), function ($query) use ($validated) {
             return $query->where('department_id', $validated['department_id']);
         })
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->where('status', 'active')
             ->get();
 
@@ -195,6 +222,7 @@ class PayrollController extends Controller
     {
         $this->authorizePermission(request(), 'manage payroll');
         $payroll = Payroll::findOrFail($id);
+        $this->assertPayrollInActorCompany(request(), $payroll);
         $payroll->update(['status' => 'paid']);
 
         return $this->ok($payroll, 'Payroll marked as paid');
@@ -223,6 +251,11 @@ class PayrollController extends Controller
                 status
             ')
             ->groupBy('status')
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->get();
 
         return $this->ok($summary);
@@ -244,8 +277,8 @@ class PayrollController extends Controller
         }
 
         if ($request->user()?->can('view own payroll')) {
-            $employee = Employee::where('user_id', $request->user()?->id)->first();
-            if ($employee && (int) $employee->id === $employeeId) {
+            $ownEmployeeId = $this->ownEmployeeId($request->user());
+            if ($ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
                 return;
             }
         }
@@ -255,6 +288,62 @@ class PayrollController extends Controller
 
     private function authorizePayrollAccess(Request $request, Payroll $payroll): void
     {
+        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll')) {
+            $this->assertPayrollInActorCompany($request, $payroll);
+            return;
+        }
+
         $this->authorizeEmployeeScopedAccess($request, (int) $payroll->employee_id);
+        $this->assertPayrollInActorCompany($request, $payroll);
+    }
+
+    private function ownEmployeeId(?\App\Models\User $user): ?int
+    {
+        if (!$user) {
+            return null;
+        }
+
+        return (int) (Employee::where('user_id', $user->id)->value('id') ?: 0) ?: null;
+    }
+
+    private function viewOwnOnly(?\App\Models\User $user): bool
+    {
+        return (bool) $user?->can('view own payroll')
+            && !$user?->can('view payroll')
+            && !$user?->can('manage payroll');
+    }
+
+    private function scopePayrollQueryToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInActorCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this payroll record.');
+        }
+    }
+
+    private function assertPayrollInActorCompany(Request $request, Payroll $payroll): void
+    {
+        $this->assertEmployeeInActorCompany($request, (int) $payroll->employee_id);
     }
 }

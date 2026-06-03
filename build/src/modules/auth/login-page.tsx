@@ -93,7 +93,7 @@ export function LoginPage() {
           </Button>
 
           <p className="text-center text-xs font-medium tracking-wide text-[var(--muted)]">
-            Powered by Slingsottech
+            Powered by Slingshottech
           </p>
         </div>
 

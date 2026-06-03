@@ -14,7 +14,7 @@ class ChatMessagePolicy
 
     public function view(User $user, ChatMessage $message): bool
     {
-        return $this->canManage($user) && $this->sameCompany($user, $message)
+        return $this->canView($user) && $this->sameCompany($user, $message)
             || $this->isParticipant($user, $message);
     }
 
@@ -35,14 +35,14 @@ class ChatMessagePolicy
             || $this->isSender($user, $message);
     }
 
-    private function canManage(User $user): bool
+    private function canView(User $user): bool
     {
         return $user->can('manage chat messages') || $user->can('view chat messages');
     }
 
-    private function canSend(User $user): bool
+    private function canManage(User $user): bool
     {
-        return $user->can('send chat messages') || $user->can('manage chat messages');
+        return $user->can('manage chat messages');
     }
 
     private function isParticipant(User $user, ChatMessage $message): bool

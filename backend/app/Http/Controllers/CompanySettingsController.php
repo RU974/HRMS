@@ -15,13 +15,21 @@ class CompanySettingsController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'manage settings');
-        return $this->ok(Company::query()->withCount(['branches', 'users'])->orderBy('name')->get());
+        $query = Company::query()->withCount(['branches', 'users'])->orderBy('name');
+        if ($request->user()?->company_id) {
+            $query->whereKey($request->user()->company_id);
+        }
+
+        return $this->ok($query->get());
     }
 
     public function show(Request $request, string $id)
     {
         $this->authorizePermission($request, 'manage settings');
-        return $this->ok(Company::withCount(['branches', 'users'])->findOrFail($id));
+        $company = Company::withCount(['branches', 'users'])->findOrFail($id);
+        $this->assertCompanyAccess($request, $company);
+
+        return $this->ok($company);
     }
 
     public function store(Request $request)
@@ -37,12 +45,17 @@ class CompanySettingsController extends Controller
             'is_active' => 'nullable|boolean',
         ]);
 
-        return $this->ok($this->service->upsert(null, $validated), 'Company created successfully', 201);
+        $companyId = $request->user()?->company_id;
+        $company = $this->service->upsert($companyId, $validated);
+
+        return $this->ok($company, $companyId ? 'Company updated successfully' : 'Company created successfully', $companyId ? 200 : 201);
     }
 
     public function update(Request $request, string $id)
     {
         $this->authorizePermission($request, 'manage settings');
+        $company = Company::findOrFail($id);
+        $this->assertCompanyAccess($request, $company);
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => 'nullable|email|max:255',
@@ -60,6 +73,7 @@ class CompanySettingsController extends Controller
     {
         $this->authorizePermission($request, 'manage settings');
         $company = Company::withCount(['branches', 'users'])->findOrFail($id);
+        $this->assertCompanyAccess($request, $company);
 
         if ($company->branches_count > 0 || $company->users_count > 0) {
             return $this->fail('Move or remove related users and branches before deleting the company.', 422);
@@ -67,5 +81,17 @@ class CompanySettingsController extends Controller
 
         $company->delete();
         return $this->ok(null, 'Company deleted successfully');
+    }
+
+    private function assertCompanyAccess(Request $request, Company $company): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        if ((string) $company->id !== (string) $companyId) {
+            abort(403, 'You are not authorized to access this company.');
+        }
     }
 }

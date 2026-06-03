@@ -72,14 +72,14 @@ export const appRouter = createBrowserRouter([
       { path: "performance/kpis", element: withPermission(<PerformanceKpisPage />, ["view performance", "manage performance"]) },
       { path: "performance/goals", element: withPermission(<PerformanceGoalsPage />, ["view performance", "manage performance"]) },
       { path: "performance/appraisals", element: withPermission(<PerformanceAppraisalsPage />, ["view performance", "manage performance"]) },
-      { path: "announcements", element: <SuperAdminGuard><AnnouncementsPage /></SuperAdminGuard> },
-      { path: "notifications", element: <SuperAdminGuard><NotificationsPage /></SuperAdminGuard> },
+      { path: "announcements", element: withPermission(<AnnouncementsPage />, ["view announcements", "manage announcements"]) },
+      { path: "notifications", element: withPermission(<NotificationsPage />, ["view notifications", "manage notifications"]) },
       { path: "chat", element: <ChatPage /> },
       { path: "reports", element: withPermission(<ReportsPage />, ["view employees", "view attendance", "view payroll", "view performance", "manage payroll", "manage performance", "recruitment.view"]) },
       { path: "reports/attendance", element: withPermission(<AttendanceReportsPage />, ["view attendance", "manage attendance"]) },
       { path: "reports/employees", element: withPermission(<EmployeeReportsPage />, ["view employees", "manage employees"]) },
-      { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["manage payroll", "view payroll", "view own payroll"]) },
-      { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view employees", "view attendance", "manage payroll", "manage performance", "recruitment.view"]) },
+      { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["manage payroll", "view payroll"]) },
+      { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view employees", "view attendance", "manage payroll", "manage performance", "view performance"]) },
       { path: "search", element: <SearchPage /> },
       { path: "settings", element: withPermission(<SettingsPage />, ["manage users", "user.manage", "manage roles", "manage settings"]) }
     ]

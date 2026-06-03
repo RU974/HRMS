@@ -11,11 +11,15 @@ class DesignationController extends Controller
 {
     public function index()
     {
+        $this->authorizeAnyPermission(request(), ['manage settings', 'manage employees']);
+
         return $this->ok(Designation::orderBy('name')->get());
     }
 
     public function show($id)
     {
+        $this->authorizeAnyPermission(request(), ['manage settings', 'manage employees']);
+
         return $this->ok(Designation::findOrFail($id));
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
 use App\Models\PerformanceKpi;
 use Illuminate\Http\Request;
 
@@ -11,6 +12,7 @@ class PerformanceKpiController extends Controller
     {
         $this->authorizePermission($request, 'view performance');
         $query = PerformanceKpi::query()->with('employee:id,first_name,last_name,employee_number');
+        $this->scopeToCompany($request, $query);
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -39,6 +41,7 @@ class PerformanceKpiController extends Controller
             'current_value' => 'nullable|numeric|min:0',
             'unit' => 'nullable|string|max:50',
         ]);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $item = PerformanceKpi::create([
             ...$validated,
@@ -52,7 +55,9 @@ class PerformanceKpiController extends Controller
     public function show(Request $request, $id)
     {
         $this->authorizePermission($request, 'view performance');
-        return $this->ok(PerformanceKpi::with('employee:id,first_name,last_name,employee_number')->findOrFail($id));
+        $item = PerformanceKpi::with('employee:id,first_name,last_name,employee_number')->findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        return $this->ok($item);
     }
 
     public function update(Request $request, $id)
@@ -66,6 +71,7 @@ class PerformanceKpiController extends Controller
             'current_value' => 'sometimes|numeric|min:0',
             'unit' => 'sometimes|string|max:50',
         ]);
+        $this->assertEmployeeInCompany($request, (int) ($validated['employee_id'] ?? $item->employee_id));
 
         $item->update($validated);
         return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance KPI updated successfully');
@@ -74,7 +80,38 @@ class PerformanceKpiController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'manage performance');
-        PerformanceKpi::findOrFail($id)->delete();
+        $item = PerformanceKpi::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        $item->delete();
         return $this->ok(null, 'Performance KPI deleted successfully');
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this performance KPI.');
+        }
     }
 }

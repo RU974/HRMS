@@ -9,7 +9,7 @@ class AnnouncementPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        return $this->canView($user);
     }
 
     public function view(User $user, Announcement $announcement): bool
@@ -18,7 +18,8 @@ class AnnouncementPolicy
             return $this->sameCompany($user, $announcement);
         }
 
-        return $announcement->is_published
+        return $this->canView($user)
+            && $announcement->is_published
             && $this->sameCompany($user, $announcement)
             && $this->isTargetVisibleToUser($user, $announcement);
     }
@@ -38,9 +39,14 @@ class AnnouncementPolicy
         return $this->canManage($user) && $this->sameCompany($user, $announcement);
     }
 
+    private function canView(User $user): bool
+    {
+        return $user->can('view announcements') || $user->can('manage announcements');
+    }
+
     private function canManage(User $user): bool
     {
-        return $user->hasRole(User::ROLE_SUPER_ADMIN);
+        return $user->can('manage announcements');
     }
 
     private function sameCompany(User $user, Announcement $announcement): bool
@@ -59,8 +65,8 @@ class AnnouncementPolicy
     private function isTargetVisibleToUser(User $user, Announcement $announcement): bool
     {
         return $announcement->target === 'all'
-            || ($announcement->target === 'employees' && $user->hasRole(User::ROLE_EMPLOYEE))
-            || ($announcement->target === 'hr' && $user->hasAnyRole([User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN]))
-            || ($announcement->target === 'managers' && $user->hasAnyRole([User::ROLE_DEPARTMENT_MANAGER, User::ROLE_HR_MANAGER, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN]));
+            || ($announcement->target === 'employees' && $user->can('view employee announcements'))
+            || ($announcement->target === 'hr' && $user->can('view hr announcements'))
+            || ($announcement->target === 'managers' && $user->can('view manager announcements'));
     }
 }

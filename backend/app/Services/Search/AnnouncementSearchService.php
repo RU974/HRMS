@@ -62,7 +62,7 @@ class AnnouncementSearchService
 
     private function canView(User $user): bool
     {
-        return true;
+        return $user->can('view announcements') || $user->can('manage announcements');
     }
 
     private function canSeeAnnouncement(User $user, Announcement $announcement): bool
@@ -71,7 +71,8 @@ class AnnouncementSearchService
             return $this->sameCompany($user, $announcement);
         }
 
-        return $announcement->is_published
+        return ($user->can('view announcements') || $user->can('manage announcements'))
+            && $announcement->is_published
             && $this->sameCompany($user, $announcement)
             && $this->matchesTarget($user, $announcement);
     }
@@ -92,9 +93,9 @@ class AnnouncementSearchService
     private function matchesTarget(User $user, Announcement $announcement): bool
     {
         return $announcement->target === 'all'
-            || ($announcement->target === 'employees' && $user->hasRole(User::ROLE_EMPLOYEE))
-            || ($announcement->target === 'hr' && $user->hasAnyRole([User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN]))
-            || ($announcement->target === 'managers' && $user->hasAnyRole([User::ROLE_DEPARTMENT_MANAGER, User::ROLE_HR_MANAGER, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN]));
+            || ($announcement->target === 'employees' && $user->can('view employee announcements'))
+            || ($announcement->target === 'hr' && $user->can('view hr announcements'))
+            || ($announcement->target === 'managers' && $user->can('view manager announcements'));
     }
 
     private function sanitize(string $query): string

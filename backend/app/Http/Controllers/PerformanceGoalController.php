@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
 use App\Models\PerformanceGoal;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,6 +13,7 @@ class PerformanceGoalController extends Controller
     {
         $this->authorizePermission($request, 'view performance');
         $query = PerformanceGoal::query()->with('employee:id,first_name,last_name,employee_number');
+        $this->scopeToCompany($request, $query);
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -45,6 +47,7 @@ class PerformanceGoalController extends Controller
             'progress' => 'nullable|integer|min:0|max:100',
             'status' => ['nullable', Rule::in(['not_started', 'in_progress', 'completed', 'on_hold'])],
         ]);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $item = PerformanceGoal::create([
             ...$validated,
@@ -58,7 +61,9 @@ class PerformanceGoalController extends Controller
     public function show(Request $request, $id)
     {
         $this->authorizePermission($request, 'view performance');
-        return $this->ok(PerformanceGoal::with('employee:id,first_name,last_name,employee_number')->findOrFail($id));
+        $item = PerformanceGoal::with('employee:id,first_name,last_name,employee_number')->findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        return $this->ok($item);
     }
 
     public function update(Request $request, $id)
@@ -73,6 +78,7 @@ class PerformanceGoalController extends Controller
             'progress' => 'sometimes|integer|min:0|max:100',
             'status' => ['sometimes', Rule::in(['not_started', 'in_progress', 'completed', 'on_hold'])],
         ]);
+        $this->assertEmployeeInCompany($request, (int) ($validated['employee_id'] ?? $item->employee_id));
 
         $item->update($validated);
         return $this->ok($item->load('employee:id,first_name,last_name,employee_number'), 'Performance goal updated successfully');
@@ -81,7 +87,38 @@ class PerformanceGoalController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'manage performance');
-        PerformanceGoal::findOrFail($id)->delete();
+        $item = PerformanceGoal::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        $item->delete();
         return $this->ok(null, 'Performance goal deleted successfully');
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this performance goal.');
+        }
     }
 }

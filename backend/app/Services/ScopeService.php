@@ -9,7 +9,7 @@ class ScopeService
 {
     public function applyScope(Builder $query, User $user, string $module): Builder
     {
-        if ($module === 'employees' && $user->hasRole(User::ROLE_DEPARTMENT_MANAGER)) {
+        if ($module === 'employees' && $user->can('view team employees')) {
             $query->where('manager_id', $user->id);
         }
 

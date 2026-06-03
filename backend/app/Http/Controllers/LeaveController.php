@@ -13,9 +13,11 @@ class LeaveController extends Controller
     {
         $query = Leave::query()->with('employee:id,name');
         $user = $request->user();
+        $this->scopeToCompany($request, $query);
 
         if ($user?->can('view leaves') || $user?->can('approve leaves')) {
             if ($request->filled('employee_id')) {
+                $this->assertEmployeeInCompany($request, (int) $request->employee_id);
                 $query->where('employee_id', $request->employee_id);
             }
             if ($request->filled('status')) {
@@ -33,6 +35,7 @@ class LeaveController extends Controller
     {
         $leave = Leave::with('employee:id,name')->findOrFail($id);
         $this->authorizeRead($request, $leave);
+        $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
 
         return $this->ok($leave);
     }
@@ -48,6 +51,7 @@ class LeaveController extends Controller
         ]);
 
         $this->authorizeCreate($request, (int) $validated['employee_id']);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
         $validated['status'] = $validated['status'] ?? 'pending';
 
         $leave = Leave::create($validated);
@@ -60,6 +64,7 @@ class LeaveController extends Controller
         if (!$request->user()?->can('approve leaves')) {
             abort(403, 'You are not authorized to update this leave request.');
         }
+        $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
 
         $validated = $request->validate([
             'type' => 'sometimes|string|max:100',
@@ -81,6 +86,7 @@ class LeaveController extends Controller
         $leave = Leave::findOrFail($id);
 
         if ($request->user()?->can('approve leaves')) {
+            $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
             $leave->delete();
             return $this->ok(null, 'Leave request deleted successfully');
         }
@@ -97,6 +103,7 @@ class LeaveController extends Controller
     private function authorizeRead(Request $request, Leave $leave): void
     {
         if ($request->user()?->can('view leaves') || $request->user()?->can('approve leaves')) {
+            $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
             return;
         }
 
@@ -111,6 +118,7 @@ class LeaveController extends Controller
     private function authorizeCreate(Request $request, int $employeeId): void
     {
         if ($request->user()?->can('manage leaves') || $request->user()?->can('approve leaves')) {
+            $this->assertEmployeeInCompany($request, $employeeId);
             return;
         }
 
@@ -120,5 +128,34 @@ class LeaveController extends Controller
         }
 
         abort(403, 'You can only create leave requests for your own profile.');
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this leave request.');
+        }
     }
 }

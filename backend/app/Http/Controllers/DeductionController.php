@@ -13,14 +13,31 @@ class DeductionController extends Controller
     public function index(Request $request)
     {
         $this->authorizeRead($request);
+        $user = $request->user();
         $query = Deduction::with(['employee', 'payroll']);
+        $this->scopeToCompany($request, $query);
 
-        if (!$request->user()?->can('manage payroll')) {
-            $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
-            $query->where('employee_id', $employee->id);
-        }
+        $ownEmployeeId = $this->ownEmployeeId($user);
+        $viewOwnOnly = $this->viewOwnOnly($user);
+
         if ($request->filled('employee_id')) {
-            $query->where('employee_id', (int) $request->query('employee_id'));
+            $employeeId = (int) $request->query('employee_id');
+            if ($viewOwnOnly) {
+                if ($ownEmployeeId === null) {
+                    abort(403, 'You are not authorized to access deductions.');
+                }
+
+                $employeeId = $ownEmployeeId;
+            }
+
+            $this->assertEmployeeInCompany($request, $employeeId);
+            $query->where('employee_id', $employeeId);
+        } elseif ($viewOwnOnly) {
+            if ($ownEmployeeId === null) {
+                abort(403, 'You are not authorized to access deductions.');
+            }
+
+            $query->where('employee_id', $ownEmployeeId);
         }
         if ($request->filled('payroll_id')) {
             $query->where('payroll_id', (int) $request->query('payroll_id'));
@@ -44,6 +61,7 @@ class DeductionController extends Controller
             'effective_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
         $this->assertPayrollEmployeeMatch($validated['payroll_id'] ?? null, (int) $validated['employee_id']);
 
         $item = Deduction::create($validated);
@@ -61,6 +79,7 @@ class DeductionController extends Controller
     {
         $this->authorizePermission($request, 'manage payroll');
         $item = Deduction::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         $validated = $request->validate([
             'payroll_id' => 'nullable|exists:payrolls,id',
             'title' => 'sometimes|string|max:255',
@@ -69,6 +88,7 @@ class DeductionController extends Controller
             'effective_date' => 'sometimes|date',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $this->assertEmployeeInCompany($request, (int) ($validated['employee_id'] ?? $item->employee_id));
         $this->assertPayrollEmployeeMatch($validated['payroll_id'] ?? $item->payroll_id, (int) $item->employee_id);
         $item->update($validated);
         return $this->ok($item->load(['employee', 'payroll']), 'Deduction updated successfully');
@@ -77,7 +97,9 @@ class DeductionController extends Controller
     public function destroy(Request $request, int $id)
     {
         $this->authorizePermission($request, 'manage payroll');
-        Deduction::findOrFail($id)->delete();
+        $item = Deduction::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        $item->delete();
         return $this->ok(null, 'Deduction deleted successfully');
     }
 
@@ -91,14 +113,62 @@ class DeductionController extends Controller
 
     private function authorizeRecordAccess(Request $request, int $employeeId): void
     {
-        if ($request->user()?->can('manage payroll')) {
+        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll')) {
+            $this->assertEmployeeInCompany($request, $employeeId);
             return;
         }
-        $employee = Employee::where('user_id', $request->user()?->id)->first();
-        if ($request->user()?->can('view own payroll') && $employee && (int) $employee->id === $employeeId) {
+
+        $ownEmployeeId = $this->ownEmployeeId($request->user());
+        if ($request->user()?->can('view own payroll') && $ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
             return;
         }
         abort(403, 'You are not authorized to access this deduction.');
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function ownEmployeeId(?User $user): ?int
+    {
+        if (!$user) {
+            return null;
+        }
+
+        $employeeId = Employee::where('user_id', $user->id)->value('id');
+        return $employeeId ? (int) $employeeId : null;
+    }
+
+    private function viewOwnOnly(?User $user): bool
+    {
+        return (bool) $user?->can('view own payroll')
+            && !$user?->can('view payroll')
+            && !$user?->can('manage payroll');
+    }
+
+    private function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this deduction.');
+        }
     }
 
     private function assertPayrollEmployeeMatch(?int $payrollId, int $employeeId): void

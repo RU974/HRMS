@@ -105,6 +105,17 @@ class DashboardController extends Controller
 
         $announcements = Announcement::query()
             ->where('is_published', true)
+            ->when($user->company_id, function ($query) use ($user): void {
+                $query->where(function ($builder) use ($user): void {
+                    $builder->where('company_id', $user->company_id)
+                        ->orWhere(function ($legacyQuery) use ($user): void {
+                            $legacyQuery->whereNull('company_id')
+                                ->whereHas('creator', function ($creatorQuery) use ($user): void {
+                                    $creatorQuery->where('company_id', $user->company_id);
+                                });
+                        });
+                });
+            })
             ->latest('published_at')
             ->get()
             ->filter(fn (Announcement $announcement) => $this->announcementVisibleToUser($announcement, $user))
@@ -203,16 +214,37 @@ class DashboardController extends Controller
         $today = Carbon::today();
         $month = $validated['month'] ?? $today->month;
         $year = $validated['year'] ?? $today->year;
+        $companyId = $request->user()?->company_id;
 
-        $employees = Employee::count();
-        $activeEmployees = Employee::where('status', 'active')->count();
-        $todayAttendance = Attendance::whereDate('date', $today)->count();
-        $todayPresent = Attendance::whereDate('date', $today)->whereIn('status', ['present', 'late'])->count();
-        $pendingLeaves = Leave::where('status', 'pending')->count();
-        $pendingPayrolls = Payroll::where('status', 'pending')->count();
+        $employeeQuery = Employee::query();
+        $attendanceQuery = Attendance::query();
+        $leaveQuery = Leave::query();
+        $payrollQuery = Payroll::query();
+
+        if ($companyId) {
+            $employeeQuery->whereHas('user', function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId);
+            });
+            $attendanceQuery->whereHas('employee.user', function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId);
+            });
+            $leaveQuery->whereHas('employee.user', function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId);
+            });
+            $payrollQuery->whereHas('employee.user', function ($query) use ($companyId): void {
+                $query->where('company_id', $companyId);
+            });
+        }
+
+        $employees = (clone $employeeQuery)->count();
+        $activeEmployees = (clone $employeeQuery)->where('status', 'active')->count();
+        $todayAttendance = (clone $attendanceQuery)->whereDate('date', $today)->count();
+        $todayPresent = (clone $attendanceQuery)->whereDate('date', $today)->whereIn('status', ['present', 'late'])->count();
+        $pendingLeaves = (clone $leaveQuery)->where('status', 'pending')->count();
+        $pendingPayrolls = (clone $payrollQuery)->where('status', 'pending')->count();
 
         $attendanceRate = $todayAttendance > 0 ? round(($todayPresent / $todayAttendance) * 100, 2) : 0;
-        $monthlyPayroll = Payroll::whereMonth('payment_date', $month)->whereYear('payment_date', $year)->sum('net_salary');
+        $monthlyPayroll = (clone $payrollQuery)->whereMonth('payment_date', $month)->whereYear('payment_date', $year)->sum('net_salary');
 
         return $this->ok([
             'employees' => $employees,
@@ -230,8 +262,14 @@ class DashboardController extends Controller
     {
         $today = Carbon::today();
         $last7Start = $today->copy()->subDays(6);
+        $companyId = $request->user()?->company_id;
 
         $attendanceRows = Attendance::select('date', DB::raw('COUNT(*) as total'), DB::raw("SUM(CASE WHEN status IN ('present', 'late') THEN 1 ELSE 0 END) as present_count"))
+            ->when($companyId, function ($query) use ($companyId): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                    $userQuery->where('company_id', $companyId);
+                });
+            })
             ->whereBetween('date', [$last7Start->toDateString(), $today->toDateString()])
             ->groupBy('date')
             ->orderBy('date')
@@ -256,6 +294,10 @@ class DashboardController extends Controller
         $departmentDistribution = Department::query()
             ->select('departments.id', 'departments.name', DB::raw('COUNT(employees.id) as employee_count'))
             ->leftJoin('employees', 'employees.department_id', '=', 'departments.id')
+            ->leftJoin('users', 'users.id', '=', 'employees.user_id')
+            ->when($companyId, function ($query) use ($companyId): void {
+                $query->where('users.company_id', $companyId);
+            })
             ->groupBy('departments.id', 'departments.name')
             ->orderByDesc('employee_count')
             ->limit(6)
@@ -267,6 +309,11 @@ class DashboardController extends Controller
             ->values();
 
         $leaveBreakdown = Leave::query()
+            ->when($companyId, function ($query) use ($companyId): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                    $userQuery->where('company_id', $companyId);
+                });
+            })
             ->select('status', DB::raw('COUNT(*) as total'))
             ->groupBy('status')
             ->get()
@@ -278,6 +325,11 @@ class DashboardController extends Controller
 
         $recentEmployees = Employee::query()
             ->with('department:id,name')
+            ->when($companyId, function ($query) use ($companyId): void {
+                $query->whereHas('user', function ($userQuery) use ($companyId): void {
+                    $userQuery->where('company_id', $companyId);
+                });
+            })
             ->orderByDesc('created_at')
             ->limit(6)
             ->get(['id', 'employee_number', 'name', 'status', 'department_id', 'created_at'])
@@ -362,12 +414,10 @@ class DashboardController extends Controller
 
     private function announcementVisibleToUser(Announcement $announcement, User $user): bool
     {
-        $roleName = $this->resolveRoleName($user);
-
         return match ($announcement->target) {
-            'employees' => $roleName === User::ROLE_EMPLOYEE,
-            'hr' => in_array($roleName, [User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true),
-            'managers' => in_array($roleName, [User::ROLE_DEPARTMENT_MANAGER, User::ROLE_HR_MANAGER, User::ROLE_COMPANY_ADMIN, User::ROLE_SUPER_ADMIN], true),
+            'employees' => $user->can('view employee announcements'),
+            'hr' => $user->can('view hr announcements'),
+            'managers' => $user->can('view manager announcements'),
             default => true,
         };
     }

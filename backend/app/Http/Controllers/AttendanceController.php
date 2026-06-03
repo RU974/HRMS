@@ -15,12 +15,14 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
         $query = Attendance::with('employee');
+        $this->scopeToCompany($request, $query);
 
         if ($request->has('employee_id')) {
             $employeeId = (int) $request->employee_id;
             if (!$user?->can('manage attendance')) {
                 $this->authorizeAttendanceAccess($request, $employeeId);
             }
+            $this->assertEmployeeInCompany($request, $employeeId);
             $query->where('employee_id', $employeeId);
         } elseif (!$user?->can('manage attendance')) {
             $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
@@ -43,6 +45,7 @@ class AttendanceController extends Controller
     {
         $attendance = Attendance::with('employee')->findOrFail($id);
         $this->authorizeAttendanceAccess(request(), (int) $attendance->employee_id);
+        $this->assertEmployeeInCompany(request(), (int) $attendance->employee_id);
         return $this->ok($attendance);
     }
 
@@ -57,6 +60,7 @@ class AttendanceController extends Controller
             'status' => 'nullable|in:present,absent,leave,late',
             'notes' => 'nullable|string',
         ]);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $alreadyExists = Attendance::where('employee_id', $validated['employee_id'])
             ->whereDate('date', $validated['date'])
@@ -84,6 +88,7 @@ class AttendanceController extends Controller
     {
         $this->authorizePermission($request, 'approve attendance');
         $attendance = Attendance::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
         $validated = $request->validate([
             'date' => 'sometimes|date',
             'check_in' => 'nullable|date_format:H:i',
@@ -113,13 +118,16 @@ class AttendanceController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'manage attendance');
-        Attendance::findOrFail($id)->delete();
+        $attendance = Attendance::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
+        $attendance->delete();
         return $this->ok(null, 'Attendance deleted successfully');
     }
 
     public function getByEmployee($employeeId, Request $request)
     {
         $this->authorizeAttendanceAccess($request, (int) $employeeId);
+        $this->assertEmployeeInCompany($request, (int) $employeeId);
 
         $query = Attendance::where('employee_id', $employeeId);
         if ($request->has('month')) {
@@ -134,6 +142,7 @@ class AttendanceController extends Controller
     public function getMonthlyStats($employeeId, $month, $year)
     {
         $this->authorizeAttendanceAccess(request(), (int) $employeeId);
+        $this->assertEmployeeInCompany(request(), (int) $employeeId);
 
         $stats = Attendance::where('employee_id', $employeeId)
             ->whereMonth('date', $month)
@@ -155,6 +164,7 @@ class AttendanceController extends Controller
     {
         $validated = $request->validate(['employee_id' => 'required|exists:employees,id']);
         $this->authorizeAttendanceAccess($request, (int) $validated['employee_id']);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $today = Carbon::today();
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', $today)->first();
@@ -176,6 +186,7 @@ class AttendanceController extends Controller
     {
         $validated = $request->validate(['employee_id' => 'required|exists:employees,id']);
         $this->authorizeAttendanceAccess($request, (int) $validated['employee_id']);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', Carbon::today())->first();
         if (!$attendance) {
@@ -195,6 +206,11 @@ class AttendanceController extends Controller
 
         $rows = Attendance::whereMonth('date', $validated['month'])
             ->whereYear('date', $validated['year'])
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get();
@@ -250,11 +266,41 @@ class AttendanceController extends Controller
     private function authorizeAttendanceAccess(Request $request, int $employeeId): void
     {
         if ($request->user()?->can('manage attendance')) {
+            $this->assertEmployeeInCompany($request, $employeeId);
             return;
         }
 
         $employee = Employee::where('user_id', $request->user()?->id)->first();
         if (!$employee || $employee->id !== $employeeId) {
+            abort(403, 'You are not authorized to perform this action for this employee.');
+        }
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
             abort(403, 'You are not authorized to perform this action for this employee.');
         }
     }

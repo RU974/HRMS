@@ -12,6 +12,8 @@ class DepartmentController extends Controller
 {
     public function index(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['manage settings', 'manage employees', 'recruitment.view']);
+
         $query = Department::query()->withCount('employees')->orderBy('name');
         if ($request->boolean('include_archived')) {
             $query->withTrashed();
@@ -22,6 +24,8 @@ class DepartmentController extends Controller
 
     public function show($id)
     {
+        $this->authorizeAnyPermission(request(), ['manage settings', 'manage employees', 'recruitment.view']);
+
         return $this->ok(Department::with('employees')->findOrFail($id));
     }
 

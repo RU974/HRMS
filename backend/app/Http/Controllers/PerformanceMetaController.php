@@ -13,6 +13,7 @@ class PerformanceMetaController extends Controller
         $this->authorizePermission($request, 'view performance');
         $user = $request->user();
         $query = Employee::query()->select(['id', 'user_id', 'name', 'first_name', 'last_name', 'employee_number']);
+        $this->scopeToCompany($request, $query);
 
         if (!$user?->can('view employees')) {
             $query->where('user_id', $user?->id);
@@ -27,5 +28,15 @@ class PerformanceMetaController extends Controller
                 'employee_code' => $employee->employee_number,
             ];
         }));
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
     }
 }

@@ -22,6 +22,7 @@ class EmployeeController extends Controller
         $this->authorizePermission($request, 'view employees');
 
         $query = Employee::with(['department', 'designationRef', 'user']);
+        $this->scopeToCompany($request, $query);
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -54,6 +55,7 @@ class EmployeeController extends Controller
     {
         $employee = Employee::with(['department', 'designationRef', 'user'])->findOrFail($id);
         $this->authorizeEmployeeRead($request, $employee);
+        $this->assertEmployeeInCompany($request, $employee);
 
         return $this->ok($employee);
     }
@@ -91,6 +93,8 @@ class EmployeeController extends Controller
             'role' => 'nullable|string|in:' . implode(',', User::availableRoles()),
         ]);
 
+        $this->assertUserCompanyMatch($request, $validated['user_id'] ?? null);
+        $this->assertEmployeeReferenceInCompany($request, $validated['manager_id'] ?? null);
         $name = $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
         $employee = DB::transaction(function () use ($validated, $name, $request) {
             $linkedUserId = $validated['user_id'] ?? null;
@@ -100,6 +104,7 @@ class EmployeeController extends Controller
             if (!$linkedUserId && $createUser) {
                 $existingUser = User::where('email', $validated['email'])->first();
                 if ($existingUser) {
+                    $this->assertUserCompanyMatch($request, $existingUser);
                     $linkedUserId = $existingUser->id;
                 } else {
                     $linkedUser = User::create([
@@ -107,6 +112,7 @@ class EmployeeController extends Controller
                         'email' => $validated['email'],
                         'username' => $validated['username'] ?? explode('@', $validated['email'])[0],
                         'password' => Hash::make($validated['password'] ?? Str::password(12)),
+                        'company_id' => $request->user()?->company_id,
                 ]);
                 $linkedUserId = $linkedUser->id;
             }
@@ -124,6 +130,7 @@ class EmployeeController extends Controller
             }
 
             $user = User::findOrFail($linkedUserId);
+            $this->assertUserCompanyMatch($request, $user);
             $this->assignRoleToUser($user, $roleName);
 
             $designationLabel = $validated['designation'] ?? ($validated['position'] ?? '');
@@ -165,6 +172,7 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'edit employees');
         $employee = Employee::findOrFail($id);
+        $this->assertEmployeeInCompany($request, $employee);
         $validated = $request->validate([
             'user_id' => ['sometimes', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($id)],
             'name' => 'sometimes|string|max:255',
@@ -191,6 +199,7 @@ class EmployeeController extends Controller
             'department_id' => 'sometimes|exists:departments,id',
             'status' => 'sometimes|in:active,inactive',
         ]);
+        $this->assertEmployeeReferenceInCompany($request, $validated['manager_id'] ?? null);
 
         $updatePayload = $validated;
         if (!isset($updatePayload['name']) && (isset($updatePayload['first_name']) || isset($updatePayload['last_name']))) {
@@ -220,7 +229,9 @@ class EmployeeController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'delete employees');
-        Employee::findOrFail($id)->delete();
+        $employee = Employee::findOrFail($id);
+        $this->assertEmployeeInCompany($request, $employee);
+        $employee->delete();
         return $this->ok(null, 'Employee deleted successfully');
     }
 
@@ -228,9 +239,11 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'view employees');
 
-        return $this->ok(Employee::with(['department', 'designationRef', 'user'])
-            ->where('department_id', $departmentId)
-            ->paginate((int) $request->input('per_page', 15)));
+        $query = Employee::with(['department', 'designationRef', 'user'])
+            ->where('department_id', $departmentId);
+        $this->scopeToCompany($request, $query);
+
+        return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
 
     public function search(Request $request)
@@ -238,11 +251,15 @@ class EmployeeController extends Controller
         $this->authorizePermission($request, 'view employees');
 
         $term = $request->input('q', '');
-        return $this->ok(Employee::where('name', 'like', "%$term%")
-            ->orWhere('email', 'like', "%$term%")
-            ->orWhere('designation', 'like', "%$term%")
-            ->with(['department', 'designationRef', 'user'])
-            ->paginate((int) $request->input('per_page', 15)));
+        $query = Employee::where(function ($search) use ($term): void {
+            $search->where('name', 'like', "%$term%")
+                ->orWhere('email', 'like', "%$term%")
+                ->orWhere('designation', 'like', "%$term%");
+        })
+            ->with(['department', 'designationRef', 'user']);
+        $this->scopeToCompany($request, $query);
+
+        return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
 
     public function setUserPassword(Request $request, $id)
@@ -269,6 +286,7 @@ class EmployeeController extends Controller
         ]);
 
         $query = Employee::whereIn('id', $validated['employee_ids']);
+        $this->scopeToCompany($request, $query);
         if ($validated['action'] === 'activate') {
             $query->update(['status' => 'active']);
         } elseif ($validated['action'] === 'deactivate') {
@@ -288,6 +306,9 @@ class EmployeeController extends Controller
             ->with(['department', 'designationRef'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
             ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id))
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $this->scopeToCompany($request, $query);
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -328,6 +349,56 @@ class EmployeeController extends Controller
             return;
         }
         abort(403, 'You are not authorized to access this employee.');
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInCompany(Request $request, Employee $employee): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        if ((string) ($employee->user?->company_id ?? '') !== (string) $companyId) {
+            abort(403, 'You are not authorized to access this employee.');
+        }
+    }
+
+    private function assertUserCompanyMatch(Request $request, mixed $userOrId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId || empty($userOrId)) {
+            return;
+        }
+
+        $user = $userOrId instanceof User
+            ? $userOrId
+            : User::query()->select(['id', 'company_id'])->find($userOrId);
+
+        if (!$user || (string) ($user->company_id ?? '') !== (string) $companyId) {
+            abort(403, 'You are not authorized to use this user account.');
+        }
+    }
+
+    private function assertEmployeeReferenceInCompany(Request $request, mixed $employeeId): void
+    {
+        if (empty($employeeId)) {
+            return;
+        }
+
+        $employee = Employee::with('user')->find($employeeId);
+        if ($employee) {
+            $this->assertEmployeeInCompany($request, $employee);
+        }
     }
 
     private function assignRoleToUser(User $user, ?string $roleName): void

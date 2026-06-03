@@ -17,6 +17,7 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'manage users');
         $q = \App\Models\User::query()->with(['company', 'branch', 'roles.permissions', 'permissions']);
+        $this->applyCompanyScope($request, $q);
         if ($request->filled('search')) {
             $search = (string) $request->input('search');
             $q->where(function ($w) use ($search) {
@@ -29,7 +30,10 @@ class UserManagementController extends Controller
     public function show(Request $request, int $id)
     {
         $this->authorizePermission($request, 'manage users');
-        return $this->ok(\App\Models\User::with(['company', 'branch', 'roles.permissions', 'permissions'])->findOrFail($id));
+        $user = \App\Models\User::with(['company', 'branch', 'roles.permissions', 'permissions'])->findOrFail($id);
+        $this->assertCompanyAccess($request, $user);
+
+        return $this->ok($user);
     }
 
     public function store(Request $request)
@@ -54,6 +58,7 @@ class UserManagementController extends Controller
             'branch_id' => 'nullable|uuid|exists:branches,id',
         ]);
 
+        $this->normalizeCompanyPayload($request, $validated);
         $this->assertBranchMatchesCompany($validated);
 
         $user = $this->service->create($validated, $request->user());
@@ -64,6 +69,7 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'manage users');
         $user = \App\Models\User::findOrFail($id);
+        $this->assertCompanyAccess($request, $user);
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
@@ -83,6 +89,7 @@ class UserManagementController extends Controller
             'branch_id' => 'nullable|uuid|exists:branches,id',
         ]);
 
+        $this->normalizeCompanyPayload($request, $validated, $user->company_id);
         $this->assertBranchMatchesCompany($validated, $user->company_id);
 
         return $this->ok($this->service->update($user, $validated, $request->user()), 'User updated successfully');
@@ -92,6 +99,7 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'manage users');
         $user = \App\Models\User::findOrFail($id);
+        $this->assertCompanyAccess($request, $user);
         if ($request->user()?->id === $user->id) {
             return $this->fail('You cannot delete your own account.', 422);
         }
@@ -121,5 +129,46 @@ class UserManagementController extends Controller
         if (!$branchExists) {
             abort(422, 'Selected branch does not belong to the selected company.');
         }
+    }
+
+    private function applyCompanyScope(Request $request, \Illuminate\Database\Eloquent\Builder $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+    }
+
+    private function assertCompanyAccess(Request $request, \App\Models\User $targetUser): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        if ((string) ($targetUser->company_id ?? '') !== (string) $companyId) {
+            abort(403, 'You are not authorized to access this user.');
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function normalizeCompanyPayload(Request $request, array &$validated, ?string $fallbackCompanyId = null): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        if (!empty($validated['company_id']) && (string) $validated['company_id'] !== (string) $companyId) {
+            abort(403, 'You are not authorized to assign users outside your company.');
+        }
+
+        if ($fallbackCompanyId !== null && (string) $fallbackCompanyId !== (string) $companyId) {
+            abort(403, 'You are not authorized to modify users outside your company.');
+        }
+
+        $validated['company_id'] = $companyId;
     }
 }

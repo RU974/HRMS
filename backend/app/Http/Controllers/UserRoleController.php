@@ -24,6 +24,7 @@ class UserRoleController extends Controller
     {
         $this->authorizePermission($request, 'assign roles');
         $user = User::with('roles.permissions', 'permissions')->findOrFail($id);
+        $this->assertSameCompanyUser($request, $user);
 
         return $this->ok([
             'roles' => $user->roles,
@@ -38,7 +39,9 @@ class UserRoleController extends Controller
         $this->authorizePermission($request, 'assign roles');
 
         $user = User::findOrFail($id);
+        $this->assertSameCompanyUser($request, $user);
         $role = Role::findOrFail($validated['role_id']);
+        $this->assertAssignableRole($request, $role);
 
         DB::transaction(function () use ($user, $role): void {
             $user->assignRole($role);
@@ -64,7 +67,9 @@ class UserRoleController extends Controller
         $this->authorizePermission($request, 'assign roles');
 
         $user = User::findOrFail($id);
+        $this->assertSameCompanyUser($request, $user);
         $role = Role::findOrFail($validated['role_id']);
+        $this->assertAssignableRole($request, $role);
 
         DB::transaction(function () use ($user, $role): void {
             $user->removeRole($role);
@@ -95,7 +100,9 @@ class UserRoleController extends Controller
         $this->authorizePermission($request, 'assign roles');
 
         $user = User::findOrFail($id);
+        $this->assertSameCompanyUser($request, $user);
         $roles = Role::query()->whereIn('id', $validated['roles'])->get();
+        $roles->each(fn (Role $role) => $this->assertAssignableRole($request, $role));
 
         DB::transaction(function () use ($user, $roles): void {
             $user->syncRoles($roles->all());
@@ -112,5 +119,29 @@ class UserRoleController extends Controller
         );
 
         return $this->ok($user->fresh(['roles.permissions', 'permissions']), 'User roles updated successfully');
+    }
+
+    private function assertSameCompanyUser(Request $request, User $targetUser): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        if ((string) ($targetUser->company_id ?? '') !== (string) $companyId) {
+            abort(403, 'You are not authorized to access this user.');
+        }
+    }
+
+    private function assertAssignableRole(Request $request, Role $role): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId || $role->company_id === null) {
+            return;
+        }
+
+        if ((string) $role->company_id !== (string) $companyId) {
+            abort(403, 'You are not allowed to assign this role.');
+        }
     }
 }

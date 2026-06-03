@@ -16,6 +16,8 @@ class ReportController extends Controller
 
     public function index(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+
         $validated = $request->validate([
             'q' => 'nullable|string|max:100',
             'type' => ['nullable', Rule::in(self::REPORT_TYPES)],
@@ -25,6 +27,7 @@ class ReportController extends Controller
         ]);
 
         $query = Report::query()->with(['creator:id,name,email', 'updater:id,name,email']);
+        $this->scopeToCompany($request, $query);
 
         if (!empty($validated['q'])) {
             $query->where(function ($q) use ($validated) {
@@ -48,12 +51,17 @@ class ReportController extends Controller
 
     public function show($id)
     {
+        $this->authorizeAnyPermission(request(), ['view reports', 'manage reports']);
+
         $report = Report::with(['creator:id,name,email', 'updater:id,name,email'])->findOrFail($id);
+        $this->assertCompanyAccess(request(), $report);
         return $this->ok($report);
     }
 
     public function store(Request $request)
     {
+        $this->authorizePermission($request, 'manage reports');
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type' => ['required', Rule::in(self::REPORT_TYPES)],
@@ -74,6 +82,8 @@ class ReportController extends Controller
 
     public function update(Request $request, $id)
     {
+        $this->authorizePermission($request, 'manage reports');
+
         $report = Report::findOrFail($id);
 
         $validated = $request->validate([
@@ -93,16 +103,25 @@ class ReportController extends Controller
         return $this->ok($report->load(['creator:id,name,email', 'updater:id,name,email']), 'Report updated successfully');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->authorizePermission($request, 'manage reports');
+
         Report::findOrFail($id)->delete();
         return $this->ok(null, 'Report deleted successfully');
     }
 
     public function employees(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+
         $data = Employee::query()
             ->selectRaw('status, COUNT(*) as count')
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->groupBy('status')
             ->get();
 
@@ -111,6 +130,8 @@ class ReportController extends Controller
 
     public function attendance(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000',
@@ -118,6 +139,11 @@ class ReportController extends Controller
 
         $data = Attendance::whereMonth('date', $validated['month'])
             ->whereYear('date', $validated['year'])
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get();
@@ -127,6 +153,8 @@ class ReportController extends Controller
 
     public function leave(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000',
@@ -134,6 +162,11 @@ class ReportController extends Controller
 
         $data = Leave::whereMonth('from_date', $validated['month'])
             ->whereYear('from_date', $validated['year'])
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get();
@@ -143,6 +176,8 @@ class ReportController extends Controller
 
     public function payroll(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000',
@@ -150,6 +185,11 @@ class ReportController extends Controller
 
         $data = Payroll::whereMonth('payment_date', $validated['month'])
             ->whereYear('payment_date', $validated['year'])
+            ->when($request->user()?->company_id, function ($query) use ($request): void {
+                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
+                    $userQuery->where('company_id', $request->user()?->company_id);
+                });
+            })
             ->selectRaw('status, COUNT(*) as total_records, SUM(net_salary) as total_net_salary')
             ->groupBy('status')
             ->get();
@@ -159,16 +199,28 @@ class ReportController extends Controller
 
     public function analytics(Request $request)
     {
+        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000',
         ]);
 
-        $employees = Employee::count();
-        $activeEmployees = Employee::where('status', 'active')->count();
+        $employeesQuery = Employee::query();
+        $this->scopeEmployeeQuery($request, $employeesQuery);
 
-        $attendance = Attendance::whereMonth('date', $validated['month'])
-            ->whereYear('date', $validated['year'])
+        $attendanceQuery = Attendance::whereMonth('date', $validated['month'])
+            ->whereYear('date', $validated['year']);
+        $this->scopeAttendanceQuery($request, $attendanceQuery);
+
+        $payrollQuery = Payroll::whereMonth('payment_date', $validated['month'])
+            ->whereYear('payment_date', $validated['year']);
+        $this->scopePayrollQuery($request, $payrollQuery);
+
+        $employees = $employeesQuery->count();
+        $activeEmployees = (clone $employeesQuery)->where('status', 'active')->count();
+
+        $attendance = $attendanceQuery
             ->selectRaw('
                 SUM(CASE WHEN status = "present" THEN 1 ELSE 0 END) as present_count,
                 SUM(CASE WHEN status = "late" THEN 1 ELSE 0 END) as late_count,
@@ -176,8 +228,7 @@ class ReportController extends Controller
             ')
             ->first();
 
-        $payroll = Payroll::whereMonth('payment_date', $validated['month'])
-            ->whereYear('payment_date', $validated['year'])
+        $payroll = $payrollQuery
             ->selectRaw('
                 SUM(CASE WHEN status = "paid" THEN 1 ELSE 0 END) as paid_count,
                 SUM(CASE WHEN status = "pending" THEN 1 ELSE 0 END) as pending_count,
@@ -195,5 +246,66 @@ class ReportController extends Controller
             'payroll_pending' => (int) ($payroll?->pending_count ?? 0),
             'payroll_total_amount' => (float) ($payroll?->total_amount ?? 0),
         ]);
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $query->whereHas('creator', function ($creatorQuery) use ($companyId): void {
+            $creatorQuery->where('company_id', $companyId);
+        });
+    }
+
+    private function assertCompanyAccess(Request $request, Report $report): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Report::query()
+            ->whereKey($report->id)
+            ->whereHas('creator', function ($creatorQuery) use ($companyId): void {
+                $creatorQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this report.');
+        }
+    }
+
+    private function scopeEmployeeQuery(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function scopeAttendanceQuery(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function scopePayrollQuery(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
     }
 }

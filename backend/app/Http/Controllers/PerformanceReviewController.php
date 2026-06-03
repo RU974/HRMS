@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
 use App\Models\PerformanceReview;
 use Illuminate\Http\Request;
 
@@ -11,6 +12,7 @@ class PerformanceReviewController extends Controller
     {
         $this->authorizePermission($request, 'view performance');
         $query = PerformanceReview::query()->with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']);
+        $this->scopeToCompany($request, $query);
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -39,6 +41,7 @@ class PerformanceReviewController extends Controller
             'summary' => 'nullable|string|max:10000',
             'reviewer_id' => 'nullable|exists:users,id',
         ]);
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $item = PerformanceReview::create([
             ...$validated,
@@ -51,7 +54,9 @@ class PerformanceReviewController extends Controller
     public function show(Request $request, $id)
     {
         $this->authorizePermission($request, 'view performance');
-        return $this->ok(PerformanceReview::with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email'])->findOrFail($id));
+        $item = PerformanceReview::with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email'])->findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        return $this->ok($item);
     }
 
     public function update(Request $request, $id)
@@ -65,6 +70,7 @@ class PerformanceReviewController extends Controller
             'summary' => 'nullable|string|max:10000',
             'reviewer_id' => 'nullable|exists:users,id',
         ]);
+        $this->assertEmployeeInCompany($request, (int) ($validated['employee_id'] ?? $item->employee_id));
 
         $item->update($validated);
         return $this->ok($item->load(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']), 'Performance review updated successfully');
@@ -73,7 +79,38 @@ class PerformanceReviewController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'manage performance');
-        PerformanceReview::findOrFail($id)->delete();
+        $item = PerformanceReview::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $item->employee_id);
+        $item->delete();
         return $this->ok(null, 'Performance review deleted successfully');
+    }
+
+    private function scopeToCompany(Request $request, $query): void
+    {
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            });
+        }
+    }
+
+    private function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($userQuery) use ($companyId): void {
+                $userQuery->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to access this performance review.');
+        }
     }
 }

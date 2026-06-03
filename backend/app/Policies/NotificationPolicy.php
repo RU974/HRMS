@@ -9,18 +9,18 @@ class NotificationPolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        return $this->canView($user);
     }
 
     public function view(User $user, NotificationItem $notification): bool
     {
-        return $this->canManage($user) && $this->sameCompany($user, $notification)
+        return $this->canView($user) && $this->sameCompany($user, $notification)
             || $this->isOwnedByUser($user, $notification);
     }
 
     public function create(User $user): bool
     {
-        return $this->canManage($user);
+        return $this->canView($user);
     }
 
     public function update(User $user, NotificationItem $notification): bool
@@ -35,9 +35,14 @@ class NotificationPolicy
             || $this->isOwnedByUser($user, $notification);
     }
 
+    private function canView(User $user): bool
+    {
+        return $user->can('view notifications') || $user->can('manage notifications');
+    }
+
     private function canManage(User $user): bool
     {
-        return $user->hasRole(User::ROLE_SUPER_ADMIN);
+        return $user->can('manage notifications');
     }
 
     private function isOwnedByUser(User $user, NotificationItem $notification): bool

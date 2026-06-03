@@ -67,17 +67,17 @@ class NotificationController extends Controller
         ]);
 
         $targetUserId = $validated['user_id'] ?? $user?->id;
-        $isSuperAdmin = $user?->hasRole(User::ROLE_SUPER_ADMIN) ?? false;
+        $isManager = $user?->can('manage notifications') ?? false;
 
-        if ($targetUserId !== null && !$isSuperAdmin) {
-            if (!$user->can('manage notifications') && (int) $targetUserId !== (int) $user->id) {
+        if ($targetUserId !== null && !$isManager) {
+            if (!$user->can('view notifications') && (int) $targetUserId !== (int) $user->id) {
                 abort(403, 'You can only create notifications for yourself.');
             }
 
             $this->assertSameCompanyUser($request, (int) $targetUserId);
         }
 
-        if ($isSuperAdmin && ($validated['user_id'] ?? null) === null) {
+        if ($isManager && ($validated['user_id'] ?? null) === null) {
             $item = $this->broadcastNotification($user, $validated);
 
             return $this->ok($item, 'Notification created successfully', 201);
@@ -148,7 +148,7 @@ class NotificationController extends Controller
 
     private function assertSameCompanyUser(Request $request, int $userId): void
     {
-        if ($request->user()?->hasRole(User::ROLE_SUPER_ADMIN)) {
+        if ($request->user()?->can('manage notifications')) {
             return;
         }
 
