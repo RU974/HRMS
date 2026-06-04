@@ -85,6 +85,7 @@ class ReportController extends Controller
         $this->authorizePermission($request, 'manage reports');
 
         $report = Report::findOrFail($id);
+        $this->assertCompanyAccess($request, $report);
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
@@ -107,7 +108,10 @@ class ReportController extends Controller
     {
         $this->authorizePermission($request, 'manage reports');
 
-        Report::findOrFail($id)->delete();
+        $report = Report::findOrFail($id);
+        $this->assertCompanyAccess($request, $report);
+        $report->delete();
+
         return $this->ok(null, 'Report deleted successfully');
     }
 
@@ -287,6 +291,7 @@ class ReportController extends Controller
                 $userQuery->where('company_id', $companyId);
             });
         }
+        $this->applyManagedEmployeeScope($request, $query);
     }
 
     private function scopeAttendanceQuery(Request $request, $query): void
@@ -297,6 +302,7 @@ class ReportController extends Controller
                 $userQuery->where('company_id', $companyId);
             });
         }
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
     }
 
     private function scopePayrollQuery(Request $request, $query): void
@@ -307,5 +313,6 @@ class ReportController extends Controller
                 $userQuery->where('company_id', $companyId);
             });
         }
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
     }
 }

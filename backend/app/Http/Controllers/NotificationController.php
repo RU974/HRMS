@@ -148,13 +148,14 @@ class NotificationController extends Controller
 
     private function assertSameCompanyUser(Request $request, int $userId): void
     {
-        if ($request->user()?->can('manage notifications')) {
+        $targetUser = \App\Models\User::query()->select(['id', 'company_id'])->findOrFail($userId);
+        $companyId = $request->user()?->company_id;
+
+        if (!$companyId) {
             return;
         }
 
-        $targetUser = \App\Models\User::query()->select(['id', 'company_id'])->findOrFail($userId);
-
-        if ((string) ($targetUser->company_id ?? '') !== (string) ($request->user()?->company_id ?? '')) {
+        if ((string) ($targetUser->company_id ?? '') !== (string) $companyId) {
             abort(403, 'You cannot assign notifications outside your company.');
         }
     }
@@ -162,7 +163,13 @@ class NotificationController extends Controller
     private function broadcastNotification(?User $creator, array $validated): NotificationItem
     {
         $now = now()->toDateTimeString();
-        $users = User::query()->select(['id', 'company_id'])->get();
+        $users = User::query()->select(['id', 'company_id']);
+
+        if ($creator?->company_id) {
+            $users->where('company_id', $creator->company_id);
+        }
+
+        $users = $users->get();
         $rows = $users->map(fn (User $recipient) => [
             'title' => $validated['title'],
             'message' => $validated['message'],

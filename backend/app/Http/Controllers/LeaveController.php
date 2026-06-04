@@ -14,6 +14,7 @@ class LeaveController extends Controller
         $query = Leave::query()->with('employee:id,name');
         $user = $request->user();
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         if ($user?->can('view leaves') || $user?->can('approve leaves')) {
             if ($request->filled('employee_id')) {
@@ -87,6 +88,7 @@ class LeaveController extends Controller
 
         if ($request->user()?->can('approve leaves')) {
             $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
+            $this->authorizeManagedEmployeeAccess($request, (int) $leave->employee_id, 'leave request');
             $leave->delete();
             return $this->ok(null, 'Leave request deleted successfully');
         }
@@ -104,6 +106,7 @@ class LeaveController extends Controller
     {
         if ($request->user()?->can('view leaves') || $request->user()?->can('approve leaves')) {
             $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
+            $this->authorizeManagedEmployeeAccess($request, (int) $leave->employee_id, 'leave request');
             return;
         }
 
@@ -119,6 +122,7 @@ class LeaveController extends Controller
     {
         if ($request->user()?->can('manage leaves') || $request->user()?->can('approve leaves')) {
             $this->assertEmployeeInCompany($request, $employeeId);
+            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'leave request');
             return;
         }
 

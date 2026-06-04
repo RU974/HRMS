@@ -117,6 +117,8 @@ class SearchController extends Controller
                 });
             });
 
+        $this->applyManagedEmployeeScope($request, $builder);
+
         return $builder
             ->where(function ($builder) use ($like, $employeeId, $canViewAll): void {
                 if ($canViewAll) {
@@ -244,6 +246,7 @@ class SearchController extends Controller
                 $userQuery->where('company_id', $companyId);
             });
         }
+        $this->applyManagedEmployeeScope($request, $builder, 'employee');
 
         if ($canViewAll) {
             $builder->where(function ($search) use ($like): void {
@@ -293,6 +296,7 @@ class SearchController extends Controller
                 $userQuery->where('company_id', $companyId);
             });
         }
+        $this->applyManagedEmployeeScope($request, $builder, 'employee');
 
         if ($canViewAll) {
             $builder->where(function ($search) use ($like): void {
@@ -341,6 +345,7 @@ class SearchController extends Controller
                 $userQuery->where('company_id', $companyId);
             });
         }
+        $this->applyManagedEmployeeScope($request, $builder, 'employee');
 
         if ($canViewAll) {
             $builder->where(function ($search) use ($like): void {

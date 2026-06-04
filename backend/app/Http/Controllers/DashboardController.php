@@ -236,6 +236,11 @@ class DashboardController extends Controller
             });
         }
 
+        $this->applyManagedEmployeeScope($request, $employeeQuery);
+        $this->applyManagedEmployeeScope($request, $attendanceQuery, 'employee');
+        $this->applyManagedEmployeeScope($request, $leaveQuery, 'employee');
+        $this->applyManagedEmployeeScope($request, $payrollQuery, 'employee');
+
         $employees = (clone $employeeQuery)->count();
         $activeEmployees = (clone $employeeQuery)->where('status', 'active')->count();
         $todayAttendance = (clone $attendanceQuery)->whereDate('date', $today)->count();
@@ -269,7 +274,11 @@ class DashboardController extends Controller
                 $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
                     $userQuery->where('company_id', $companyId);
                 });
-            })
+            });
+
+        $this->applyManagedEmployeeScope($request, $attendanceRows, 'employee');
+
+        $attendanceRows = $attendanceRows
             ->whereBetween('date', [$last7Start->toDateString(), $today->toDateString()])
             ->groupBy('date')
             ->orderBy('date')

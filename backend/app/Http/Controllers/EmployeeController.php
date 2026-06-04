@@ -23,6 +23,7 @@ class EmployeeController extends Controller
 
         $query = Employee::with(['department', 'designationRef', 'user']);
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -173,6 +174,7 @@ class EmployeeController extends Controller
         $this->authorizePermission($request, 'edit employees');
         $employee = Employee::findOrFail($id);
         $this->assertEmployeeInCompany($request, $employee);
+        $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $validated = $request->validate([
             'user_id' => ['sometimes', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($id)],
             'name' => 'sometimes|string|max:255',
@@ -231,6 +233,7 @@ class EmployeeController extends Controller
         $this->authorizePermission($request, 'delete employees');
         $employee = Employee::findOrFail($id);
         $this->assertEmployeeInCompany($request, $employee);
+        $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $employee->delete();
         return $this->ok(null, 'Employee deleted successfully');
     }
@@ -242,6 +245,7 @@ class EmployeeController extends Controller
         $query = Employee::with(['department', 'designationRef', 'user'])
             ->where('department_id', $departmentId);
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
 
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
@@ -258,6 +262,7 @@ class EmployeeController extends Controller
         })
             ->with(['department', 'designationRef', 'user']);
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
 
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
@@ -266,6 +271,8 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'edit employees');
         $employee = Employee::with('user')->findOrFail($id);
+        $this->assertEmployeeInCompany($request, $employee);
+        $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $validated = $request->validate(['password' => 'required|string|min:8|confirmed']);
 
         if (!$employee->user) {
@@ -287,6 +294,7 @@ class EmployeeController extends Controller
 
         $query = Employee::whereIn('id', $validated['employee_ids']);
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
         if ($validated['action'] === 'activate') {
             $query->update(['status' => 'active']);
         } elseif ($validated['action'] === 'deactivate') {
@@ -305,12 +313,12 @@ class EmployeeController extends Controller
         $rows = Employee::query()
             ->with(['department', 'designationRef'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
-            ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id))
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $this->scopeToCompany($request, $query);
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id));
+
+        $this->scopeToCompany($request, $rows);
+        $this->applyManagedEmployeeScope($request, $rows);
+
+        $rows = $rows->orderBy('created_at', 'desc')->get();
 
         $headers = [
             'Content-Type' => 'text/csv',
@@ -343,6 +351,7 @@ class EmployeeController extends Controller
     private function authorizeEmployeeRead(Request $request, Employee $employee): void
     {
         if ($request->user()?->can('view employees')) {
+            $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
             return;
         }
         if ($request->user()?->id === $employee->user_id) {

@@ -19,6 +19,7 @@ class PayrollController extends Controller
         $user = $request->user();
         $query = Payroll::with('employee');
         $this->scopePayrollQueryToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         $ownEmployeeId = $this->ownEmployeeId($user);
         $viewOwnOnly = $this->viewOwnOnly($user);
@@ -141,6 +142,7 @@ class PayrollController extends Controller
         $this->assertEmployeeInActorCompany($request, (int) $employeeId);
         $query = Payroll::where('employee_id', $employeeId);
         $this->scopePayrollQueryToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         if ($request->has('year')) {
             $query->whereYear('payment_date', $request->year);
@@ -273,6 +275,7 @@ class PayrollController extends Controller
     private function authorizeEmployeeScopedAccess(Request $request, int $employeeId): void
     {
         if ($request->user()?->can('manage payroll')) {
+            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'payroll record');
             return;
         }
 
@@ -290,6 +293,9 @@ class PayrollController extends Controller
     {
         if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll')) {
             $this->assertPayrollInActorCompany($request, $payroll);
+            if ($request->user()?->can('manage payroll')) {
+                $this->authorizeManagedEmployeeAccess($request, (int) $payroll->employee_id, 'payroll record');
+            }
             return;
         }
 

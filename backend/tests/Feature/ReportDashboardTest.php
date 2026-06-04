@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Attendance;
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Leave;
@@ -79,6 +80,32 @@ class ReportDashboardTest extends TestCase
             ->assertOk()
             ->assertJsonStructure(['success', 'message', 'data'])
             ->assertJsonCount(1, 'data');
+    }
+
+    public function test_report_managers_cannot_modify_reports_belonging_to_other_companies(): void
+    {
+        $companyA = Company::create(['name' => 'Company A']);
+        $companyB = Company::create(['name' => 'Company B']);
+
+        $reportOwner = $this->createUserWithRole(User::ROLE_HR_MANAGER, ['company_id' => $companyA->id]);
+        $report = \App\Models\Report::create([
+            'name' => 'Company A Report',
+            'type' => 'employee',
+            'description' => 'Company report',
+            'status' => 'active',
+            'filters' => [],
+            'created_by' => $reportOwner->id,
+            'updated_by' => $reportOwner->id,
+        ]);
+
+        $otherManager = $this->createUserWithRole(User::ROLE_HR_MANAGER, ['company_id' => $companyB->id]);
+        Sanctum::actingAs($otherManager);
+
+        $this->putJson('/api/v1/reports/' . $report->id, ['name' => 'Unauthorized Update'])
+            ->assertForbidden();
+
+        $this->deleteJson('/api/v1/reports/' . $report->id)
+            ->assertForbidden();
     }
 
     public function test_report_endpoints_validate_month_and_year(): void

@@ -15,6 +15,7 @@ class EmployeeDocumentController extends Controller
     {
         $query = EmployeeDocument::with(['employee', 'versions']);
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
         if ($request->has('employee_id')) {
             $this->assertEmployeeInCompany($request, (int) $request->employee_id);
             $query->where('employee_id', $request->employee_id);
@@ -136,6 +137,11 @@ class EmployeeDocumentController extends Controller
 
     private function ensureAccess(Request $request, EmployeeDocument $document): void
     {
+        if ($request->user()?->can('manage employee documents')) {
+            $this->authorizeManagedEmployeeAccess($request, (int) $document->employee_id, 'employee document');
+            return;
+        }
+
         if (!$this->canAccess($request, $document)) {
             abort(403, 'You are not authorized to access this document.');
         }

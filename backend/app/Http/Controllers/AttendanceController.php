@@ -16,6 +16,7 @@ class AttendanceController extends Controller
         $user = $request->user();
         $query = Attendance::with('employee');
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         if ($request->has('employee_id')) {
             $employeeId = (int) $request->employee_id;
@@ -130,6 +131,7 @@ class AttendanceController extends Controller
         $this->assertEmployeeInCompany($request, (int) $employeeId);
 
         $query = Attendance::where('employee_id', $employeeId);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
         if ($request->has('month')) {
             $query->whereMonth('date', $request->month);
         }
@@ -210,7 +212,11 @@ class AttendanceController extends Controller
                 $query->whereHas('employee.user', function ($userQuery) use ($request): void {
                     $userQuery->where('company_id', $request->user()?->company_id);
                 });
-            })
+            });
+
+        $this->applyManagedEmployeeScope($request, $rows, 'employee');
+
+        $rows = $rows
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->get();
@@ -267,6 +273,7 @@ class AttendanceController extends Controller
     {
         if ($request->user()?->can('manage attendance')) {
             $this->assertEmployeeInCompany($request, $employeeId);
+            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'attendance record');
             return;
         }
 

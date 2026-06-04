@@ -16,6 +16,7 @@ class BonusController extends Controller
         $user = $request->user();
         $query = Bonus::with(['employee', 'payroll']);
         $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         $ownEmployeeId = $this->ownEmployeeId($user);
         $viewOwnOnly = $this->viewOwnOnly($user);
@@ -117,6 +118,9 @@ class BonusController extends Controller
     {
         if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll')) {
             $this->assertEmployeeInCompany($request, $employeeId);
+            if ($request->user()?->can('manage payroll')) {
+                $this->authorizeManagedEmployeeAccess($request, $employeeId, 'bonus record');
+            }
             return;
         }
 
