@@ -3,13 +3,29 @@
 namespace App\Http\Controllers\Recruitment;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Recruitment\Concerns\EnsuresCompanyIsolation;
 use App\Models\Candidate;
+use App\Services\Recruitment\CandidateWorkflowService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 abstract class AbstractOnboardingController extends Controller
 {
+    use EnsuresCompanyIsolation;
+
+    private function validateCandidateBelongsToCompany(Request $request, string $field = 'candidate_id')
+    {
+        return Rule::exists('candidates', 'id')->where(function ($query) use ($request) {
+            if ($request->user()?->company_id) {
+                $query->where('company_id', $request->user()->company_id);
+            }
+        });
+    }
+
     public function index(Request $request)
     {
+        $this->authorizePermission($request, 'view recruitment');
+
         $query = Candidate::with('jobOpening')
             ->where('stage', 'hired')
             ->latest();
@@ -32,19 +48,33 @@ abstract class AbstractOnboardingController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizePermission($request, 'manage recruitment');
+
+        $workflowService = app(CandidateWorkflowService::class);
+
         $validated = $request->validate([
-            'candidate_id' => 'required|exists:candidates,id',
+            'candidate_id' => ['required', $this->validateCandidateBelongsToCompany($request)],
             'onboarding_status' => 'required|in:pending,in_progress,completed,deferred',
             'onboarding_start_date' => 'nullable|date',
             'onboarding_notes' => 'nullable|string',
+            'onboarding_checklist' => 'sometimes|nullable|array',
+            'onboarding_checklist.*.title' => 'required_with:onboarding_checklist|string|max:255',
+            'onboarding_checklist.*.completed' => 'sometimes|boolean',
+            'onboarding_checklist.*.notes' => 'sometimes|nullable|string',
         ]);
 
         $candidate = Candidate::findOrFail($validated['candidate_id']);
+
+        if (array_key_exists('onboarding_checklist', $validated)) {
+            $validated['onboarding_checklist'] = $workflowService->normalizeChecklist($validated['onboarding_checklist'] ?? []);
+        }
+
         $candidate->update([
             'stage' => 'hired',
             'onboarding_status' => $validated['onboarding_status'],
             'onboarding_start_date' => $validated['onboarding_start_date'] ?? null,
             'onboarding_notes' => $validated['onboarding_notes'] ?? null,
+            'onboarding_checklist' => $validated['onboarding_checklist'] ?? $candidate->onboarding_checklist,
         ]);
 
         return $this->ok($candidate->load('jobOpening'), 'Onboarding created successfully', 201);
@@ -52,18 +82,32 @@ abstract class AbstractOnboardingController extends Controller
 
     public function show($id)
     {
-        return $this->ok(Candidate::with('jobOpening')->where('stage', 'hired')->findOrFail($id));
+        $this->authorizePermission(request(), 'view recruitment');
+
+        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load('jobOpening'));
     }
 
     public function update(Request $request, $id)
     {
-        $candidate = Candidate::findOrFail($id);
+        $this->authorizeAnyPermission($request, ['manage recruitment', 'edit recruitment']);
+
+        $candidate = $this->resolveTenantModel(Candidate::class, $id);
+
+        $workflowService = app(CandidateWorkflowService::class);
 
         $validated = $request->validate([
             'onboarding_status' => 'sometimes|in:pending,in_progress,completed,deferred',
             'onboarding_start_date' => 'sometimes|nullable|date',
             'onboarding_notes' => 'sometimes|nullable|string',
+            'onboarding_checklist' => 'sometimes|nullable|array',
+            'onboarding_checklist.*.title' => 'required_with:onboarding_checklist|string|max:255',
+            'onboarding_checklist.*.completed' => 'sometimes|boolean',
+            'onboarding_checklist.*.notes' => 'sometimes|nullable|string',
         ]);
+
+        if (array_key_exists('onboarding_checklist', $validated)) {
+            $validated['onboarding_checklist'] = $workflowService->normalizeChecklist($validated['onboarding_checklist'] ?? []);
+        }
 
         $candidate->update([
             ...$validated,
@@ -75,11 +119,14 @@ abstract class AbstractOnboardingController extends Controller
 
     public function destroy($id)
     {
-        $candidate = Candidate::findOrFail($id);
+        $this->authorizeAnyPermission(request(), ['manage recruitment', 'edit recruitment']);
+
+        $candidate = $this->resolveTenantModel(Candidate::class, $id);
         $candidate->update([
             'onboarding_status' => null,
             'onboarding_start_date' => null,
             'onboarding_notes' => null,
+            'onboarding_checklist' => null,
         ]);
 
         return $this->ok($candidate->load('jobOpening'), 'Onboarding deleted successfully');

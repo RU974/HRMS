@@ -98,6 +98,10 @@ export function getPayrollReportSummary(month: number, year: number) {
   return apiClient<ReportCountsItem[]>(`/reports/payroll?month=${month}&year=${year}`);
 }
 
+export function getLeaveReportSummary(month: number, year: number) {
+  return apiClient<ReportCountsItem[]>(`/reports/leave?month=${month}&year=${year}`);
+}
+
 export function getReportsAnalytics(month: number, year: number) {
   return apiClient<ReportsAnalyticsSummary>(`/reports/analytics?month=${month}&year=${year}`);
 }

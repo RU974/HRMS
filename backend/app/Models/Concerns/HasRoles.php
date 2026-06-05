@@ -180,19 +180,19 @@ trait HasRoles
                     return $role;
                 }
 
-                $byId = Role::query()
-                    ->whereKey((string) $role)
-                    ->where('guard_name', $this->getDefaultGuardName())
-                    ->value('id');
+                $roleKey = trim((string) $role);
+            $byId = Role::query()
+                ->whereKey($roleKey)
+                ->value('id');
 
-                if ($byId) {
-                    return $byId;
-                }
+            if ($byId) {
+                return $byId;
+            }
 
-                return Role::query()
-                    ->where('name', trim((string) $role))
-                    ->where('guard_name', $this->getDefaultGuardName())
-                    ->value('id');
+            return Role::query()
+                ->where('name', $roleKey)
+                ->where('guard_name', $this->getDefaultGuardName())
+                ->value('id');
             })
             ->filter()
             ->values()

@@ -13,6 +13,7 @@ use App\Models\NotificationItem;
 use App\Models\Payroll;
 use App\Models\Payslip;
 use App\Models\User;
+use App\Services\LeavePolicyService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -390,30 +391,27 @@ class DashboardController extends Controller
      */
     private function buildLeaveBreakdown(int $employeeId): array
     {
-        $approvedLeaves = Leave::query()
-            ->where('employee_id', $employeeId)
-            ->where('status', 'approved')
-            ->get(['type', 'from_date', 'to_date']);
+        $employee = Employee::find($employeeId);
+        $policyService = new LeavePolicyService();
+        $today = Carbon::today();
 
         return LeaveType::query()
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
-            ->map(function (LeaveType $leaveType) use ($approvedLeaves): array {
-                $usedDays = $approvedLeaves->filter(function (Leave $leave) use ($leaveType): bool {
-                    return mb_strtolower((string) $leave->type) === mb_strtolower((string) $leaveType->name);
-                })->sum(function (Leave $leave): int {
-                    return Carbon::parse($leave->from_date)->diffInDays(Carbon::parse($leave->to_date)) + 1;
-                });
-
-                $defaultDays = (int) $leaveType->default_days;
+            ->map(function (LeaveType $leaveType) use ($employee, $policyService, $today): array {
+                $balance = $employee
+                    ? $policyService->buildBalanceSummary($employee, $leaveType, $today)
+                    : null;
 
                 return [
                     'id' => $leaveType->id,
                     'name' => $leaveType->name,
-                    'default_days' => $defaultDays,
-                    'used_days' => (int) $usedDays,
-                    'remaining_days' => max($defaultDays - (int) $usedDays, 0),
+                    'default_days' => (int) $leaveType->default_days,
+                    'accrued_days' => $balance?->accrued_days ?? (int) $leaveType->default_days,
+                    'used_days' => $balance?->used_days ?? 0,
+                    'pending_days' => $balance?->pending_days ?? 0,
+                    'remaining_days' => $balance?->remaining_days ?? max((int) $leaveType->default_days - ($balance?->used_days ?? 0), 0),
                     'is_paid' => (bool) $leaveType->is_paid,
                 ];
             })

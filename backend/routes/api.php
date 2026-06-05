@@ -69,24 +69,24 @@ $registerRoutes = function (): void {
             Route::post('/refresh', [AuthController::class, 'refresh']);
         });
 
-        // Dashboard + reports
+        // Dashboard + reports (all protected with audit log)
         Route::get('dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('dashboard/insights', [DashboardController::class, 'insights']);
         Route::get('dashboard/workspace', [DashboardController::class, 'workspace']);
         Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search');
         Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
         Route::get('settings/themes/current', [ThemeSettingsController::class, 'current']);
-        Route::get('settings/themes/company', [ThemeSettingsController::class, 'company']);
+        Route::get('settings/themes/company', [ThemeSettingsController::class, 'company'])->middleware('permission:manage settings');
         Route::put('settings/themes/current', [ThemeSettingsController::class, 'saveCurrent']);
         Route::delete('settings/themes/current', [ThemeSettingsController::class, 'resetCurrent']);
-        Route::prefix('reports')->group(function () {
+        Route::middleware('permission:view reports')->prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
             Route::get('/attendance', [ReportController::class, 'attendance']);
             Route::get('/leave', [ReportController::class, 'leave']);
             Route::get('/payroll', [ReportController::class, 'payroll']);
             Route::get('/analytics', [ReportController::class, 'analytics']);
         });
-        Route::apiResource('reports', ReportController::class);
+        Route::middleware('permission:view reports|manage reports')->apiResource('reports', ReportController::class);
 
         Route::middleware('permission:manage roles')->group(function () {
             Route::get('permissions', [RolePermissionController::class, 'permissions']);
@@ -116,48 +116,65 @@ $registerRoutes = function (): void {
         });
 
         // Employee routes
-        Route::get('employees/search', [EmployeeController::class, 'search']);
-        Route::get('employees/department/{departmentId}', [EmployeeController::class, 'getByDepartment']);
-        Route::post('employees/bulk-action', [EmployeeController::class, 'bulkAction']);
-        Route::get('employees/export/csv', [EmployeeController::class, 'export']);
-        Route::post('employees/{id}/set-password', [EmployeeController::class, 'setUserPassword']);
-        Route::apiResource('employees', EmployeeController::class);
+        Route::group([], function () {
+            Route::get('employees/search', [EmployeeController::class, 'search']);
+            Route::get('employees/department/{departmentId}', [EmployeeController::class, 'getByDepartment']);
+            Route::post('employees/bulk-action', [EmployeeController::class, 'bulkAction']);
+            Route::get('employees/export/csv', [EmployeeController::class, 'export']);
+            Route::post('employees/{id}/set-password', [EmployeeController::class, 'setUserPassword']);
+            Route::apiResource('employees', EmployeeController::class);
+        });
 
         // Department routes
-        Route::post('departments/{id}/restore', [DepartmentController::class, 'restore']);
-        Route::post('departments/{id}/reassign-employees', [DepartmentController::class, 'reassignEmployees']);
-        Route::delete('departments/{id}/force', [DepartmentController::class, 'forceDelete']);
+        Route::middleware('permission:manage settings')->group(function () {
+            Route::post('departments/{id}/restore', [DepartmentController::class, 'restore']);
+            Route::delete('departments/{id}/force', [DepartmentController::class, 'forceDelete']);
+        });
+        Route::middleware('permission:manage employees')->post('departments/{id}/reassign-employees', [DepartmentController::class, 'reassignEmployees']);
         Route::apiResource('departments', DepartmentController::class);
 
         // Designation routes
         Route::apiResource('designations', DesignationController::class);
 
         // Attendance routes
-        Route::get('attendance/employee/{employeeId}', [AttendanceController::class, 'getByEmployee']);
-        Route::get('attendance/monthly-stats/{employeeId}/{month}/{year}', [AttendanceController::class, 'getMonthlyStats']);
-        Route::get('attendance/company-monthly-summary', [AttendanceController::class, 'companyMonthlySummary']);
-        Route::get('attendance/policy', [AttendanceController::class, 'getPolicy']);
-        Route::put('attendance/policy', [AttendanceController::class, 'updatePolicy']);
+        Route::group([], function () {
+            Route::get('attendance/employee/{employeeId}', [AttendanceController::class, 'getByEmployee']);
+            Route::get('attendance/monthly-stats/{employeeId}/{month}/{year}', [AttendanceController::class, 'getMonthlyStats']);
+            Route::get('attendance/company-monthly-summary', [AttendanceController::class, 'companyMonthlySummary']);
+            Route::get('attendance/corrections', [AttendanceController::class, 'listCorrections']);
+            Route::post('attendance/{attendance}/request-correction', [AttendanceController::class, 'requestCorrection']);
+            Route::post('attendance/{attendance}/review-correction', [AttendanceController::class, 'reviewCorrection']);
+            Route::apiResource('attendance', AttendanceController::class);
+        });
+        Route::middleware('permission:manage attendance')->group(function () {
+            Route::get('attendance/policy', [AttendanceController::class, 'getPolicy']);
+            Route::put('attendance/policy', [AttendanceController::class, 'updatePolicy']);
+        });
         Route::post('attendance/check-in', [AttendanceController::class, 'checkIn']);
         Route::post('attendance/check-out', [AttendanceController::class, 'checkOut']);
-        Route::apiResource('attendance', AttendanceController::class);
 
         // Employee document routes
-        Route::get('employee-documents/{id}/preview', [EmployeeDocumentController::class, 'preview']);
-        Route::get('employee-documents/{id}/download', [EmployeeDocumentController::class, 'download']);
-        Route::apiResource('employee-documents', EmployeeDocumentController::class);
+        Route::group([], function () {
+            Route::get('employee-documents/{id}/preview', [EmployeeDocumentController::class, 'preview']);
+            Route::get('employee-documents/{id}/download', [EmployeeDocumentController::class, 'download']);
+            Route::apiResource('employee-documents', EmployeeDocumentController::class);
+        });
 
         // Payroll routes
-        Route::get('payroll/employee/{employeeId}', [PayrollController::class, 'getByEmployee']);
-        Route::get('payroll/summary/monthly', [PayrollController::class, 'getMonthlySummary']);
-        Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
-        Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
-        Route::apiResource('payroll', PayrollController::class);
-        Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
-        Route::apiResource('payroll-processings', PayrollProcessingController::class);
-        Route::apiResource('payslips', PayslipController::class);
-        Route::apiResource('bonuses', BonusController::class);
-        Route::apiResource('deductions', DeductionController::class);
+        Route::group([], function () {
+            Route::get('payroll/employee/{employeeId}', [PayrollController::class, 'getByEmployee']);
+            Route::get('payroll/summary/monthly', [PayrollController::class, 'getMonthlySummary']);
+            Route::apiResource('payroll', PayrollController::class);
+            Route::apiResource('payslips', PayslipController::class);
+            Route::apiResource('bonuses', BonusController::class);
+            Route::apiResource('deductions', DeductionController::class);
+        });
+        Route::middleware('permission:manage payroll')->group(function () {
+            Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
+            Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
+            Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
+            Route::apiResource('payroll-processings', PayrollProcessingController::class);
+        });
 
         // Leave routes
         Route::apiResource('leaves', LeaveController::class);
@@ -172,26 +189,35 @@ $registerRoutes = function (): void {
         // Recruitment routes
         Route::middleware('permission:recruitment.view')->group(function () {
             Route::get('recruitment/pipeline-summary', [RecruitmentCandidateController::class, 'pipelineSummary']);
-            Route::apiResource('job-openings', RecruitmentJobOpeningController::class);
-            Route::apiResource('candidates', RecruitmentCandidateController::class);
-            Route::apiResource('interviews', RecruitmentInterviewController::class);
-            Route::apiResource('onboarding', RecruitmentOnboardingController::class);
+            Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->only(['index', 'show']);
+            Route::apiResource('candidates', RecruitmentCandidateController::class)->only(['index', 'show']);
+            Route::apiResource('interviews', RecruitmentInterviewController::class)->only(['index', 'show']);
+            Route::apiResource('onboarding', RecruitmentOnboardingController::class)->only(['index', 'show']);
+        });
+
+        Route::middleware('permission:manage recruitment|edit recruitment|schedule interviews|send offers')->group(function () {
+            Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->except(['index', 'show']);
+            Route::apiResource('candidates', RecruitmentCandidateController::class)->except(['index', 'show']);
+            Route::apiResource('interviews', RecruitmentInterviewController::class)->except(['index', 'show']);
+            Route::apiResource('onboarding', RecruitmentOnboardingController::class)->except(['index', 'show']);
         });
 
         // Communication routes
+        Route::middleware('throttle:communication')->apiResource('announcements', AnnouncementController::class);
+        Route::middleware('throttle:communication')->apiResource('notifications', NotificationController::class);
         Route::middleware('throttle:communication')->group(function () {
-            Route::apiResource('announcements', AnnouncementController::class);
-            Route::apiResource('notifications', NotificationController::class);
             Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
             Route::apiResource('chat-messages', ChatMessageController::class);
         });
 
         // Performance routes
-        Route::apiResource('performance-reviews', PerformanceReviewController::class);
-        Route::apiResource('performance-kpis', PerformanceKpiController::class);
-        Route::apiResource('performance-goals', PerformanceGoalController::class);
-        Route::apiResource('performance-appraisals', PerformanceAppraisalController::class);
-        Route::get('performance/meta/employees', [PerformanceMetaController::class, 'employees']);
+        Route::middleware('permission:view performance|manage performance')->group(function () {
+            Route::apiResource('performance-reviews', PerformanceReviewController::class);
+            Route::apiResource('performance-kpis', PerformanceKpiController::class);
+            Route::apiResource('performance-goals', PerformanceGoalController::class);
+            Route::apiResource('performance-appraisals', PerformanceAppraisalController::class);
+            Route::get('performance/meta/employees', [PerformanceMetaController::class, 'employees']);
+        });
     });
 };
 

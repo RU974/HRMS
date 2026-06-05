@@ -154,8 +154,19 @@ class EmployeeDocumentController extends Controller
             return $this->isInCompany($request, $document->employee_id);
         }
         if ($document->visibility === 'manager_only') {
-            return ($user?->can('view employees') || $user?->can('view attendance'))
-                && $this->isInCompany($request, $document->employee_id);
+            // Manager-only documents require actual management hierarchy relationship
+            // Not just generic view employees/attendance permissions
+            if (!($user?->can('view employees') || $user?->can('view attendance'))) {
+                return false;
+            }
+
+            // Verify user is within the managed scope of the document's employee
+            if (!$this->isInCompany($request, $document->employee_id)) {
+                return false;
+            }
+
+            // Enforce management hierarchy: user must be the actual manager
+            return $this->isEmployeeWithinManagedScope($request, $document->employee_id);
         }
         if ($document->visibility === 'employee_self') {
             return $user?->id === $document->employee?->user_id;

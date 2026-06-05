@@ -7,6 +7,8 @@ use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\Payroll;
 use App\Models\Report;
+use App\Services\ReportAnalyticsService;
+use App\Services\ReportExportService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -46,7 +48,11 @@ class ReportController extends Controller
             $query->whereJsonContains('filters->module', $validated['module']);
         }
 
-        return $this->ok($query->orderByDesc('created_at')->paginate((int) ($validated['per_page'] ?? 10)));
+        $paginator = $query->orderByDesc('created_at')->paginate((int) ($validated['per_page'] ?? 10));
+        $service = new ReportAnalyticsService();
+        $paginator->getCollection()->transform(fn (Report $report) => $service->enrichReport($report));
+
+        return $this->ok($paginator);
     }
 
     public function show($id)
@@ -55,7 +61,9 @@ class ReportController extends Controller
 
         $report = Report::with(['creator:id,name,email', 'updater:id,name,email'])->findOrFail($id);
         $this->assertCompanyAccess(request(), $report);
-        return $this->ok($report);
+
+        $service = new ReportAnalyticsService();
+        return $this->ok($service->enrichReport($report));
     }
 
     public function store(Request $request)
@@ -119,15 +127,21 @@ class ReportController extends Controller
     {
         $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
 
-        $data = Employee::query()
-            ->selectRaw('status, COUNT(*) as count')
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
-            ->groupBy('status')
-            ->get();
+        $service = new ReportAnalyticsService();
+        $data = $service->employeeSummary($request);
+        $format = $this->resolveExportFormat($request);
+
+        if ($format) {
+            return (new ReportExportService())->export(
+                'employee-report',
+                ['Status', 'Count'],
+                $data->map(fn ($row) => [
+                    'status' => $row->status,
+                    'count' => $row->count,
+                ])->toArray(),
+                $format
+            );
+        }
 
         return $this->ok($data);
     }
@@ -141,16 +155,21 @@ class ReportController extends Controller
             'year' => 'required|integer|min:2000',
         ]);
 
-        $data = Attendance::whereMonth('date', $validated['month'])
-            ->whereYear('date', $validated['year'])
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
-            ->selectRaw('status, COUNT(*) as count')
-            ->groupBy('status')
-            ->get();
+        $service = new ReportAnalyticsService();
+        $data = $service->attendanceSummary($request, $validated['month'], $validated['year']);
+        $format = $this->resolveExportFormat($request);
+
+        if ($format) {
+            return (new ReportExportService())->export(
+                'attendance-report-' . $validated['year'] . '-' . $validated['month'],
+                ['Status', 'Count'],
+                $data->map(fn ($row) => [
+                    'status' => $row->status,
+                    'count' => $row->count,
+                ])->toArray(),
+                $format
+            );
+        }
 
         return $this->ok($data);
     }
@@ -164,16 +183,21 @@ class ReportController extends Controller
             'year' => 'required|integer|min:2000',
         ]);
 
-        $data = Leave::whereMonth('from_date', $validated['month'])
-            ->whereYear('from_date', $validated['year'])
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
-            ->selectRaw('status, COUNT(*) as count')
-            ->groupBy('status')
-            ->get();
+        $service = new ReportAnalyticsService();
+        $data = $service->leaveSummary($request, $validated['month'], $validated['year']);
+        $format = $this->resolveExportFormat($request);
+
+        if ($format) {
+            return (new ReportExportService())->export(
+                'leave-report-' . $validated['year'] . '-' . $validated['month'],
+                ['Status', 'Count'],
+                $data->map(fn ($row) => [
+                    'status' => $row->status,
+                    'count' => $row->count,
+                ])->toArray(),
+                $format
+            );
+        }
 
         return $this->ok($data);
     }
@@ -187,16 +211,26 @@ class ReportController extends Controller
             'year' => 'required|integer|min:2000',
         ]);
 
-        $data = Payroll::whereMonth('payment_date', $validated['month'])
-            ->whereYear('payment_date', $validated['year'])
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
-            ->selectRaw('status, COUNT(*) as total_records, SUM(net_salary) as total_net_salary')
-            ->groupBy('status')
-            ->get();
+        $service = new ReportAnalyticsService();
+        $data = $service->payrollSummary($request, $validated['month'], $validated['year']);
+        $format = $this->resolveExportFormat($request);
+
+        if ($format) {
+            return (new ReportExportService())->export(
+                'payroll-report-' . $validated['year'] . '-' . $validated['month'],
+                ['Status', 'Total Records', 'Total Net Salary', 'Total Base Salary', 'Total Bonus', 'Total Deductions', 'Total Tax'],
+                $data->map(fn ($row) => [
+                    'status' => $row->status,
+                    'total_records' => $row->total_records,
+                    'total_net_salary' => $row->total_net_salary,
+                    'total_base_salary' => $row->total_base_salary,
+                    'total_bonus' => $row->total_bonus,
+                    'total_deductions' => $row->total_deductions,
+                    'total_tax' => $row->total_tax,
+                ])->toArray(),
+                $format
+            );
+        }
 
         return $this->ok($data);
     }
@@ -210,46 +244,42 @@ class ReportController extends Controller
             'year' => 'required|integer|min:2000',
         ]);
 
-        $employeesQuery = Employee::query();
-        $this->scopeEmployeeQuery($request, $employeesQuery);
+        $service = new ReportAnalyticsService();
+        $data = $service->analyticsOverview($request, $validated['month'], $validated['year']);
+        $format = $this->resolveExportFormat($request);
 
-        $attendanceQuery = Attendance::whereMonth('date', $validated['month'])
-            ->whereYear('date', $validated['year']);
-        $this->scopeAttendanceQuery($request, $attendanceQuery);
+        if ($format) {
+            return (new ReportExportService())->export(
+                'analytics-report-' . $validated['year'] . '-' . $validated['month'],
+                ['Metric', 'Value'],
+                collect($data)->map(fn ($value, $key) => [
+                    'metric' => $key,
+                    'value' => $value,
+                ])->values()->toArray(),
+                $format
+            );
+        }
 
-        $payrollQuery = Payroll::whereMonth('payment_date', $validated['month'])
-            ->whereYear('payment_date', $validated['year']);
-        $this->scopePayrollQuery($request, $payrollQuery);
+        return $this->ok($data);
+    }
 
-        $employees = $employeesQuery->count();
-        $activeEmployees = (clone $employeesQuery)->where('status', 'active')->count();
+    private function resolveExportFormat(Request $request): ?string
+    {
+        $format = $request->query('format');
+        if (!$format) {
+            return null;
+        }
 
-        $attendance = $attendanceQuery
-            ->selectRaw('
-                SUM(CASE WHEN status = "present" THEN 1 ELSE 0 END) as present_count,
-                SUM(CASE WHEN status = "late" THEN 1 ELSE 0 END) as late_count,
-                SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_count
-            ')
-            ->first();
+        if (!$request->user()?->can('export reports')) {
+            abort(403, 'You are not authorized to export reports.');
+        }
 
-        $payroll = $payrollQuery
-            ->selectRaw('
-                SUM(CASE WHEN status = "paid" THEN 1 ELSE 0 END) as paid_count,
-                SUM(CASE WHEN status = "pending" THEN 1 ELSE 0 END) as pending_count,
-                COALESCE(SUM(net_salary), 0) as total_amount
-            ')
-            ->first();
+        $format = strtolower(trim($format));
+        if (!in_array($format, ['csv', 'excel', 'xlsx', 'pdf'], true)) {
+            abort(422, 'Unsupported export format.');
+        }
 
-        return $this->ok([
-            'employees' => $employees,
-            'active_employees' => $activeEmployees,
-            'attendance_present' => (int) ($attendance?->present_count ?? 0),
-            'attendance_late' => (int) ($attendance?->late_count ?? 0),
-            'attendance_absent' => (int) ($attendance?->absent_count ?? 0),
-            'payroll_paid' => (int) ($payroll?->paid_count ?? 0),
-            'payroll_pending' => (int) ($payroll?->pending_count ?? 0),
-            'payroll_total_amount' => (float) ($payroll?->total_amount ?? 0),
-        ]);
+        return $format;
     }
 
     private function scopeToCompany(Request $request, $query): void

@@ -82,6 +82,99 @@ class ReportDashboardTest extends TestCase
             ->assertJsonCount(1, 'data');
     }
 
+    public function test_analytics_endpoint_returns_extended_metrics(): void
+    {
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
+        $department = Department::create(['name' => 'Operations']);
+        $employee = Employee::create([
+            'user_id' => $user->id,
+            'name' => 'Analytics Employee',
+            'email' => 'analytics.employee@example.com',
+            'department_id' => $department->id,
+            'designation' => 'Analyst',
+            'salary' => 1500,
+            'status' => 'active',
+        ]);
+
+        Attendance::create([
+            'employee_id' => $employee->id,
+            'date' => '2026-05-15',
+            'check_in' => '2026-05-15 09:00:00',
+            'status' => 'present',
+        ]);
+
+        Payroll::create([
+            'employee_id' => $employee->id,
+            'month' => 5,
+            'year' => 2026,
+            'base_salary' => 1500,
+            'bonus' => 0,
+            'deductions' => 0,
+            'tax' => 0,
+            'net_salary' => 1500,
+            'payment_date' => '2026-05-31',
+            'status' => 'pending',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/reports/analytics?month=5&year=2026')
+            ->assertOk()
+            ->assertJsonPath('data.attendance_present', 1)
+            ->assertJsonPath('data.payroll_total_amount', 1500)
+            ->assertJsonPath('data.attendance_rate', 100)
+            ->assertJsonStructure(['success', 'message', 'data' => ['employees', 'active_employees', 'attendance_present', 'attendance_rate', 'payroll_total_amount', 'payroll_status_breakdown']]);
+    }
+
+    public function test_report_endpoints_support_export_formats(): void
+    {
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
+        $department = Department::create(['name' => 'Operations']);
+        $employee = Employee::create([
+            'user_id' => $user->id,
+            'name' => 'Export Employee',
+            'email' => 'export.employee@example.com',
+            'department_id' => $department->id,
+            'designation' => 'Analyst',
+            'salary' => 1500,
+            'status' => 'active',
+        ]);
+
+        Attendance::create([
+            'employee_id' => $employee->id,
+            'date' => '2026-05-15',
+            'check_in' => '2026-05-15 09:00:00',
+            'status' => 'present',
+        ]);
+
+        Payroll::create([
+            'employee_id' => $employee->id,
+            'month' => 5,
+            'year' => 2026,
+            'base_salary' => 1500,
+            'bonus' => 0,
+            'deductions' => 0,
+            'tax' => 0,
+            'net_salary' => 1500,
+            'payment_date' => '2026-05-31',
+            'status' => 'pending',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->get('/api/v1/reports/payroll?month=5&year=2026&format=csv')
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $this->get('/api/v1/reports/attendance?month=5&year=2026&format=excel')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.ms-excel; charset=UTF-8');
+
+        $this->get('/api/v1/reports/analytics?month=5&year=2026&format=pdf')
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
     public function test_report_managers_cannot_modify_reports_belonging_to_other_companies(): void
     {
         $companyA = Company::create(['name' => 'Company A']);

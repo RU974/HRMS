@@ -69,7 +69,7 @@ class UserManagementService
 
     private function resolveAssignableRoleIds(array $roleIds, ?User $actor): array
     {
-        if (!$actor || !$actor->can('assign roles')) {
+        if (!$actor || (! $actor->can('assign roles') && ! $actor->can('manage users'))) {
             abort(403, 'You are not authorized to assign roles.');
         }
 

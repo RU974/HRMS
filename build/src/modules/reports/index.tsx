@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 const reportAreas = [
   { title: "Attendance Reports", description: "Track present, absent, and late trends by month.", path: "/reports/attendance" },
   { title: "Employee Reports", description: "Review employee distribution and workforce status.", path: "/reports/employees" },
+  { title: "Leave Reports", description: "Analyze leave volumes and approvals by month.", path: "/reports/leave" },
   { title: "Payroll Reports", description: "Monitor paid and pending payroll with salary totals.", path: "/reports/payroll" },
   { title: "Analytics Reports", description: "Cross-module HR analytics with consolidated KPIs.", path: "/reports/analytics" },
 ];

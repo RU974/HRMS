@@ -52,6 +52,11 @@ export function getEmployees() {
   return apiClient<PaginatedResponse<Employee>>("/employees?per_page=10");
 }
 
+export function getEmployeesPage(params: { per_page?: number } = {}) {
+  const query = new URLSearchParams({ per_page: String(params.per_page ?? 10) });
+  return apiClient<PaginatedResponse<Employee>>(`/employees?${query.toString()}`);
+}
+
 export function createEmployee(formData: FormData) {
   return apiClient<Employee>("/employees", {
     method: "POST",

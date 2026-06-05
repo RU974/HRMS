@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\User;
+use App\Services\LeavePolicyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class LeaveController extends Controller
 {
@@ -55,7 +57,29 @@ class LeaveController extends Controller
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
         $validated['status'] = $validated['status'] ?? 'pending';
 
-        $leave = Leave::create($validated);
+        try {
+            $leave = DB::transaction(function () use ($validated, $request) {
+                $leave = Leave::create(array_merge($validated, ['approval_step' => 1]));
+                $policyService = new LeavePolicyService();
+                $leaveType = $policyService->findLeaveTypeByName($leave->type);
+                $isApproverCreatedApproved = $request->user()?->can('approve leaves') && $leave->status === 'approved';
+                if ($isApproverCreatedApproved && $leaveType && (int) $leaveType->required_approval_levels > 1) {
+                    $leave->status = 'pending';
+                    $leave->save();
+                }
+
+                $policyService->reservePendingLeave($leave, $isApproverCreatedApproved);
+
+                if ($leave->status === 'approved') {
+                    $policyService->finalizeLeaveApproval($leave);
+                }
+
+                return $leave;
+            });
+        } catch (\RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
         return $this->ok($leave, 'Leave request created successfully', 201);
     }
 
@@ -66,6 +90,11 @@ class LeaveController extends Controller
             abort(403, 'You are not authorized to update this leave request.');
         }
         $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
+
+        $originalStatus = $leave->status;
+        $originalType = $leave->type;
+        $originalFromDate = $leave->from_date;
+        $originalToDate = $leave->to_date;
 
         $validated = $request->validate([
             'type' => 'sometimes|string|max:100',
@@ -78,8 +107,37 @@ class LeaveController extends Controller
             return $this->fail('The to_date must be after or equal to from_date.', 422);
         }
 
-        $leave->update($validated);
-        return $this->ok($leave, 'Leave request updated successfully');
+        $leave->fill($validated);
+        $policyService = new LeavePolicyService();
+
+        try {
+            DB::transaction(function () use ($leave, $validated, $originalStatus, $originalType, $originalFromDate, $originalToDate, $policyService) {
+                $pendingReservationUpdated = false;
+                $leave->save();
+
+                if ($originalStatus === 'pending' && $leave->status === 'pending' && (
+                    array_key_exists('type', $validated)
+                    || array_key_exists('from_date', $validated)
+                    || array_key_exists('to_date', $validated)
+                )) {
+                    $originalSegments = $policyService->segmentsForRange($leave->employee, $originalType, $originalFromDate, $originalToDate);
+                    $policyService->adjustPendingReservation($leave, $originalSegments);
+                    $pendingReservationUpdated = true;
+                }
+
+                if ($originalStatus !== $leave->status) {
+                    if ($leave->status === 'approved') {
+                        $policyService->finalizeLeaveApproval($leave);
+                    } elseif (in_array($leave->status, ['rejected', 'cancelled'], true)) {
+                        $policyService->releaseLeaveReservation($leave, $originalStatus);
+                    }
+                }
+            });
+        } catch (\RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok($leave->refresh(), 'Leave request updated successfully');
     }
 
     public function destroy(Request $request, $id)
@@ -89,7 +147,13 @@ class LeaveController extends Controller
         if ($request->user()?->can('approve leaves')) {
             $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
             $this->authorizeManagedEmployeeAccess($request, (int) $leave->employee_id, 'leave request');
-            $leave->delete();
+
+            $policyService = new LeavePolicyService();
+            DB::transaction(function () use ($leave, $policyService) {
+                $policyService->releaseLeaveReservation($leave, $leave->status);
+                $leave->delete();
+            });
+
             return $this->ok(null, 'Leave request deleted successfully');
         }
 
@@ -98,7 +162,12 @@ class LeaveController extends Controller
             abort(403, 'You can only delete your own pending leave request.');
         }
 
-        $leave->delete();
+        $policyService = new LeavePolicyService();
+        DB::transaction(function () use ($leave, $policyService) {
+            $policyService->releaseLeaveReservation($leave, $leave->status);
+            $leave->delete();
+        });
+
         return $this->ok(null, 'Leave request deleted successfully');
     }
 

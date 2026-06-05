@@ -14,8 +14,9 @@ class RolePermissionController extends Controller
     {
     }
 
-    public function permissions()
+    public function permissions(Request $request)
     {
+        $this->authorizePermission($request, 'manage roles');
         $grouped = Permission::query()
             ->orderBy('module')
             ->orderBy('action')
@@ -32,6 +33,7 @@ class RolePermissionController extends Controller
 
     public function roles(Request $request)
     {
+        $this->authorizePermission($request, 'manage roles');
         $companyId = $request->user()?->company_id;
 
         $roles = Role::with('permissions')
@@ -50,6 +52,7 @@ class RolePermissionController extends Controller
 
     public function storeRole(Request $request)
     {
+        $this->authorizePermission($request, 'manage roles');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -78,6 +81,7 @@ class RolePermissionController extends Controller
 
     public function updateRole(Request $request, string $id)
     {
+        $this->authorizePermission($request, 'manage roles');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -109,6 +113,7 @@ class RolePermissionController extends Controller
 
     public function deleteRole(Request $request, string $id)
     {
+        $this->authorizePermission($request, 'manage roles');
         $role = Role::with('users')->withCount('users')->findOrFail($id);
         $companyId = $request->user()?->company_id;
         if ($role->company_id !== null && $role->company_id !== $companyId) {

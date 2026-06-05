@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -175,20 +176,17 @@ export function NotificationsPage() {
       {modalOpen && (
         <Modal title={editing ? "Edit Notification" : "Create Notification"} onClose={closeModal}>
           <form className="space-y-4" onSubmit={submit}>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Title</label>
+            <FormField label="Title">
               <FormInput value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Message</label>
+            </FormField>
+            <FormField label="Message">
               <textarea
                 className="min-h-28 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
                 value={form.message}
                 onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Type</label>
+            </FormField>
+            <FormField label="Type">
               <select
                 className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
                 value={form.type}
@@ -199,7 +197,7 @@ export function NotificationsPage() {
                 <option value="warning">Warning</option>
                 <option value="error">Error</option>
               </select>
-            </div>
+            </FormField>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.is_read} onChange={(e) => setForm((prev) => ({ ...prev, is_read: e.target.checked }))} />
               Mark as read

@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use App\Services\PayrollCalculator;
 
 class PayrollController extends Controller
 {
@@ -88,7 +89,7 @@ class PayrollController extends Controller
             'tax' => 'nullable|numeric|min:0',
             'net_salary' => 'required|numeric|min:0',
             'payment_date' => 'required|date',
-            'status' => 'required|in:pending,processed,paid,cancelled',
+            'status' => 'required|in:draft,reviewed,approved,pending,processed,paid,cancelled',
         ]);
         $this->assertEmployeeInActorCompany($request, (int) $validated['employee_id']);
 
@@ -112,7 +113,7 @@ class PayrollController extends Controller
             'tax' => 'nullable|numeric|min:0',
             'net_salary' => 'numeric|min:0',
             'payment_date' => 'date',
-            'status' => 'in:pending,processed,paid,cancelled',
+            'status' => 'in:draft,reviewed,approved,pending,processed,paid,cancelled',
         ]);
 
         $payroll->update($validated);
@@ -180,6 +181,8 @@ class PayrollController extends Controller
         $failed = 0;
         $skipped = 0;
 
+        $calculator = new PayrollCalculator();
+
         foreach ($employees as $employee) {
             try {
                 $alreadyExists = Payroll::where('employee_id', $employee->id)
@@ -192,15 +195,17 @@ class PayrollController extends Controller
                     continue;
                 }
 
+                $calc = $calculator->calculateForEmployee($employee, (int) $validated['month'], (int) $validated['year']);
+
                 Payroll::create([
                     'employee_id' => $employee->id,
                     'month' => $validated['month'],
                     'year' => $validated['year'],
-                    'base_salary' => $employee->salary,
-                    'bonus' => 0,
-                    'deductions' => 0,
-                    'tax' => 0,
-                    'net_salary' => $employee->salary,
+                    'base_salary' => $calc['base_salary'],
+                    'bonus' => $calc['bonuses'],
+                    'deductions' => $calc['deductions'],
+                    'tax' => $calc['tax'],
+                    'net_salary' => $calc['net_salary'],
                     'payment_date' => Carbon::createFromDate($validated['year'], $validated['month'], 1)->endOfMonth(),
                     'status' => 'pending',
                 ]);

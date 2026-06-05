@@ -41,7 +41,7 @@ abstract class Controller
     protected function authorizeAnyPermission(Request $request, array $permissions, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
-        if (!$user || !$user->can($permissions)) {
+        if (!$user || !$user->hasAnyPermission($permissions)) {
             abort(403, $message);
         }
     }

@@ -77,6 +77,56 @@ class UserRoleAssignmentTest extends TestCase
         );
     }
 
+    public function test_user_management_allows_manage_users_permission_to_assign_roles(): void
+    {
+        $permission = Permission::firstOrCreate([
+            'module' => 'user',
+            'action' => 'manage',
+        ], [
+            'description' => 'Manage users',
+        ]);
+
+        $manageUsersRole = Role::firstOrCreate([
+            'company_id' => null,
+            'name' => 'User Manager',
+        ], [
+            'description' => 'User manager role',
+            'guard_name' => 'web',
+            'is_system' => false,
+        ]);
+        $manageUsersRole->permissions()->sync([$permission->id]);
+
+        $employeeRole = Role::firstOrCreate([
+            'company_id' => null,
+            'name' => User::ROLE_EMPLOYEE,
+        ], [
+            'description' => 'Employee role',
+            'guard_name' => 'web',
+            'is_system' => true,
+        ]);
+
+        $actor = $this->createUserWithRole('User Manager', [
+            'name' => 'Actor User',
+            'email' => 'actor.user@example.com',
+        ]);
+
+        Sanctum::actingAs($actor);
+
+        $payload = [
+            'name' => 'New Managed User',
+            'email' => 'newmanageduser@example.com',
+            'password' => 'password123',
+            'role_ids' => [$employeeRole->id],
+        ];
+
+        $response = $this->postJson('/api/v1/settings/users', $payload);
+
+        $response->assertCreated()->assertJsonPath('success', true);
+
+        $newUser = User::where('email', 'newmanageduser@example.com')->firstOrFail()->load('roles');
+        $this->assertTrue($newUser->roles->contains(fn ($role) => $role->id === $employeeRole->id));
+    }
+
     public function test_user_management_updates_keep_existing_roles_when_only_password_changes(): void
     {
         $employeeRole = Role::firstOrCreate([

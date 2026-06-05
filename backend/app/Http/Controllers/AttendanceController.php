@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Attendance;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
+use App\Models\Shift;
 use App\Models\User;
+use App\Services\AttendanceCalculator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -71,14 +73,23 @@ class AttendanceController extends Controller
         }
 
         $policy = AttendancePolicy::query()->first();
+        $shift = $this->getEmployeeShift((int) $validated['employee_id']);
         $status = $validated['status'] ?? 'present';
+
         if (!empty($validated['check_in'])) {
-            $validated['check_in'] = Carbon::parse($validated['date'] . ' ' . $validated['check_in'])->toDateTimeString();
-            $status = $this->deriveStatusFromCheckIn($validated['check_in'], $policy, $status);
+            $validated['check_in'] = $this->attendanceCalculator()->normalizeCheckTime($validated['date'], $validated['check_in']);
+            $status = $this->attendanceCalculator()->deriveStatusFromCheckIn(
+                $policy,
+                $shift,
+                $validated['check_in'],
+                $status
+            );
         }
+
         if (!empty($validated['check_out'])) {
-            $validated['check_out'] = Carbon::parse($validated['date'] . ' ' . $validated['check_out'])->toDateTimeString();
+            $validated['check_out'] = $this->attendanceCalculator()->normalizeCheckTime($validated['date'], $validated['check_out']);
         }
+
         $validated['status'] = $status;
 
         $attendance = Attendance::create($validated);
@@ -98,18 +109,30 @@ class AttendanceController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $date = $validated['date'] ?? $attendance->date;
+        $date = Carbon::parse($validated['date'] ?? $attendance->date)->toDateString();
         if (!empty($validated['check_in'])) {
-            $validated['check_in'] = Carbon::parse($date . ' ' . $validated['check_in'])->toDateTimeString();
+            $validated['check_in'] = $this->attendanceCalculator()->normalizeCheckTime($date, $validated['check_in']);
         }
         if (!empty($validated['check_out'])) {
-            $validated['check_out'] = Carbon::parse($date . ' ' . $validated['check_out'])->toDateTimeString();
+            $validated['check_out'] = $this->attendanceCalculator()->normalizeCheckTime($date, $validated['check_out']);
         }
 
         $policy = AttendancePolicy::query()->first();
+        $shift = $attendance->employee?->shift;
         if (!empty($validated['check_in'])) {
             $currentStatus = $validated['status'] ?? $attendance->status;
-            $validated['status'] = $this->deriveStatusFromCheckIn($validated['check_in'], $policy, $currentStatus);
+            $validated['status'] = $this->attendanceCalculator()->deriveStatusFromCheckIn(
+                $policy,
+                $shift,
+                $validated['check_in'],
+                $currentStatus
+            );
+        }
+
+        if (!empty($validated['check_in']) && !empty($validated['check_out'])) {
+            if (Carbon::parse($validated['check_out'])->lessThan(Carbon::parse($validated['check_in']))) {
+                return $this->fail('Check-out cannot be earlier than check-in.', 422);
+            }
         }
 
         $attendance->update($validated);
@@ -170,16 +193,44 @@ class AttendanceController extends Controller
 
         $today = Carbon::today();
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', $today)->first();
+        $policy = AttendancePolicy::query()->first();
+        $shift = Employee::find($validated['employee_id'])?->shift;
+        $now = Carbon::now();
 
         if (!$attendance) {
-            $checkIn = Carbon::now()->toDateTimeString();
+            $checkIn = $now->toDateTimeString();
             $attendance = Attendance::create([
                 'employee_id' => $validated['employee_id'],
                 'date' => $today,
                 'check_in' => $checkIn,
-                'status' => $this->deriveStatusFromCheckIn($checkIn, AttendancePolicy::first(), 'present'),
+                'status' => $this->attendanceCalculator()->deriveStatusFromCheckIn(
+                    $policy,
+                    $shift,
+                    $checkIn,
+                    'present'
+                ),
             ]);
+
+            return $this->ok($attendance, 'Check-in successful');
         }
+
+        if ($attendance->check_in && !$attendance->check_out) {
+            return $this->ok($attendance, 'Already checked in for today');
+        }
+
+        if ($attendance->check_in && $attendance->check_out) {
+            return $this->fail('Attendance already completed for today.', 422);
+        }
+
+        $attendance->update([
+            'check_in' => $now->toDateTimeString(),
+            'status' => $this->attendanceCalculator()->deriveStatusFromCheckIn(
+                $policy,
+                $shift,
+                $now->toDateTimeString(),
+                $attendance->status ?? 'present'
+            ),
+        ]);
 
         return $this->ok($attendance, 'Check-in successful');
     }
@@ -194,8 +245,53 @@ class AttendanceController extends Controller
         if (!$attendance) {
             return $this->fail('No check-in record found for today.', 404);
         }
-        $attendance->update(['check_out' => Carbon::now()->toDateTimeString()]);
+
+        if ($attendance->check_out) {
+            return $this->ok($attendance, 'Already checked out for today');
+        }
+
+        $update = ['check_out' => Carbon::now()->toDateTimeString()];
+        if (!$attendance->check_in) {
+            $update['notes'] = trim((string) ($attendance->notes ? $attendance->notes . ' ' : '') . 'Recorded check-out without prior check-in.');
+        }
+
+        $attendance->update($update);
         return $this->ok($attendance, 'Check-out successful');
+    }
+
+    public function listCorrections(Request $request)
+    {
+        $user = $request->user();
+        $query = Attendance::with('employee')->whereNotNull('correction_status');
+
+        if ($request->has('employee_id')) {
+            $employeeId = (int) $request->employee_id;
+            if (!$user?->can('manage attendance') && !$user?->can('approve attendance')) {
+                $this->authorizeAttendanceAccess($request, $employeeId);
+            }
+            $this->assertEmployeeInCompany($request, $employeeId);
+            $query->where('employee_id', $employeeId);
+        } elseif (!$user?->can('manage attendance') && !$user?->can('approve attendance')) {
+            $employee = Employee::where('user_id', $user?->id)->firstOrFail();
+            $query->where('employee_id', $employee->id);
+        }
+
+        if ($request->has('status')) {
+            $query->where('correction_status', $request->status);
+        }
+
+        if ($request->has('month')) {
+            $query->whereMonth('date', $request->month);
+        }
+        if ($request->has('year')) {
+            $query->whereYear('date', $request->year);
+        }
+
+        if ($user?->can('manage attendance') || $user?->can('approve attendance')) {
+            $this->applyManagedEmployeeScope($request, $query, 'employee');
+        }
+
+        return $this->ok($query->orderBy('correction_requested_at', 'desc')->paginate(15));
     }
 
     public function companyMonthlySummary(Request $request)
@@ -255,18 +351,69 @@ class AttendanceController extends Controller
         return $this->ok($policy, 'Attendance policy updated successfully');
     }
 
-    private function deriveStatusFromCheckIn(string $checkInDateTime, ?AttendancePolicy $policy, string $fallbackStatus): string
+    public function requestCorrection(Request $request, $id)
     {
-        if (!$policy) {
-            return $fallbackStatus;
-        }
-        if ($policy->allow_manual_status_override && $fallbackStatus !== 'present') {
-            return $fallbackStatus;
+        $attendance = Attendance::findOrFail($id);
+        $this->authorizeAttendanceAccess($request, (int) $attendance->employee_id);
+        $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
+
+        $validated = $request->validate([
+            'correction_request_notes' => 'required|string',
+        ]);
+
+        if ($attendance->correction_status === 'pending') {
+            return $this->fail('A correction request is already pending for this attendance.', 422);
         }
 
-        $checkIn = Carbon::parse($checkInDateTime);
-        $threshold = Carbon::parse($checkIn->toDateString() . ' ' . $policy->late_after_time);
-        return $checkIn->greaterThan($threshold) ? 'late' : 'present';
+        $attendance->update([
+            'correction_status' => 'pending',
+            'correction_request_notes' => $validated['correction_request_notes'],
+            'correction_requested_at' => Carbon::now(),
+            'correction_response_notes' => null,
+            'correction_reviewed_at' => null,
+        ]);
+
+        return $this->ok($attendance, 'Correction request submitted successfully');
+    }
+
+    public function reviewCorrection(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'approve attendance');
+
+        $attendance = Attendance::findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
+
+        $validated = $request->validate([
+            'correction_status' => 'required|in:pending,approved,rejected',
+            'correction_response_notes' => 'nullable|string',
+        ]);
+
+        if ($attendance->correction_status !== 'pending' && $validated['correction_status'] === 'pending') {
+            return $this->fail('Only pending correction requests can be reopened.', 422);
+        }
+
+        $attendance->update([
+            'correction_status' => $validated['correction_status'],
+            'correction_response_notes' => $validated['correction_response_notes'] ?? $attendance->correction_response_notes,
+            'correction_reviewed_at' => Carbon::now(),
+        ]);
+
+        return $this->ok($attendance, 'Correction request reviewed successfully');
+    }
+
+    private function deriveStatusFromCheckIn(string $checkInDateTime, ?AttendancePolicy $policy, ?Shift $shift, string $fallbackStatus): string
+    {
+        return $this->attendanceCalculator()->deriveStatusFromCheckIn($policy, $shift, $checkInDateTime, $fallbackStatus);
+    }
+
+    private function attendanceCalculator(): AttendanceCalculator
+    {
+        return new AttendanceCalculator();
+    }
+
+    private function getEmployeeShift(int $employeeId)
+    {
+        return Employee::find($employeeId)?->shift;
     }
 
     private function authorizeAttendanceAccess(Request $request, int $employeeId): void

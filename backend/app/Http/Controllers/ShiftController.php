@@ -14,6 +14,7 @@ class ShiftController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizePermission($request, 'attendance.edit');
         $validated = $request->validate([
             'name' => 'required|string|max:120|unique:shifts,name',
             'start_time' => 'required|date_format:H:i',
@@ -37,6 +38,7 @@ class ShiftController extends Controller
 
     public function update(Request $request, $id)
     {
+        $this->authorizePermission($request, 'attendance.edit');
         $shift = Shift::findOrFail($id);
         $validated = $request->validate([
             'name' => 'sometimes|string|max:120|unique:shifts,name,' . $id,
@@ -50,8 +52,9 @@ class ShiftController extends Controller
         return $this->ok($shift, 'Shift updated successfully');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->authorizePermission($request, 'attendance.edit');
         Shift::findOrFail($id)->delete();
         return $this->ok(null, 'Shift deleted successfully');
     }

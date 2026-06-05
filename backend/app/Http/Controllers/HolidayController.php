@@ -14,6 +14,7 @@ class HolidayController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizePermission($request, 'attendance.edit');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'holiday_date' => 'required|date|unique:holidays,holiday_date',
@@ -34,6 +35,7 @@ class HolidayController extends Controller
 
     public function update(Request $request, $id)
     {
+        $this->authorizePermission($request, 'attendance.edit');
         $holiday = Holiday::findOrFail($id);
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
@@ -45,8 +47,9 @@ class HolidayController extends Controller
         return $this->ok($holiday, 'Holiday updated successfully');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $this->authorizePermission($request, 'attendance.edit');
         Holiday::findOrFail($id)->delete();
         return $this->ok(null, 'Holiday deleted successfully');
     }

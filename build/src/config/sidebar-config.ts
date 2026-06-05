@@ -82,6 +82,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
     title: "Operations",
     items: [
       { label: "Employees", path: "/employees", icon: Users2, permissions: ["view employees", "manage employees"] },
+      { label: "Employee Documents", path: "/employee-documents", icon: FileText, roles: employeeRoleOnly, permissions: ["manage employee documents", "view employees", "view attendance"] },
       { label: "Attendance", path: "/attendance", icon: Clock3, permissions: ["view attendance", "manage attendance"] },
       { label: "Leaves", path: "/leaves", icon: CalendarRange, permissions: ["view leaves", "approve leaves", "manage leaves"] },
       {
@@ -120,7 +121,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
           { label: "Appraisals", path: "/performance/appraisals", icon: BriefcaseBusiness, permissions: ["view performance", "manage performance"] },
         ],
       },
-      { label: "Reports", path: "/reports", icon: FileText, permissions: ["view employees", "view attendance", "view payroll", "view performance", "manage payroll", "manage performance", "recruitment.view"] },
+      { label: "Reports", path: "/reports", icon: FileText, permissions: ["view reports", "manage reports"] },
     ],
   },
   {

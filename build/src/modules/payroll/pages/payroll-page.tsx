@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
+import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -70,9 +71,14 @@ export function PayrollPage() {
   const [processingStatusFilter, setProcessingStatusFilter] = useState<PayrollProcessing["status"] | "">("");
 
   const [payslipModal, setPayslipModal] = useState(false);
+  const [payslipDetailOpen, setPayslipDetailOpen] = useState(false);
+  const [selectedPayslip, setSelectedPayslip] = useState<Payslip | null>(null);
   const [payslipEdit, setPayslipEdit] = useState<Payslip | null>(null);
   const [payslipForm, setPayslipForm] = useState({ employee_id: 0, payroll_id: 0, slip_number: "", issue_date: "", status: "draft" as Payslip["status"], file_url: "", notes: "" });
   const [payslipStatusFilter, setPayslipStatusFilter] = useState<Payslip["status"] | "">("");
+
+  const [payrollDetailOpen, setPayrollDetailOpen] = useState(false);
+  const [selectedPayroll, setSelectedPayroll] = useState<PayrollRecord | null>(null);
 
   const [bonusModal, setBonusModal] = useState(false);
   const [bonusEdit, setBonusEdit] = useState<Bonus | null>(null);
@@ -155,7 +161,7 @@ export function PayrollPage() {
             <SectionTable
               onAdd={() => { setPayrollEdit(null); setPayrollForm({ employee_id: 0, month: new Date().getMonth() + 1, year: new Date().getFullYear(), base_salary: 0, bonus: 0, deductions: 0, tax: 0, payment_date: "", status: "pending" }); setPayrollModal(true); }}
               headers={["Employee", "Month/Year", "Base", "Net", "Payment Date", "Status", "Actions"]}
-              rows={(payrolls.data ?? []).map((item) => [item.employee?.name ?? `#${item.employee_id}`, `${item.month}/${item.year}`, Number(item.base_salary).toLocaleString(), Number(item.net_salary).toLocaleString(), item.payment_date?.slice(0, 10) ?? "-", item.status, <div className="flex gap-2" key={item.id}><Button variant="outline" onClick={() => void payrollMarkPaid.mutateAsync(item.id)}>Mark Paid</Button><Button variant="outline" onClick={() => { setPayrollEdit(item); setPayrollForm({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date.slice(0, 10), status: item.status }); setPayrollModal(true); }}>Edit</Button><Button variant="outline" onClick={() => void payrollDelete.mutateAsync(item.id)}>Delete</Button></div>])}
+              rows={(payrolls.data ?? []).map((item) => [item.employee?.name ?? `#${item.employee_id}`, `${item.month}/${item.year}`, Number(item.base_salary).toLocaleString(), Number(item.net_salary).toLocaleString(), item.payment_date?.slice(0, 10) ?? "-", item.status, <div className="flex gap-2" key={item.id}><Button variant="outline" onClick={() => { setSelectedPayroll(item); setPayrollDetailOpen(true); }}>View</Button><Button variant="outline" onClick={() => void payrollMarkPaid.mutateAsync(item.id)}>Mark Paid</Button><Button variant="outline" onClick={() => { setPayrollEdit(item); setPayrollForm({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date.slice(0, 10), status: item.status }); setPayrollModal(true); }}>Edit</Button><Button variant="outline" onClick={() => void payrollDelete.mutateAsync(item.id)}>Delete</Button></div>])}
             />
           </div>
         )}
@@ -305,6 +311,7 @@ export function PayrollPage() {
                         <td className="max-w-[260px] truncate p-3 text-[var(--muted)]">{item.notes || "-"}</td>
                         <td className="p-3">
                           <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => { setSelectedPayslip(item); setPayslipDetailOpen(true); }}>View</Button>
                             <Button variant="outline" onClick={() => { setPayslipEdit(item); setPayslipForm({ employee_id: item.employee_id, payroll_id: item.payroll_id, slip_number: item.slip_number, issue_date: item.issue_date.slice(0, 10), status: item.status, file_url: item.file_url ?? "", notes: item.notes ?? "" }); setPayslipModal(true); }}>Edit</Button>
                             <Button variant="outline" onClick={async () => { if (!window.confirm("Delete this payslip?")) return; await payslipDeleteMut.mutateAsync(item.id); }}>Delete</Button>
                           </div>
@@ -390,6 +397,8 @@ export function PayrollPage() {
         )}
       </section>
 
+      {payrollDetailOpen && selectedPayroll && <PayrollDetailModal payroll={selectedPayroll} onClose={() => { setPayrollDetailOpen(false); setSelectedPayroll(null); }} />}
+      {payslipDetailOpen && selectedPayslip && <PayslipDetailModal payslip={selectedPayslip} onClose={() => { setPayslipDetailOpen(false); setSelectedPayslip(null); }} />}
       {processingModal && <Modal title={`${processingEdit ? "Edit" : "New"} Payroll Processing`} onClose={() => setProcessingModal(false)}><form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setError(null); if (processingForm.month < 1 || processingForm.month > 12) { setError("Payroll Processing month must be between 1 and 12."); return; } if (processingForm.year < 2020) { setError("Payroll Processing year must be 2020 or later."); return; } const payload = { ...processingForm, processed_at: processingForm.processed_at || null, notes: processingForm.notes?.trim() ? processingForm.notes.trim() : null }; if (processingEdit) { void processingUpdate.mutate({ id: processingEdit.id, payload }); return; } void processingCreate.mutate(payload); }}><div className="grid gap-3 md:grid-cols-2"><FormField label="Month"><FormInput type="number" min={1} max={12} value={processingForm.month} onChange={(e) => setProcessingForm((p) => ({ ...p, month: Number(e.target.value) }))} /></FormField><FormField label="Year"><FormInput type="number" min={2020} value={processingForm.year} onChange={(e) => setProcessingForm((p) => ({ ...p, year: Number(e.target.value) }))} /></FormField><FormField label="Status"><select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={processingForm.status} onChange={(e) => setProcessingForm((p) => ({ ...p, status: e.target.value as PayrollProcessing["status"] }))}><option value="draft">Draft</option><option value="processing">Processing</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></FormField><FormField label="Processed At"><FormInput type="date" value={processingForm.processed_at} onChange={(e) => setProcessingForm((p) => ({ ...p, processed_at: e.target.value }))} /></FormField></div><FormField label="Notes"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={processingForm.notes} onChange={(e) => setProcessingForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Add processing notes, exceptions, and approvals..." maxLength={1000} /></FormField><div className="flex justify-end"><Button type="submit">{processingEdit ? "Update" : "Create"}</Button></div></form></Modal>}
       {payslipModal && <Modal title={`${payslipEdit ? "Edit" : "New"} Payslip`} onClose={() => setPayslipModal(false)}><form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setError(null); if (!payslipForm.issue_date) { setError("Payslip issue date is required."); return; } if (!payslipEdit && (!payslipForm.employee_id || !payslipForm.payroll_id || !payslipForm.slip_number.trim())) { setError("Employee, payroll, and slip number are required."); return; } if (payslipEdit) { void payslipUpdateMut.mutate({ id: payslipEdit.id, payload: { status: payslipForm.status, issue_date: payslipForm.issue_date, file_url: payslipForm.file_url || undefined, notes: payslipForm.notes || undefined } }); return; } void payslipCreate.mutate({ ...payslipForm, slip_number: payslipForm.slip_number.trim(), file_url: payslipForm.file_url || null, notes: payslipForm.notes || null }); }}><div className="grid gap-3 md:grid-cols-2"><FormField label="Employee"><select disabled={Boolean(payslipEdit)} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={payslipForm.employee_id} onChange={(e) => setPayslipForm((p) => ({ ...p, employee_id: Number(e.target.value) }))}><option value={0}>Select employee</option>{(employees.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></FormField><FormField label="Payroll"><select disabled={Boolean(payslipEdit)} className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={payslipForm.payroll_id} onChange={(e) => setPayslipForm((p) => ({ ...p, payroll_id: Number(e.target.value) }))}><option value={0}>Select payroll</option>{(payrolls.data ?? []).map((x) => <option key={x.id} value={x.id}>#{x.id} - {x.month}/{x.year}</option>)}</select></FormField>{!payslipEdit && <FormField label="Slip Number"><FormInput value={payslipForm.slip_number} onChange={(e) => setPayslipForm((p) => ({ ...p, slip_number: e.target.value }))} /></FormField>}<FormField label="Issue Date"><FormInput type="date" value={payslipForm.issue_date} onChange={(e) => setPayslipForm((p) => ({ ...p, issue_date: e.target.value }))} /></FormField><FormField label="Status"><select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={payslipForm.status} onChange={(e) => setPayslipForm((p) => ({ ...p, status: e.target.value as Payslip["status"] }))}><option value="draft">Draft</option><option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></FormField><FormField label="File URL"><FormInput value={payslipForm.file_url} onChange={(e) => setPayslipForm((p) => ({ ...p, file_url: e.target.value }))} placeholder="https://..." /></FormField></div><FormField label="Notes"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={payslipForm.notes} onChange={(e) => setPayslipForm((p) => ({ ...p, notes: e.target.value }))} maxLength={1000} /></FormField><div className="flex justify-end"><Button type="submit">{payslipEdit ? "Update" : "Create"}</Button></div></form></Modal>}
       {bonusModal && <Modal title={`${bonusEdit ? "Edit" : "New"} Bonus`} onClose={() => setBonusModal(false)}><form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setError(null); if (!bonusForm.employee_id) { setError("Please select an employee for the bonus record."); return; } if (!bonusForm.title.trim()) { setError("Bonus title is required."); return; } if (bonusForm.amount < 0) { setError("Bonus amount cannot be negative."); return; } if (!bonusForm.effective_date) { setError("Effective date is required."); return; } const linkedPayroll = bonusForm.payroll_id ? (payrolls.data ?? []).find((payroll) => payroll.id === bonusForm.payroll_id) : null; if (linkedPayroll && linkedPayroll.employee_id !== bonusForm.employee_id) { setError("Selected payroll must belong to the selected employee."); return; } const payload = { ...bonusForm, title: bonusForm.title.trim(), payroll_id: bonusForm.payroll_id || null, notes: bonusForm.notes.trim() || null, taxable: Boolean(bonusForm.taxable) }; if (bonusEdit) { void bonusUpdateMut.mutate({ id: bonusEdit.id, payload }); return; } void bonusCreate.mutate(payload); }}><div className="grid gap-3 md:grid-cols-2"><FormField label="Employee"><select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={bonusForm.employee_id} onChange={(e) => { const employeeId = Number(e.target.value); setBonusForm((p) => ({ ...p, employee_id: employeeId, payroll_id: (payrolls.data ?? []).some((payroll) => payroll.id === p.payroll_id && payroll.employee_id === employeeId) ? p.payroll_id : 0 })); }}><option value={0}>Select employee</option>{(employees.data ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></FormField><FormField label="Payroll (optional)"><select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={bonusForm.payroll_id} onChange={(e) => setBonusForm((p) => ({ ...p, payroll_id: Number(e.target.value) }))}><option value={0}>No linked payroll</option>{bonusPayrollOptions.map((x) => <option key={x.id} value={x.id}>#{x.id} - {x.month}/{x.year}</option>)}</select></FormField><FormField label="Title"><FormInput value={bonusForm.title} onChange={(e) => setBonusForm((p) => ({ ...p, title: e.target.value }))} placeholder="Quarterly Incentive" /></FormField><FormField label="Amount"><FormInput type="number" min={0} step="0.01" value={bonusForm.amount} onChange={(e) => setBonusForm((p) => ({ ...p, amount: Number(e.target.value) }))} /></FormField><FormField label="Effective Date"><FormInput type="date" value={bonusForm.effective_date} onChange={(e) => setBonusForm((p) => ({ ...p, effective_date: e.target.value }))} /></FormField><FormField label="Taxable"><label className="flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"><input type="checkbox" checked={bonusForm.taxable} onChange={(e) => setBonusForm((p) => ({ ...p, taxable: e.target.checked }))} /> Mark as taxable</label></FormField></div><FormField label="Notes"><textarea className="min-h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={bonusForm.notes} onChange={(e) => setBonusForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Add context for finance or payroll review." maxLength={1000} /></FormField><div className="flex justify-end"><Button type="submit" disabled={bonusCreate.isPending || bonusUpdateMut.isPending}>{bonusEdit ? "Update" : "Create"}</Button></div></form></Modal>}
@@ -399,9 +408,6 @@ export function PayrollPage() {
   );
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="mb-1 block text-sm font-medium">{label}</label>{children}</div>;
-}
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
@@ -436,6 +442,68 @@ function PayslipStatusBadge({ status }: { status: Payslip["status"] }) {
       : "bg-slate-100 text-slate-700 border-slate-200";
 
   return <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}>{status}</span>;
+}
+
+function SalaryBreakdown({ payroll }: { payroll: PayrollRecord }) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SummaryCard label="Base Salary" value={formatCurrency(Number(payroll.base_salary ?? 0))} />
+        <SummaryCard label="Bonus" value={formatCurrency(Number(payroll.bonus ?? 0))} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SummaryCard label="Deductions" value={formatCurrency(Number(payroll.deductions ?? 0))} />
+        <SummaryCard label="Tax" value={formatCurrency(Number(payroll.tax ?? 0))} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SummaryCard label="Net Salary" value={formatCurrency(Number(payroll.net_salary ?? 0))} />
+        <SummaryCard label="Payment Date" value={payroll.payment_date ? payroll.payment_date.slice(0, 10) : "Pending"} />
+      </div>
+    </div>
+  );
+}
+
+function PayrollDetailModal({ payroll, onClose }: { payroll: PayrollRecord; onClose: () => void }) {
+  return (
+    <Modal title={`Payroll Detail — ${payroll.employee?.name ?? `#${payroll.employee_id}`}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SummaryCard label="Month/Year" value={`${payroll.month}/${payroll.year}`} />
+          <SummaryCard label="Status" value={payroll.status} />
+        </div>
+        <SalaryBreakdown payroll={payroll} />
+      </div>
+    </Modal>
+  );
+}
+
+function PayslipDetailModal({ payslip, onClose }: { payslip: Payslip; onClose: () => void }) {
+  return (
+    <Modal title={`Payslip — ${payslip.slip_number}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SummaryCard label="Employee" value={payslip.employee?.name ?? `#${payslip.employee_id}`} />
+          <SummaryCard label="Issue Date" value={payslip.issue_date.slice(0, 10)} />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SummaryCard label="Status" value={payslip.status} />
+          <SummaryCard label="Payroll" value={payslip.payroll ? `#${payslip.payroll.id}` : String(payslip.payroll_id)} />
+        </div>
+        {payslip.file_url ? (
+          <a href={payslip.file_url} target="_blank" rel="noreferrer" className="inline-flex rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">
+            Download Payslip
+          </a>
+        ) : (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--muted)]">No file attached for this payslip.</div>
+        )}
+        {payslip.payroll ? <SalaryBreakdown payroll={payslip.payroll} /> : null}
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+          <p className="text-sm font-semibold text-[var(--text)]">Notes</p>
+          <p className="text-sm text-[var(--muted)]">{payslip.notes ?? "No notes available."}</p>
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 function SectionTable({ headers, rows, onAdd }: { headers: string[]; rows: React.ReactNode[][]; onAdd: () => void }) {

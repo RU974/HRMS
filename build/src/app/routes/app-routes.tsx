@@ -5,8 +5,7 @@ import { AuthGuard } from "@/app/guards/auth-guard";
 import { PermissionGuard } from "@/app/guards/permission-guard";
 import { SuperAdminGuard } from "@/app/guards/role-guard";
 import { DashboardPage } from "@/modules/dashboard/dashboard-page";
-import { EmployeesPage } from "@/modules/employees";
-import { EmployeeFormPage } from "@/modules/employees/employee-form-page";
+import { EmployeesPage, EmployeeFormPage } from "@/modules/employees";
 import { AttendancePage } from "@/modules/attendance";
 import { PayrollPage } from "@/modules/payroll";
 import { RecruitmentPage } from "@/modules/recruitment";
@@ -15,6 +14,7 @@ import { InterviewsPage } from "@/modules/recruitment/interviews-page";
 import { JobsPage } from "@/modules/recruitment/jobs-page";
 import { OnboardingPage } from "@/modules/recruitment/onboarding-page";
 import { LeavesPage } from "@/modules/leaves";
+import { EmployeeDocumentsPage } from "@/modules/employee-documents";
 import { DepartmentsPage } from "@/modules/departments";
 import { DesignationsPage } from "@/modules/designations";
 import { ShiftsPage } from "@/modules/shifts";
@@ -30,6 +30,7 @@ import { ChatPage } from "@/modules/chat";
 import { ReportsPage } from "@/modules/reports";
 import { AttendanceReportsPage } from "@/modules/reports/attendance-reports-page";
 import { EmployeeReportsPage } from "@/modules/reports/employee-reports-page";
+import { LeaveReportsPage } from "@/modules/reports/leave-reports-page";
 import { PayrollReportsPage } from "@/modules/reports/payroll-reports-page";
 import { AnalyticsReportsPage } from "@/modules/reports/analytics-reports-page";
 import { SearchPage } from "@/modules/search";
@@ -63,6 +64,7 @@ export const appRouter = createBrowserRouter([
       { path: "recruitment/interviews", element: withPermission(<InterviewsPage />, ["recruitment.view"]) },
       { path: "recruitment/onboarding", element: withPermission(<OnboardingPage />, ["recruitment.view"]) },
       { path: "leaves", element: withPermission(<LeavesPage />, ["view leaves", "approve leaves", "request own leave"]) },
+      { path: "employee-documents", element: <EmployeeDocumentsPage /> },
       { path: "departments", element: withPermission(<DepartmentsPage />, ["manage settings"]) },
       { path: "designations", element: withPermission(<DesignationsPage />, ["manage settings"]) },
       { path: "shifts", element: withPermission(<ShiftsPage />, ["attendance.edit"]) },
@@ -75,11 +77,12 @@ export const appRouter = createBrowserRouter([
       { path: "announcements", element: withPermission(<AnnouncementsPage />, ["view announcements", "manage announcements"]) },
       { path: "notifications", element: withPermission(<NotificationsPage />, ["view notifications", "manage notifications"]) },
       { path: "chat", element: <ChatPage /> },
-      { path: "reports", element: withPermission(<ReportsPage />, ["view employees", "view attendance", "view payroll", "view performance", "manage payroll", "manage performance", "recruitment.view"]) },
-      { path: "reports/attendance", element: withPermission(<AttendanceReportsPage />, ["view attendance", "manage attendance"]) },
-      { path: "reports/employees", element: withPermission(<EmployeeReportsPage />, ["view employees", "manage employees"]) },
-      { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["manage payroll", "view payroll"]) },
-      { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view employees", "view attendance", "manage payroll", "manage performance", "view performance"]) },
+      { path: "reports", element: withPermission(<ReportsPage />, ["view reports", "manage reports"]) },
+      { path: "reports/attendance", element: withPermission(<AttendanceReportsPage />, ["view reports", "manage reports"]) },
+      { path: "reports/employees", element: withPermission(<EmployeeReportsPage />, ["view reports", "manage reports"]) },
+      { path: "reports/leave", element: withPermission(<LeaveReportsPage />, ["view reports", "manage reports"]) },
+      { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["view reports", "manage reports"]) },
+      { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view reports", "manage reports"]) },
       { path: "search", element: <SearchPage /> },
       { path: "settings", element: withPermission(<SettingsPage />, ["manage users", "user.manage", "manage roles", "manage settings"]) }
     ]
