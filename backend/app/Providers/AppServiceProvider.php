@@ -7,6 +7,8 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Gate;
+use App\Models\User;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -44,6 +46,15 @@ class AppServiceProvider extends ServiceProvider
             $email = urlencode((string) $notifiable->getEmailForPasswordReset());
 
             return $frontendUrl . '/auth/reset-password?token=' . urlencode($token) . '&email=' . $email;
+        });
+
+        // Grant Super Admin unconditional access to all policies and gates.
+        Gate::before(function ($user, $ability) {
+            if ($user instanceof User && $user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+                return true;
+            }
+
+            return null;
         });
     }
 }

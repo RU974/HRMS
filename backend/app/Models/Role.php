@@ -2,40 +2,33 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Role extends Model
 {
-    use HasFactory, HasUuids;
-
-    protected $keyType = 'string';
-    public $incrementing = false;
+    use HasFactory;
 
     protected $fillable = [
-        'company_id',
         'name',
-        'guard_name',
+        'display_name',
         'description',
-        'is_system',
+        'company_id',
+        'guard_name',
     ];
 
-    protected $casts = [
-        'is_system' => 'boolean',
-    ];
-
-    public function permissions(): BelongsToMany
+    public function permissions()
     {
-        return $this->belongsToMany(Permission::class, 'role_has_permissions')
-            ->withTimestamps();
+        return $this->belongsToMany(Permission::class, 'permission_role');
     }
 
-    public function users(): MorphToMany
+    public function users()
     {
-        return $this->morphedByMany(User::class, 'model', 'model_has_roles', 'role_id', 'model_id')
-            ->withTimestamps();
+        return $this->morphedByMany(User::class, 'model', 'model_has_roles', 'role_id', 'model_id');
+    }
+
+    public function assignedUsers()
+    {
+        return $this->belongsToMany(User::class, 'role_user');
     }
 }

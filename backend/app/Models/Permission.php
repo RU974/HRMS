@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,24 +9,21 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
 class Permission extends Model
 {
-    use HasFactory, HasUuids;
-
-    protected $keyType = 'string';
-    public $incrementing = false;
+    use HasFactory;
 
     protected $fillable = [
         'name',
         'module',
         'action',
-        'guard_name',
+        'display_name',
         'description',
+        'company_id',
+        'guard_name',
     ];
-
-    protected $appends = ['key'];
 
     public function roles(): BelongsToMany
     {
-        return $this->belongsToMany(Role::class, 'role_has_permissions')
+        return $this->belongsToMany(Role::class, 'permission_role')
             ->withTimestamps();
     }
 
@@ -39,11 +35,6 @@ class Permission extends Model
 
     public function getKeyAttribute(): string
     {
-        return $this->module . '.' . $this->action;
-    }
-
-    public function getRouteKeyName(): string
-    {
-        return 'name';
+        return ($this->module ? $this->module . '.' : '') . $this->action;
     }
 }

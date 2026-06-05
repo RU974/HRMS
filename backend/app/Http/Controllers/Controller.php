@@ -33,6 +33,9 @@ abstract class Controller
     protected function authorizePermission(Request $request, string $permission, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
+        if ($user && $user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            return;
+        }
         if (!$user || !$user->can($permission)) {
             abort(403, $message);
         }
@@ -41,6 +44,9 @@ abstract class Controller
     protected function authorizeAnyPermission(Request $request, array $permissions, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
+        if ($user && $user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            return;
+        }
         if (!$user || !$user->hasAnyPermission($permissions)) {
             abort(403, $message);
         }
@@ -49,6 +55,9 @@ abstract class Controller
     protected function authorizeSelfOrPermission(Request $request, ?int $userId, string $permission, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
+        if ($user && $user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            return;
+        }
         if ($user && $user->hasPermission($permission)) {
             return;
         }
@@ -66,6 +75,10 @@ abstract class Controller
             abort(403, $message);
         }
 
+        if ($user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            return;
+        }
+
         if (!$user->hasAnyRole($roles)) {
             abort(403, $message);
         }
@@ -74,6 +87,9 @@ abstract class Controller
     protected function authorizeSelfOrRole(Request $request, ?int $userId, array $roles, string $message = 'You are not authorized to perform this action.'): void
     {
         $user = $request->user();
+        if ($user && $user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            return;
+        }
         if ($user && $user->hasAnyRole($roles)) {
             return;
         }

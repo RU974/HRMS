@@ -4,6 +4,7 @@ namespace App\Models\Concerns;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\User;
 use App\Services\PermissionService;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
@@ -37,6 +38,10 @@ trait HasRoles
     public function hasRole(string|array|Role $roles): bool
     {
         $roleNames = $this->getRoleNames();
+        // Super Admin bypass: has every role implicitly
+        if ($roleNames->contains(User::ROLE_SUPER_ADMIN)) {
+            return true;
+        }
         $requested = collect(is_array($roles) ? $roles : [$roles])
             ->map(fn ($role) => $role instanceof Role ? $role->name : trim((string) $role))
             ->filter()

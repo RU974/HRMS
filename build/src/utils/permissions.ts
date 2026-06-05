@@ -1,3 +1,5 @@
+import { isSuperAdminRole } from "@/config/rbac";
+
 type PermissionLike = string | { key?: string | null; name?: string | null; module?: string | null; action?: string | null };
 type RoleLike = { permissions?: PermissionLike[] | null };
 type AuthLike = {
@@ -31,6 +33,14 @@ export function collectPermissionKeys(user?: AuthLike | null): string[] {
 }
 
 export function hasPermission(user: AuthLike | null | undefined, permission: string): boolean {
+  // Super admin bypass
+  try {
+    if (isSuperAdminRole(user as any)) {
+      return true;
+    }
+  } catch (e) {
+    // ignore
+  }
   const normalized = normalizePermissionKey(permission);
   const permissions = collectPermissionKeys(user);
 

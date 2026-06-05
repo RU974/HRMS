@@ -123,6 +123,8 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
     { label: "Add Employee", to: "/employees/new" },
     { label: "Attendance", to: "/attendance" },
     { label: "Leaves", to: "/leaves" },
+    { label: "Approvals", to: "/approvals" },
+    { label: "Workflows", to: "/workflows" },
     { label: "Payroll", to: "/payroll" },
     { label: "Recruitment", to: "/recruitment" },
     { label: "Performance", to: "/performance" }

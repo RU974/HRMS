@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
@@ -14,8 +15,14 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        // Ensure database migrations are run before seeding
-        if (!\Schema::hasTable('permissions')) {
+        $usesRefreshDatabase = in_array(
+            RefreshDatabase::class,
+            class_uses_recursive(static::class),
+            true,
+        );
+
+        // Ensure database migrations are run before seeding for non-refresh tests.
+        if (!$usesRefreshDatabase && !\Schema::hasTable('permissions')) {
             $this->artisan('migrate', ['--force' => true]);
         }
 

@@ -32,6 +32,8 @@ use App\Http\Controllers\CompanySettingsController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\ThemeSettingsController;
 use App\Http\Controllers\SystemLogController;
+use App\Http\Controllers\WorkflowController;
+use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ChatMessageController;
@@ -113,6 +115,18 @@ $registerRoutes = function (): void {
                 Route::get('settings/system-logs', [SystemLogController::class, 'index']);
                 Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
             });
+        });
+
+        Route::middleware('permission:approvals:view')->group(function () {
+            Route::get('approvals', [ApprovalController::class, 'index']);
+            Route::get('approvals/{id}', [ApprovalController::class, 'show']);
+        });
+
+        Route::middleware('permission:approvals:manage_settings')->group(function () {
+            Route::post('approvals', [ApprovalController::class, 'store']);
+            Route::post('approvals/{id}/approve', [ApprovalController::class, 'approve']);
+            Route::post('approvals/{id}/reject', [ApprovalController::class, 'reject']);
+            Route::apiResource('workflows', WorkflowController::class)->except(['create', 'edit']);
         });
 
         // Employee routes

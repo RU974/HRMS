@@ -27,6 +27,9 @@ import { PerformanceAppraisalsPage } from "@/modules/performance/appraisals-page
 import { AnnouncementsPage } from "@/modules/announcements";
 import { NotificationsPage } from "@/modules/notifications";
 import { ChatPage } from "@/modules/chat";
+import { ApprovalsPage } from "@/modules/approvals";
+import { ApprovalDetailPage } from "@/modules/approvals";
+import { WorkflowsPage } from "@/modules/workflows";
 import { ReportsPage } from "@/modules/reports";
 import { AttendanceReportsPage } from "@/modules/reports/attendance-reports-page";
 import { EmployeeReportsPage } from "@/modules/reports/employee-reports-page";
@@ -64,6 +67,9 @@ export const appRouter = createBrowserRouter([
       { path: "recruitment/interviews", element: withPermission(<InterviewsPage />, ["recruitment.view"]) },
       { path: "recruitment/onboarding", element: withPermission(<OnboardingPage />, ["recruitment.view"]) },
       { path: "leaves", element: withPermission(<LeavesPage />, ["view leaves", "approve leaves", "request own leave"]) },
+      { path: "approvals", element: withPermission(<ApprovalsPage />, ["approvals:view", "approvals:manage_settings", "approvals:approve"]) },
+      { path: "approvals/:id", element: withPermission(<ApprovalDetailPage />, ["approvals:view", "approvals:manage_settings", "approvals:approve"]) },
+      { path: "workflows", element: withPermission(<WorkflowsPage />, ["approvals:manage_settings"]) },
       { path: "employee-documents", element: <EmployeeDocumentsPage /> },
       { path: "departments", element: withPermission(<DepartmentsPage />, ["manage settings"]) },
       { path: "designations", element: withPermission(<DesignationsPage />, ["manage settings"]) },

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\PermissionService;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,6 +20,10 @@ class PermissionMiddleware
 
         if (!$user) {
             abort(401, 'Unauthenticated.');
+        }
+
+        if ($user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            return $next($request);
         }
 
         $requiredPermissions = array_map('trim', explode('|', $requiredPermission));

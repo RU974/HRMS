@@ -12,6 +12,10 @@ class PermissionService
 
     public function getMergedPermissions(User $user): Collection
     {
+        if ($this->isSuperAdmin($user)) {
+            return collect([self::WILDCARD, '*']);
+        }
+
         $cacheKey = $this->cacheKey($user->id);
 
         return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($user) {
@@ -41,6 +45,10 @@ class PermissionService
 
     public function hasPermission(User $user, string $requiredPermission): bool
     {
+        if ($this->isSuperAdmin($user)) {
+            return true;
+        }
+
         $permissions = $this->getMergedPermissions($user);
         $normalized = mb_strtolower(trim($requiredPermission));
         $normalizedKey = str_replace(':', '.', $normalized);
@@ -49,6 +57,11 @@ class PermissionService
             || $permissions->contains('*')
             || $permissions->contains($normalized)
             || $permissions->contains($normalizedKey);
+    }
+
+    private function isSuperAdmin(User $user): bool
+    {
+        return $user->hasAnyRole([User::ROLE_SUPER_ADMIN]);
     }
 
     public function flushUserPermissionCache(User $user): void

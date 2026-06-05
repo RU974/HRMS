@@ -34,6 +34,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             PermissionSeeder::class,
             RoleSeeder::class,
+            RolePermissionSeeder::class,
+            WorkflowSeeder::class,
         ]);
 
         $superAdminRole = Role::where('name', User::ROLE_SUPER_ADMIN)->whereNull('company_id')->first();

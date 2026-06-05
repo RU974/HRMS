@@ -1,6 +1,7 @@
 export * from "./api-client";
 export * from "./auth-service";
 export * from "./announcement-service";
+export * from "./approval-service";
 export * from "./notification-service";
 export * from "./chat-service";
 export * from "./dashboard-service";

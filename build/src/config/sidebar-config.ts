@@ -48,7 +48,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
     title: "Workspace",
     items: [
       { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
-      { label: "My Profile", path: "/profile", icon: UserCircle2, roles: employeeRoleOnly },
+      { label: "My Profile", path: "/profile", icon: UserCircle2 },
     ],
   },
   {
@@ -58,14 +58,12 @@ export const sidebarSections: SidebarSectionConfig[] = [
         label: "Attendance",
         path: "/attendance",
         icon: Clock3,
-        roles: employeeRoleOnly,
         permissions: ["view attendance", "manage attendance"],
       },
       {
         label: "Leave Management",
         path: "/leaves",
         icon: CalendarRange,
-        roles: employeeRoleOnly,
         permissions: ["view leaves", "approve leaves", "request own leave", "manage leaves"],
       },
     ],
@@ -73,8 +71,8 @@ export const sidebarSections: SidebarSectionConfig[] = [
   {
     title: "Communication",
     items: [
-      { label: "Announcements", path: "/announcements", icon: Megaphone, roles: superAdminRoleOnly },
-      { label: "Notifications", path: "/notifications", icon: Bell, roles: superAdminRoleOnly },
+      { label: "Announcements", path: "/announcements", icon: Megaphone },
+      { label: "Notifications", path: "/notifications", icon: Bell },
       { label: "Chat", path: "/chat", icon: MessageCircleMore },
     ],
   },
@@ -82,9 +80,11 @@ export const sidebarSections: SidebarSectionConfig[] = [
     title: "Operations",
     items: [
       { label: "Employees", path: "/employees", icon: Users2, permissions: ["view employees", "manage employees"] },
-      { label: "Employee Documents", path: "/employee-documents", icon: FileText, roles: employeeRoleOnly, permissions: ["manage employee documents", "view employees", "view attendance"] },
+      { label: "Employee Documents", path: "/employee-documents", icon: FileText, permissions: ["manage employee documents", "view employees", "view attendance"] },
       { label: "Attendance", path: "/attendance", icon: Clock3, permissions: ["view attendance", "manage attendance"] },
       { label: "Leaves", path: "/leaves", icon: CalendarRange, permissions: ["view leaves", "approve leaves", "manage leaves"] },
+      { label: "Approvals", path: "/approvals", icon: ShieldCheck, permissions: ["approvals:view", "approvals:manage_settings", "approvals:approve"] },
+      { label: "Approval Workflows", path: "/workflows", icon: FolderKanban, permissions: ["approvals:manage_settings"] },
       {
         label: "Payroll",
         icon: WalletCards,
@@ -150,7 +150,12 @@ export const sidebarSections: SidebarSectionConfig[] = [
 ];
 
 function canSeeItem(user: AuthUser | null | undefined, item: SidebarItemConfig): boolean {
+  // Super admin always has access to everything
   const roleKeys = getUserRoleKeys(user);
+  if (roleKeys.includes('super_admin')) {
+    return true;
+  }
+
   const matchesRole = !item.roles?.length || item.roles.some((role) => roleKeys.includes(normalizeRoleKey(role)));
   const matchesPermission = !item.permissions?.length
     || (item.requireAllPermissions ? hasAllPermissions(user, item.permissions) : hasAnyPermission(user, item.permissions));
