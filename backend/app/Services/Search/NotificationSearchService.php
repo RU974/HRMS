@@ -18,7 +18,7 @@ class NotificationSearchService
             ->where(function ($builder) use ($user): void {
                 $builder->where('user_id', $user->id);
 
-                if ($user->can('view notifications') || $user->can('manage notifications')) {
+                if ($this->canView($user)) {
                     if ($user->company_id) {
                         if ($this->supportsCompanyScope()) {
                             $builder->orWhere('company_id', $user->company_id);
@@ -55,7 +55,7 @@ class NotificationSearchService
             return true;
         }
 
-        if (!($user->can('view notifications') || $user->can('manage notifications'))) {
+        if (!$this->canView($user)) {
             return false;
         }
 
@@ -68,6 +68,18 @@ class NotificationSearchService
         }
 
         return (string) ($notification->creator?->company_id ?? '') === (string) $user->company_id;
+    }
+
+    private function canView(User $user): bool
+    {
+        return $user->can('notification:view') || $this->canManage($user);
+    }
+
+    private function canManage(User $user): bool
+    {
+        return $user->can('notification:create')
+            || $user->can('notification:edit')
+            || $user->can('notification:delete');
     }
 
     private function sanitize(string $query): string

@@ -33,6 +33,7 @@ export function ChatPage() {
     mutationFn: createChatMessage,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+      await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
       closeModal();
     },
     onError: (e: Error) => setError(e.message)
@@ -42,6 +43,7 @@ export function ChatPage() {
     mutationFn: ({ id, text }: { id: number; text: string }) => updateChatMessage(id, { message: text }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+      await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
       closeModal();
     },
     onError: (e: Error) => setError(e.message)
@@ -51,6 +53,7 @@ export function ChatPage() {
     mutationFn: deleteChatMessage,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+      await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
     },
     onError: (e: Error) => setError(e.message)
   });

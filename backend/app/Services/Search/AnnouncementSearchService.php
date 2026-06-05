@@ -62,16 +62,16 @@ class AnnouncementSearchService
 
     private function canView(User $user): bool
     {
-        return $user->can('view announcements') || $user->can('manage announcements');
+        return $user->can('announcement:view') || $this->canManage($user);
     }
 
     private function canSeeAnnouncement(User $user, Announcement $announcement): bool
     {
-        if ($user->can('manage announcements') || $user->can('manage settings')) {
+        if ($this->canManage($user) || $user->can('manage settings')) {
             return $this->sameCompany($user, $announcement);
         }
 
-        return ($user->can('view announcements') || $user->can('manage announcements'))
+        return $this->canView($user)
             && $announcement->is_published
             && $this->sameCompany($user, $announcement)
             && $this->matchesTarget($user, $announcement);
@@ -93,9 +93,29 @@ class AnnouncementSearchService
     private function matchesTarget(User $user, Announcement $announcement): bool
     {
         return $announcement->target === 'all'
-            || ($announcement->target === 'employees' && $user->can('view employee announcements'))
-            || ($announcement->target === 'hr' && $user->can('view hr announcements'))
-            || ($announcement->target === 'managers' && $user->can('view manager announcements'));
+            || $announcement->target === 'employees'
+            || ($announcement->target === 'hr' && $this->isHrUser($user))
+            || ($announcement->target === 'managers' && $this->isManagerUser($user));
+    }
+
+    private function isHrUser(User $user): bool
+    {
+        return $user->hasRole([
+            User::ROLE_HR_MANAGER,
+            User::ROLE_HR_EXECUTIVE,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ]);
+    }
+
+    private function isManagerUser(User $user): bool
+    {
+        return $user->hasRole([
+            User::ROLE_DEPARTMENT_MANAGER,
+            User::ROLE_HR_MANAGER,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ]);
     }
 
     private function sanitize(string $query): string

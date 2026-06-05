@@ -37,12 +37,14 @@ class NotificationPolicy
 
     private function canView(User $user): bool
     {
-        return $user->can('view notifications') || $user->can('manage notifications');
+        return $user->can('notification:view') || $this->canManage($user);
     }
 
     private function canManage(User $user): bool
     {
-        return $user->can('manage notifications');
+        return $user->can('notification:create')
+            || $user->can('notification:edit')
+            || $user->can('notification:delete');
     }
 
     private function isOwnedByUser(User $user, NotificationItem $notification): bool

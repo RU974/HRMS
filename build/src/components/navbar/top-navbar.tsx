@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useLayoutStore } from "@/store/layout-store";
 import { ThemeSwitcher } from "./theme-switcher";
 import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
+import { ChatDropdown } from "@/components/chat/chat-dropdown";
 import { Button } from "@/components/ui/button";
 import { logoutRequest } from "@/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
@@ -46,6 +47,7 @@ export function TopNavbar() {
           className="ml-auto hidden w-full max-w-md md:block"
         />
         <div className="flex items-center gap-2">
+          <ChatDropdown />
           <NotificationDropdown />
           <ThemeSwitcher />
           <Button variant="ghost" onClick={handleLogout}>Logout</Button>

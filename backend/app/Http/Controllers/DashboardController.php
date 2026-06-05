@@ -422,10 +422,30 @@ class DashboardController extends Controller
     private function announcementVisibleToUser(Announcement $announcement, User $user): bool
     {
         return match ($announcement->target) {
-            'employees' => $user->can('view employee announcements'),
-            'hr' => $user->can('view hr announcements'),
-            'managers' => $user->can('view manager announcements'),
+            'employees' => true,
+            'hr' => $this->isHrUser($user),
+            'managers' => $this->isManagerUser($user),
             default => true,
         };
+    }
+
+    private function isHrUser(User $user): bool
+    {
+        return $user->hasRole([
+            User::ROLE_HR_MANAGER,
+            User::ROLE_HR_EXECUTIVE,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ]);
+    }
+
+    private function isManagerUser(User $user): bool
+    {
+        return $user->hasRole([
+            User::ROLE_DEPARTMENT_MANAGER,
+            User::ROLE_HR_MANAGER,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ]);
     }
 }

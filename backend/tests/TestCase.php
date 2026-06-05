@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
+use Database\Seeders\RolePermissionSeeder;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -29,6 +30,7 @@ abstract class TestCase extends BaseTestCase
         // Ensure permissions and roles exist for authorization tests
         $this->seed(PermissionSeeder::class);
         $this->seed(RoleSeeder::class);
+        $this->seed(RolePermissionSeeder::class);
     }
 
     protected function createUserWithRole(string $roleName, array $attributes = []): User

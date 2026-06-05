@@ -1,0 +1,193 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MessageCircle, ArrowRight, Mail } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { listChatMessages, updateChatMessage } from "@/services/chat-service";
+import { useAuthStore } from "@/store/auth-store";
+
+function formatRelativeTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const diffMinutes = Math.round((Date.now() - date.getTime()) / 60000);
+  if (diffMinutes < 1) {
+    return "just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  return date.toLocaleDateString();
+}
+
+export function ChatDropdown() {
+  const queryClient = useQueryClient();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const user = useAuthStore((state) => state.user);
+
+  const chatQuery = useQuery({
+    queryKey: ["chat-messages", "unread", user?.id],
+    queryFn: () => {
+      if (!user?.id) {
+        return Promise.resolve([] as Array<{ id: number; sender?: { name: string }; message: string; created_at: string }>);
+      }
+
+      return listChatMessages({ receiver_id: user.id, read: "unread" });
+    },
+    enabled: Boolean(user?.id)
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: number) => updateChatMessage(id, { is_read: true }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
+      await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+    }
+  });
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  const unreadMessages = chatQuery.data ?? [];
+  const badgeCount = unreadMessages.length;
+
+  async function markAllAsRead() {
+    await Promise.all(unreadMessages.map((item) => updateChatMessage(item.id, { is_read: true })));
+    await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
+    await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Button
+        type="button"
+        variant="ghost"
+        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-0 text-[var(--text)]"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="Open chat messages"
+      >
+        <MessageCircle className="h-5 w-5" />
+        {badgeCount > 0 ? (
+          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+            {badgeCount}
+          </span>
+        ) : null}
+      </Button>
+
+      {open ? (
+        <div className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/10">
+          <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold">Messages</p>
+              <p className="text-xs text-[var(--muted)]">
+                {badgeCount > 0 ? `${badgeCount} unread message${badgeCount === 1 ? "" : "s"}` : "No new messages"}
+              </p>
+            </div>
+            {badgeCount > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                onClick={async () => await markAllAsRead()}
+              >
+                Mark all read
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="max-h-[34rem] overflow-y-auto px-4 py-3">
+            {chatQuery.isLoading ? (
+              <p className="text-sm text-[var(--muted)]">Loading messages...</p>
+            ) : unreadMessages.length > 0 ? (
+              <div className="space-y-2">
+                {unreadMessages.slice(0, 5).map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--border)]/20 p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 rounded-full bg-[var(--primary)]/10 p-2 text-[var(--primary)]">
+                        <Mail className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold">{item.sender?.name ?? "Unknown sender"}</p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.message}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-[var(--muted)]">{formatRelativeTime(item.created_at)}</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 px-3 text-xs"
+                            onClick={async () => {
+                              await markReadMutation.mutateAsync(item.id);
+                            }}
+                            disabled={markReadMutation.isPending}
+                          >
+                            Mark read
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">No unread chat messages.</p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
+            <Link
+              to="/chat"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--primary)] transition hover:opacity-80"
+              onClick={() => setOpen(false)}
+            >
+              View full chat
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

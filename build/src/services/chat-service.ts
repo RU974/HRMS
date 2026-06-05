@@ -23,11 +23,13 @@ export interface ChatMessagePayload {
   message: string;
 }
 
-export function listChatMessages(query?: { q?: string; sender_id?: number; receiver_id?: number }) {
+export function listChatMessages(query?: { q?: string; sender_id?: number; receiver_id?: number; read?: "all" | "read" | "unread" }) {
   const params = new URLSearchParams();
   if (query?.q?.trim()) params.set("q", query.q.trim());
   if (query?.sender_id) params.set("sender_id", String(query.sender_id));
   if (query?.receiver_id) params.set("receiver_id", String(query.receiver_id));
+  if (query?.read === "read") params.set("read", "true");
+  if (query?.read === "unread") params.set("read", "false");
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return apiClient<ChatMessage[]>(`/chat-messages${suffix}`);
 }

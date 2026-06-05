@@ -41,12 +41,15 @@ class AnnouncementPolicy
 
     private function canView(User $user): bool
     {
-        return $user->can('view announcements') || $user->can('manage announcements');
+        return $user->can('announcement:view') || $this->canManage($user);
     }
 
     private function canManage(User $user): bool
     {
-        return $user->can('manage announcements');
+        return $user->hasAnyRole([User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN])
+            || $user->can('announcement:create')
+            || $user->can('announcement:edit')
+            || $user->can('announcement:delete');
     }
 
     private function sameCompany(User $user, Announcement $announcement): bool
@@ -65,8 +68,28 @@ class AnnouncementPolicy
     private function isTargetVisibleToUser(User $user, Announcement $announcement): bool
     {
         return $announcement->target === 'all'
-            || ($announcement->target === 'employees' && $user->can('view employee announcements'))
-            || ($announcement->target === 'hr' && $user->can('view hr announcements'))
-            || ($announcement->target === 'managers' && $user->can('view manager announcements'));
+            || $announcement->target === 'employees'
+            || ($announcement->target === 'hr' && $this->isHrUser($user))
+            || ($announcement->target === 'managers' && $this->isManagerUser($user));
+    }
+
+    private function isHrUser(User $user): bool
+    {
+        return $user->hasRole([
+            User::ROLE_HR_MANAGER,
+            User::ROLE_HR_EXECUTIVE,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ]);
+    }
+
+    private function isManagerUser(User $user): bool
+    {
+        return $user->hasRole([
+            User::ROLE_DEPARTMENT_MANAGER,
+            User::ROLE_HR_MANAGER,
+            User::ROLE_COMPANY_ADMIN,
+            User::ROLE_SUPER_ADMIN,
+        ]);
     }
 }

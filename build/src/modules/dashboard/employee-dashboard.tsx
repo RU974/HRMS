@@ -55,7 +55,7 @@ export function EmployeeDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={data?.employee?.name ?? "Employee Dashboard"}
+        title="Employee Dashboard"
         subtitle={`Self-service workspace for ${data?.role_name ?? "Employee"} in ${departmentName}.`}
       />
 

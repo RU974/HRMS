@@ -76,6 +76,11 @@ class ChatMessageController extends Controller
             $query->where('receiver_id', (int) $request->query('receiver_id'));
         }
 
+        if ($request->filled('read')) {
+            $readValue = $request->query('read') === 'true' || $request->query('read') === 'read';
+            $query->where('is_read', $readValue);
+        }
+
         return $this->ok($query->latest()->get());
     }
 

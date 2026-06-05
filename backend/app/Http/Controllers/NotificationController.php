@@ -21,7 +21,7 @@ class NotificationController extends Controller
         $query->where(function ($builder) use ($user): void {
             $builder->where('user_id', $user->id);
 
-            if ($user->can('view notifications') || $user->can('manage notifications')) {
+            if ($this->canViewNotifications($user)) {
                 if ($user->company_id) {
                     if ($this->supportsCompanyScope()) {
                         $builder->orWhere('company_id', $user->company_id);
@@ -67,10 +67,10 @@ class NotificationController extends Controller
         ]);
 
         $targetUserId = $validated['user_id'] ?? $user?->id;
-        $isManager = $user?->can('manage notifications') ?? false;
+        $isManager = $this->canManageNotifications($user);
 
         if ($targetUserId !== null && !$isManager) {
-            if (!$user->can('view notifications') && (int) $targetUserId !== (int) $user->id) {
+            if (!$this->canViewNotifications($user) && (int) $targetUserId !== (int) $user->id) {
                 abort(403, 'You can only create notifications for yourself.');
             }
 
@@ -117,7 +117,7 @@ class NotificationController extends Controller
         $item = NotificationItem::with(['user:id,name,email,company_id', 'creator:id,name,email,company_id'])->findOrFail($id);
         $this->authorize('update', $item);
 
-        $isManager = $request->user()->can('manage notifications');
+        $isManager = $this->canManageNotifications($request->user());
         $validated = $request->validate($isManager ? [
             'title' => 'sometimes|string|max:255',
             'message' => 'sometimes|string|max:5000',
@@ -158,6 +158,18 @@ class NotificationController extends Controller
         if ((string) ($targetUser->company_id ?? '') !== (string) $companyId) {
             abort(403, 'You cannot assign notifications outside your company.');
         }
+    }
+
+    private function canManageNotifications(?User $user): bool
+    {
+        return $user?->can('notification:create')
+            || $user?->can('notification:edit')
+            || $user?->can('notification:delete');
+    }
+
+    private function canViewNotifications(User $user): bool
+    {
+        return $user->can('notification:view') || $this->canManageNotifications($user);
     }
 
     private function broadcastNotification(?User $creator, array $validated): NotificationItem

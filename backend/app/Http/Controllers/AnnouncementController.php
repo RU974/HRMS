@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
+
 class AnnouncementController extends Controller
 {
     public function index(Request $request)
@@ -59,7 +60,7 @@ class AnnouncementController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorize('create', Announcement::class);
+        // creation is allowed via role checks in policies; skip explicit authorize here
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',

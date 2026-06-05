@@ -23,6 +23,8 @@ class RolePermissionSeeder extends Seeder
                 'approvals:view', 'approvals:approve', 'approvals:manage_settings',
                 'settings:manage_settings', 'reports:view', 'reports:manage_settings',
                 'performance:view', 'performance:edit', 'performance:manage_settings',
+                'announcement:view', 'announcement:create', 'announcement:edit', 'announcement:delete',
+                'notification:view', 'notification:create', 'notification:edit', 'notification:delete',
             ],
             'HR Manager' => [
                 'dashboard:view',
