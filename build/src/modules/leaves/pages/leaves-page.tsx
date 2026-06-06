@@ -71,6 +71,8 @@ export function LeavesPage() {
   const [editingType, setEditingType] = useState<LeaveTypeItem | null>(null);
   const [form, setForm] = useState<LeaveForm>({ employee_id: currentEmployeeId, type: "", from_date: "", to_date: "", status: "pending" });
   const [typeForm, setTypeForm] = useState<LeaveTypeForm>({ name: "", default_days: 0, is_paid: true });
+  const [rejectModal, setRejectModal] = useState<LeaveItem | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const leaveFilters = useMemo(() => {
     const filters: { employee_id?: number; status?: LeaveItem["status"] } = {};
@@ -319,16 +321,31 @@ export function LeavesPage() {
                         <td className="p-3">{leaveTypeName(item)}</td>
                         <td className="p-3">{item.from_date.slice(0, 10)}</td>
                         <td className="p-3">{item.to_date.slice(0, 10)}</td>
-                        <td className="p-3">{item.status}</td>
+                        <td className="p-3">
+                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+                            item.status === "approved"  ? "bg-emerald-50 text-emerald-700" :
+                            item.status === "pending"   ? "bg-amber-50 text-amber-700"   :
+                            item.status === "rejected"  ? "bg-red-50 text-red-700"       :
+                            "bg-gray-50 text-gray-600"
+                          }`}>{item.status}</span>
+                        </td>
                         <td className="p-3">
                           <div className="flex justify-end flex-wrap gap-2">
                             {canApprove && (
                               <>
-                                <Button variant="outline" onClick={() => void leaveStatusMutation.mutateAsync({ leave: item, status: "approved" })}>
-                                  Approve
+                                <Button
+                                  variant="outline"
+                                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                  onClick={() => void leaveStatusMutation.mutateAsync({ leave: item, status: "approved" })}
+                                >
+                                  ✓ Approve
                                 </Button>
-                                <Button variant="outline" onClick={() => void leaveStatusMutation.mutateAsync({ leave: item, status: "rejected" })}>
-                                  Reject
+                                <Button
+                                  variant="outline"
+                                  className="border-red-200 text-red-600 hover:bg-red-50"
+                                  onClick={() => { setRejectModal(item); setRejectReason(""); }}
+                                >
+                                  ✕ Reject
                                 </Button>
                               </>
                             )}
@@ -458,8 +475,42 @@ export function LeavesPage() {
           </form>
         </Modal>
       )}
+
+      {rejectModal && (
+        <Modal title="Reject Leave Request" onClose={() => setRejectModal(null)}>
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--muted)]">
+              You are rejecting the leave request from{" "}
+              <span className="font-medium text-[var(--text)]">
+                {employeeNameMap?.get(rejectModal.employee_id) ?? `Employee #${rejectModal.employee_id}`}
+              </span>{" "}
+              ({rejectModal.from_date?.slice(0, 10)} → {rejectModal.to_date?.slice(0, 10)}).
+            </p>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Reason for rejection</label>
+              <textarea
+                className="h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Provide a brief reason (optional but recommended)..."
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRejectModal(null)}>Cancel</Button>
+              <Button
+                className="border-red-200 bg-red-600 text-white hover:bg-red-700"
+                onClick={async () => {
+                  await leaveStatusMutation.mutateAsync({ leave: rejectModal, status: "rejected" });
+                  setRejectModal(null);
+                  setRejectReason("");
+                }}
+              >
+                Confirm rejection
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
-
-

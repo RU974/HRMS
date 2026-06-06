@@ -140,9 +140,57 @@ export function PayrollPage() {
     setSearchParams({ tab: nextTab });
   };
 
+  const [generateModalOpen, setGenerateModalOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGeneratePayroll() {
+    setGenerating(true);
+    setError(null);
+    try {
+      await generatePayroll({ month: generateMonth, year: generateYear });
+      await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] });
+      setGenerateModalOpen(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Payroll" subtitle="Manage salary slip, payroll processing, payslips, bonuses, and deductions." />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <PageHeader title="Payroll" subtitle="Manage salary slip, payroll processing, payslips, bonuses, and deductions." />
+        <Button onClick={() => setGenerateModalOpen(true)} className="shrink-0">
+          ⚡ Generate Payroll
+        </Button>
+      </div>
+
+      {generateModalOpen && (
+        <Modal title="Generate Monthly Payroll" onClose={() => setGenerateModalOpen(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--muted)]">
+              This will auto-calculate payroll for all active employees for the selected month and year based on their salary structure.
+            </p>
+            {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Month">
+                <FormInput type="number" min={1} max={12} value={generateMonth} onChange={(e) => setGenerateMonth(Number(e.target.value))} />
+              </FormField>
+              <FormField label="Year">
+                <FormInput type="number" min={2020} value={generateYear} onChange={(e) => setGenerateYear(Number(e.target.value))} />
+              </FormField>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setGenerateModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleGeneratePayroll} disabled={generating}>
+                {generating ? "Generating…" : "Generate payroll"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
         <div className="mb-4 flex flex-wrap gap-2">
           {(["salary-structure", "salary-slip", "payroll-processing", "payslips", "bonuses", "deductions"] as Tab[]).map((t) => (
@@ -161,7 +209,7 @@ export function PayrollPage() {
             <SectionTable
               onAdd={() => { setPayrollEdit(null); setPayrollForm({ employee_id: 0, month: new Date().getMonth() + 1, year: new Date().getFullYear(), base_salary: 0, bonus: 0, deductions: 0, tax: 0, payment_date: "", status: "pending" }); setPayrollModal(true); }}
               headers={["Employee", "Month/Year", "Base", "Net", "Payment Date", "Status", "Actions"]}
-              rows={(payrolls.data ?? []).map((item) => [item.employee?.name ?? `#${item.employee_id}`, `${item.month}/${item.year}`, Number(item.base_salary).toLocaleString(), Number(item.net_salary).toLocaleString(), item.payment_date?.slice(0, 10) ?? "-", item.status, <div className="flex gap-2" key={item.id}><Button variant="outline" onClick={() => { setSelectedPayroll(item); setPayrollDetailOpen(true); }}>View</Button><Button variant="outline" onClick={() => void payrollMarkPaid.mutateAsync(item.id)}>Mark Paid</Button><Button variant="outline" onClick={() => { setPayrollEdit(item); setPayrollForm({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date.slice(0, 10), status: item.status }); setPayrollModal(true); }}>Edit</Button><Button variant="outline" onClick={() => void payrollDelete.mutateAsync(item.id)}>Delete</Button></div>])}
+              rows={(payrolls.data ?? []).map((item) => [item.employee?.name ?? `#${item.employee_id}`, `${item.month}/${item.year}`, Number(item.base_salary).toLocaleString(), Number(item.net_salary).toLocaleString(), item.payment_date?.slice(0, 10) ?? "-", <span key={`status-${item.id}`} className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${ item.status === "paid" ? "bg-emerald-50 text-emerald-700" : item.status === "pending" ? "bg-amber-50 text-amber-700" : item.status === "cancelled" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700" }`}>{item.status}</span>, <div className="flex gap-2" key={item.id}><Button variant="outline" onClick={() => { setSelectedPayroll(item); setPayrollDetailOpen(true); }}>View</Button>{item.status !== "paid" && <Button variant="outline" className="text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => void payrollMarkPaid.mutateAsync(item.id)}>✓ Mark Paid</Button>}<Button variant="outline" onClick={() => { setPayrollEdit(item); setPayrollForm({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date.slice(0, 10), status: item.status }); setPayrollModal(true); }}>Edit</Button><Button variant="outline" onClick={() => void payrollDelete.mutateAsync(item.id)}>Delete</Button></div>])}
             />
           </div>
         )}

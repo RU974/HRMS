@@ -1,33 +1,123 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { getEmployeeReportSummary } from "@/services/report-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
+import { downloadCsv } from "@/modules/reports/report-utils";
+import { Button } from "@/components/ui/button";
+
+declare global { interface Window { Chart: any; } }
+
+const STATUS_COLORS = ["#22c55e", "#ef4444", "#f59e0b", "#6366f1", "#0ea5e9"];
+
+function EmployeeDonut({ rows }: { rows: { status: string; count: number }[] }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const instanceRef = useRef<any>(null);
+
+  useEffect(() => {
+    const init = () => {
+      if (!ref.current || !rows.length) return;
+      if (instanceRef.current) instanceRef.current.destroy();
+      instanceRef.current = new window.Chart(ref.current, {
+        type: "doughnut",
+        data: {
+          labels: rows.map((r) => r.status),
+          datasets: [{ data: rows.map((r) => r.count), backgroundColor: STATUS_COLORS, borderWidth: 2, hoverOffset: 6 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: "65%",
+          plugins: {
+            legend: { position: "right", labels: { font: { size: 11 }, usePointStyle: true } },
+            tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.label}: ${ctx.parsed}` } },
+          },
+        },
+      });
+    };
+    if (window.Chart) { init(); return; }
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    script.onload = init;
+    document.head.appendChild(script);
+    return () => { if (instanceRef.current) instanceRef.current.destroy(); };
+  }, [rows]);
+
+  if (!rows.length) return <p className="text-sm text-[var(--muted)]">No data.</p>;
+  return <div className="h-48"><canvas ref={ref} /></div>;
+}
 
 export function EmployeeReportsPage() {
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["reports", "employees", "summary"],
     queryFn: getEmployeeReportSummary,
   });
 
   const rows = useMemo(() => data ?? [], [data]);
+  const total = rows.reduce((s, r) => s + (r.count ?? 0), 0);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Employee Reports" subtitle="Separate employee reporting and report CRUD." />
-      <Card>
-        <h3 className="text-lg font-semibold">Employee Status Summary</h3>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          {rows.map((item) => (
-            <div key={item.status} className="rounded-lg border border-[var(--border)]/70 p-3">
-              <p className="text-xs uppercase text-[var(--muted)]">{item.status}</p>
-              <p className="text-xl font-semibold">{item.count ?? 0}</p>
-            </div>
-          ))}
-          {rows.length === 0 && <p className="text-sm text-[var(--muted)]">No summary data available.</p>}
-        </div>
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <PageHeader title="Employee Reports" subtitle="Workforce composition and status breakdown." />
+        <Button variant="outline" onClick={() => downloadCsv("employees-summary.csv", ["Status","Count"], rows.map((r) => [r.status, r.count ?? 0]))}>
+          Export CSV
+        </Button>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-4 text-base font-semibold">Employee Status Summary</h3>
+          {isLoading && <div className="h-48 animate-pulse rounded-xl bg-[var(--border)]" />}
+          {!isLoading && <EmployeeDonut rows={rows.map((r) => ({ status: r.status, count: r.count ?? 0 }))} />}
+        </Card>
+
+        <Card>
+          <h3 className="mb-4 text-base font-semibold">Breakdown Table</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Count</th>
+                  <th className="p-3 text-right">% of total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 && !isLoading && (
+                  <tr><td colSpan={3} className="p-6 text-center text-sm text-[var(--muted)]">No data available.</td></tr>
+                )}
+                {isLoading && [...Array(3)].map((_, i) => (
+                  <tr key={i} className="border-b border-[var(--border)]/50">
+                    {[1,2,3].map((j) => <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>)}
+                  </tr>
+                ))}
+                {rows.map((item, i) => (
+                  <tr key={item.status} className="border-b border-[var(--border)]/50">
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[i % STATUS_COLORS.length] }} />
+                        <span className="capitalize font-medium">{item.status}</span>
+                      </div>
+                    </td>
+                    <td className="p-3 text-right font-semibold">{item.count ?? 0}</td>
+                    <td className="p-3 text-right text-[var(--muted)]">
+                      {total > 0 ? `${Math.round(((item.count ?? 0) / total) * 100)}%` : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {rows.length > 0 && (
+                  <tr className="font-semibold">
+                    <td className="p-3">Total</td>
+                    <td className="p-3 text-right">{total}</td>
+                    <td className="p-3 text-right">100%</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
       <ReportCrudSection reportType="employee" />
     </div>
   );

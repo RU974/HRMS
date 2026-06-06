@@ -6,6 +6,7 @@ import { PermissionGuard } from "@/app/guards/permission-guard";
 import { SuperAdminGuard } from "@/app/guards/role-guard";
 import { DashboardPage } from "@/modules/dashboard/dashboard-page";
 import { EmployeesPage, EmployeeFormPage } from "@/modules/employees";
+import { EmployeeDetailPage } from "@/modules/employees/pages/employee-detail-page";
 import { AttendancePage } from "@/modules/attendance";
 import { PayrollPage } from "@/modules/payroll";
 import { RecruitmentPage } from "@/modules/recruitment";
@@ -59,6 +60,7 @@ export const appRouter = createBrowserRouter([
       { path: "profile", element: <ProfilePage /> },
       { path: "employees", element: withPermission(<EmployeesPage />, ["view employees", "manage employees"]) },
       { path: "employees/new", element: withPermission(<EmployeeFormPage />, ["manage employees"]) },
+      { path: "employees/:id", element: withPermission(<EmployeeDetailPage />, ["view employees", "manage employees"]) },
       { path: "attendance", element: withPermission(<AttendancePage />, ["view attendance", "manage attendance"]) },
       { path: "payroll", element: withPermission(<PayrollPage />, ["manage payroll", "view payroll", "view own payroll"]) },
       { path: "recruitment", element: withPermission(<RecruitmentPage />, ["recruitment.view"]) },
@@ -90,8 +92,8 @@ export const appRouter = createBrowserRouter([
       { path: "reports/payroll", element: withPermission(<PayrollReportsPage />, ["view reports", "manage reports"]) },
       { path: "reports/analytics", element: withPermission(<AnalyticsReportsPage />, ["view reports", "manage reports"]) },
       { path: "search", element: <SearchPage /> },
-      { path: "settings", element: withPermission(<SettingsPage />, ["manage users", "user.manage", "manage roles", "manage settings"]) }
-    ]
+      { path: "settings", element: withPermission(<SettingsPage />, ["manage users", "user.manage", "manage roles", "manage settings"]) },
+    ],
   },
   {
     path: "/auth",
@@ -100,7 +102,7 @@ export const appRouter = createBrowserRouter([
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
-      { path: "reset-password", element: <ResetPasswordPage /> }
-    ]
-  }
+      { path: "reset-password", element: <ResetPasswordPage /> },
+    ],
+  },
 ]);
