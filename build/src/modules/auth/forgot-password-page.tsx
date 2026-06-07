@@ -3,18 +3,16 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { forgotPassword } from "@/services/auth-service";
-import { Toast } from "@/components/notifications/toast";
+import { toast } from "@/components/notifications/toast";
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setSuccess("");
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -25,7 +23,7 @@ export function ForgotPasswordPage() {
     setLoading(true);
     try {
       await forgotPassword(normalizedEmail);
-      setSuccess("If the email exists, a reset link has been sent.");
+      toast.success("Reset link sent", "If the email exists, a reset link has been sent.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send reset link");
     } finally {
@@ -35,7 +33,6 @@ export function ForgotPasswordPage() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-      {success && <Toast message={success} />}
       <h1 className="text-2xl font-bold">Forgot password</h1>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">Enter your work email to receive a password reset link.</p>
       <div className="mt-4 space-y-3">
@@ -56,5 +53,3 @@ export function ForgotPasswordPage() {
     </form>
   );
 }
-
-

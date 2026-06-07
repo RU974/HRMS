@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { resetPassword } from "@/services/auth-service";
-import { Toast } from "@/components/notifications/toast";
+import { toast } from "@/components/notifications/toast";
 
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -14,13 +14,11 @@ export function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setSuccess("");
 
     if (!token) {
       setError("Reset token is missing or invalid.");
@@ -47,7 +45,7 @@ export function ResetPasswordPage() {
         password,
         passwordConfirmation
       });
-      setSuccess("Password reset successfully. You can now sign in.");
+      toast.success("Password reset", "Password reset successfully. You can now sign in.");
       setPassword("");
       setPasswordConfirmation("");
     } catch (err) {
@@ -59,7 +57,6 @@ export function ResetPasswordPage() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
-      {success && <Toast message={success} />}
       <h1 className="text-2xl font-bold">Reset password</h1>
       <p className="mt-2 text-sm text-[var(--muted-foreground)]">Enter your account email and a new password to finish reset.</p>
       <div className="mt-4 space-y-3">
@@ -96,5 +93,3 @@ export function ResetPasswordPage() {
     </form>
   );
 }
-
-
