@@ -16,6 +16,7 @@ return new class extends Migration
                 $table->string('display_name')->nullable();
                 $table->text('description')->nullable();
                 $table->unsignedBigInteger('company_id')->nullable()->index();
+                $table->boolean('is_system')->default(false);
                 $table->timestamps();
             });
         }
