@@ -40,14 +40,25 @@ export interface SidebarSectionConfig {
   items: SidebarItemConfig[];
 }
 
-const employeeRoleOnly: RoleKey[] = ["employee"];
-const superAdminRoleOnly: RoleKey[] = ["super_admin"];
+// ─── Actual permission keys from DB (module:action → normalized as module.action) ───
+// Seeder generates: dashboard.view, employees.view, employees.create, employees.edit,
+// employees.delete, leaves.view, leaves.approve, leaves.manage_settings,
+// attendance.view, attendance.create, attendance.edit, attendance.manage_settings,
+// payroll.view, payroll.create, payroll.edit, payroll.approve, payroll.manage_settings,
+// recruitment.view, recruitment.create, recruitment.edit, recruitment.delete,
+// documents.view, documents.create, documents.edit, documents.delete,
+// approvals.view, approvals.approve, approvals.manage_settings,
+// reports.view, reports.export, reports.manage_settings,
+// announcement.view, announcement.create, announcement.edit, announcement.delete,
+// notification.view, performance.view, performance.edit, performance.manage_settings,
+// settings.manage_settings, users.view, users.create, users.edit, users.delete,
+// audit_logs.view
 
 export const sidebarSections: SidebarSectionConfig[] = [
   {
     title: "Workspace",
     items: [
-      { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+      { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, permissions: ["dashboard.view"] },
       { label: "My Profile", path: "/profile", icon: UserCircle2 },
     ],
   },
@@ -58,91 +69,147 @@ export const sidebarSections: SidebarSectionConfig[] = [
         label: "Attendance",
         path: "/attendance",
         icon: Clock3,
-        permissions: ["view attendance", "manage attendance"],
+        permissions: ["attendance.view", "attendance.create", "attendance.edit", "attendance.manage_settings"],
       },
       {
         label: "Leave Management",
         path: "/leaves",
         icon: CalendarRange,
-        permissions: ["view leaves", "approve leaves", "request own leave", "manage leaves"],
+        permissions: ["leaves.view", "leaves.approve", "leaves.create", "leaves.manage_settings"],
       },
     ],
   },
   {
     title: "Communication",
     items: [
-      { label: "Announcements", path: "/announcements", icon: Megaphone },
-      { label: "Notifications", path: "/notifications", icon: Bell },
-      { label: "Chat", path: "/chat", icon: MessageCircleMore },
+      { label: "Announcements", path: "/announcements", icon: Megaphone, permissions: ["announcement.view"] },
+      { label: "Notifications",  path: "/notifications",  icon: Bell,    permissions: ["notification.view"] },
+      { label: "Chat",           path: "/chat",           icon: MessageCircleMore },
     ],
   },
   {
     title: "Operations",
     items: [
-      { label: "Employees", path: "/employees", icon: Users2, permissions: ["view employees", "manage employees"] },
-      { label: "Employee Documents", path: "/employee-documents", icon: FileText, permissions: ["manage employee documents", "view employees", "view attendance"] },
-      { label: "Attendance", path: "/attendance", icon: Clock3, permissions: ["view attendance", "manage attendance"] },
-      { label: "Leaves", path: "/leaves", icon: CalendarRange, permissions: ["view leaves", "approve leaves", "manage leaves"] },
-      { label: "Approvals", path: "/approvals", icon: ShieldCheck, permissions: ["approvals:view", "approvals:manage_settings", "approvals:approve"] },
-      { label: "Approval Workflows", path: "/workflows", icon: FolderKanban, permissions: ["approvals:manage_settings"] },
+      {
+        label: "Employees",
+        path: "/employees",
+        icon: Users2,
+        permissions: ["employees.view", "employees.create", "employees.edit", "employees.delete"],
+      },
+      {
+        label: "Employee Documents",
+        path: "/employee-documents",
+        icon: FileText,
+        permissions: ["documents.view", "documents.create", "documents.edit", "documents.delete"],
+      },
+      {
+        label: "Attendance",
+        path: "/attendance",
+        icon: Clock3,
+        permissions: ["attendance.view", "attendance.edit", "attendance.manage_settings"],
+      },
+      {
+        label: "Leaves",
+        path: "/leaves",
+        icon: CalendarRange,
+        permissions: ["leaves.view", "leaves.approve", "leaves.manage_settings"],
+      },
+      {
+        label: "Approvals",
+        path: "/approvals",
+        icon: ShieldCheck,
+        permissions: ["approvals.view", "approvals.approve", "approvals.manage_settings"],
+      },
+      {
+        label: "Approval Workflows",
+        path: "/workflows",
+        icon: FolderKanban,
+        permissions: ["approvals.manage_settings"],
+      },
       {
         label: "Payroll",
         icon: WalletCards,
-        permissions: ["manage payroll", "view payroll", "view own payroll"],
+        permissions: ["payroll.view", "payroll.create", "payroll.edit", "payroll.approve", "payroll.manage_settings"],
         children: [
-          { label: "Salary Structure", path: "/payroll?tab=salary-structure", icon: BriefcaseBusiness, permissions: ["manage payroll"] },
-          { label: "Payroll Processing", path: "/payroll?tab=payroll-processing", icon: FolderKanban, permissions: ["manage payroll"] },
-          { label: "Payslips", path: "/payroll?tab=payslips", icon: FileText, permissions: ["manage payroll", "view payroll", "view own payroll"] },
-          { label: "Bonuses", path: "/payroll?tab=bonuses", icon: BadgeInfo, permissions: ["manage payroll", "view payroll", "view own payroll"] },
-          { label: "Deductions", path: "/payroll?tab=deductions", icon: ScrollText, permissions: ["manage payroll", "view payroll", "view own payroll"] },
+          { label: "Salary Structure",    path: "/payroll?tab=salary-structure",    icon: BriefcaseBusiness, permissions: ["payroll.manage_settings"] },
+          { label: "Payroll Processing",  path: "/payroll?tab=payroll-processing",  icon: FolderKanban,      permissions: ["payroll.edit", "payroll.manage_settings"] },
+          { label: "Payslips",            path: "/payroll?tab=payslips",            icon: FileText,          permissions: ["payroll.view", "payroll.create", "payroll.edit", "payroll.manage_settings"] },
+          { label: "Bonuses",             path: "/payroll?tab=bonuses",             icon: BadgeInfo,         permissions: ["payroll.view", "payroll.edit", "payroll.manage_settings"] },
+          { label: "Deductions",          path: "/payroll?tab=deductions",          icon: ScrollText,        permissions: ["payroll.view", "payroll.edit", "payroll.manage_settings"] },
         ],
       },
       {
         label: "Recruitment",
         icon: FolderKanban,
-        permissions: ["recruitment.view"],
+        permissions: ["recruitment.view", "recruitment.create", "recruitment.edit", "recruitment.delete"],
         children: [
-          { label: "Overview", path: "/recruitment", icon: FolderKanban, permissions: ["recruitment.view"] },
-          { label: "Jobs", path: "/recruitment/jobs", icon: BriefcaseBusiness, permissions: ["recruitment.view"] },
-          { label: "Candidates", path: "/recruitment/candidates", icon: Users2, permissions: ["recruitment.view"] },
-          { label: "Interviews", path: "/recruitment/interviews", icon: CalendarClock, permissions: ["recruitment.view"] },
-          { label: "Onboarding", path: "/recruitment/onboarding", icon: FileText, permissions: ["recruitment.view"] },
+          { label: "Overview",     path: "/recruitment",                icon: FolderKanban,    permissions: ["recruitment.view"] },
+          { label: "Jobs",         path: "/recruitment/jobs",           icon: BriefcaseBusiness, permissions: ["recruitment.view"] },
+          { label: "Candidates",   path: "/recruitment/candidates",     icon: Users2,          permissions: ["recruitment.view"] },
+          { label: "Interviews",   path: "/recruitment/interviews",     icon: CalendarClock,   permissions: ["recruitment.view"] },
+          { label: "Onboarding",   path: "/recruitment/onboarding",     icon: FileText,        permissions: ["recruitment.view"] },
         ],
       },
       {
         label: "Performance",
         icon: ChartColumn,
-        permissions: ["view performance", "manage performance"],
+        permissions: ["performance.view", "performance.edit", "performance.manage_settings"],
         children: [
-          { label: "Overview", path: "/performance", icon: ChartColumn, permissions: ["view performance", "manage performance"] },
-          { label: "Reviews", path: "/performance/reviews", icon: FileText, permissions: ["view performance", "manage performance"] },
-          { label: "KPIs", path: "/performance/kpis", icon: BadgeInfo, permissions: ["view performance", "manage performance"] },
-          { label: "Goals", path: "/performance/goals", icon: ShieldCheck, permissions: ["view performance", "manage performance"] },
-          { label: "Appraisals", path: "/performance/appraisals", icon: BriefcaseBusiness, permissions: ["view performance", "manage performance"] },
+          { label: "Overview",    path: "/performance",             icon: ChartColumn,  permissions: ["performance.view", "performance.edit"] },
+          { label: "Reviews",     path: "/performance/reviews",     icon: FileText,     permissions: ["performance.view", "performance.edit"] },
+          { label: "KPIs",        path: "/performance/kpis",        icon: BadgeInfo,    permissions: ["performance.view", "performance.edit"] },
+          { label: "Goals",       path: "/performance/goals",       icon: ShieldCheck,  permissions: ["performance.view", "performance.edit"] },
+          { label: "Appraisals",  path: "/performance/appraisals",  icon: BriefcaseBusiness, permissions: ["performance.view", "performance.edit"] },
         ],
       },
-      { label: "Reports", path: "/reports", icon: FileText, permissions: ["view reports", "manage reports"] },
+      {
+        label: "Reports",
+        path: "/reports",
+        icon: FileText,
+        permissions: ["reports.view", "reports.export", "reports.manage_settings"],
+      },
     ],
   },
   {
     title: "Administration",
     items: [
-      { label: "Departments", path: "/departments", icon: Building2, permissions: ["manage settings"] },
-      { label: "Designations", path: "/designations", icon: BriefcaseBusiness, permissions: ["manage settings"] },
-      { label: "Shifts", path: "/shifts", icon: CalendarClock, permissions: ["attendance.edit"] },
-      { label: "Holidays", path: "/holidays", icon: CalendarRange, permissions: ["attendance.edit"] },
+      {
+        label: "Departments",
+        path: "/departments",
+        icon: Building2,
+        permissions: ["settings.manage_settings", "employees.manage_settings"],
+      },
+      {
+        label: "Designations",
+        path: "/designations",
+        icon: BriefcaseBusiness,
+        permissions: ["settings.manage_settings", "employees.manage_settings"],
+      },
+      {
+        label: "Shifts",
+        path: "/shifts",
+        icon: CalendarClock,
+        permissions: ["attendance.edit", "attendance.manage_settings"],
+      },
+      {
+        label: "Holidays",
+        path: "/holidays",
+        icon: CalendarRange,
+        permissions: ["attendance.edit", "attendance.manage_settings"],
+      },
       {
         label: "Settings",
         path: "/settings",
         icon: Settings2,
-        permissions: ["manage users", "user.manage", "manage roles", "manage settings"],
+        permissions: ["users.view", "users.create", "users.edit", "users.delete", "settings.manage_settings"],
         children: [
-          { label: "User Management", path: "/settings?tab=users", icon: Users2, permissions: ["manage users", "user.manage"] },
-          { label: "Roles & Permissions", path: "/settings?tab=roles", icon: ShieldCheck, permissions: ["manage roles"] },
-          { label: "Company Settings", path: "/settings?tab=company", icon: Building2, permissions: ["manage settings"] },
-          { label: "Branches", path: "/settings?tab=branches", icon: FolderCog, permissions: ["manage settings"] },
-          { label: "Themes", path: "/settings?tab=theme", icon: BadgeInfo, permissions: ["manage settings"] },
-          { label: "System Logs", path: "/settings?tab=logs", icon: ScrollText, permissions: ["manage settings", "view audit logs"], requireAllPermissions: true },
+          { label: "User Management",    path: "/settings?tab=users",    icon: Users2,       permissions: ["users.view", "users.create", "users.edit", "users.delete"] },
+          { label: "Roles & Permissions",path: "/settings?tab=roles",    icon: ShieldCheck,  permissions: ["settings.manage_settings"] },
+          { label: "Company Settings",   path: "/settings?tab=company",  icon: Building2,    permissions: ["settings.manage_settings"] },
+          { label: "Branches",           path: "/settings?tab=branches", icon: FolderCog,    permissions: ["settings.manage_settings"] },
+          { label: "Themes",             path: "/settings?tab=theme",    icon: BadgeInfo,    permissions: ["settings.manage_settings"] },
+          { label: "Licensing",          path: "/settings?tab=licensing",icon: BadgeInfo,    permissions: ["settings.manage_settings"] },
+          { label: "System Logs",        path: "/settings?tab=logs",     icon: ScrollText,   permissions: ["audit_logs.view", "settings.manage_settings"], requireAllPermissions: true },
         ],
       },
     ],
@@ -150,29 +217,32 @@ export const sidebarSections: SidebarSectionConfig[] = [
 ];
 
 function canSeeItem(user: AuthUser | null | undefined, item: SidebarItemConfig): boolean {
-  // Super admin always has access to everything
   const roleKeys = getUserRoleKeys(user);
-  if (roleKeys.includes('super_admin')) {
-    return true;
-  }
 
-  const matchesRole = !item.roles?.length || item.roles.some((role) => roleKeys.includes(normalizeRoleKey(role)));
+  // Super admin always sees everything
+  if (roleKeys.includes("super_admin")) return true;
+
+  const matchesRole = !item.roles?.length
+    || item.roles.some(role => roleKeys.includes(normalizeRoleKey(role)));
+
   const matchesPermission = !item.permissions?.length
-    || (item.requireAllPermissions ? hasAllPermissions(user, item.permissions) : hasAnyPermission(user, item.permissions));
+    || (item.requireAllPermissions
+      ? hasAllPermissions(user, item.permissions)
+      : hasAnyPermission(user, item.permissions));
 
   return matchesRole && matchesPermission;
 }
 
 export function getVisibleSidebarSections(user: AuthUser | null | undefined): SidebarSectionConfig[] {
   return sidebarSections
-    .map((section) => ({
+    .map(section => ({
       ...section,
       items: section.items
-        .map((item) => {
-          const children = item.children?.filter((child) => canSeeItem(user, child));
+        .map(item => {
+          const children = item.children?.filter(child => canSeeItem(user, child));
           return { ...item, children };
         })
-        .filter((item) => canSeeItem(user, item) || (item.children?.length ?? 0) > 0),
+        .filter(item => canSeeItem(user, item) || (item.children?.length ?? 0) > 0),
     }))
-    .filter((section) => section.items.length > 0);
+    .filter(section => section.items.length > 0);
 }

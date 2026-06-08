@@ -46,7 +46,7 @@ class UserManagementController extends Controller
             'role_ids' => 'required|array|min:1',
             'role_ids.*' => [
                 'required',
-                'uuid',
+                'integer',
                 Rule::exists('roles', 'id')->where(function ($query) use ($request) {
                     $query->whereNull('company_id');
                     if ($request->user()?->company_id) {
@@ -54,8 +54,8 @@ class UserManagementController extends Controller
                     }
                 }),
             ],
-            'company_id' => 'nullable|uuid|exists:companies,id',
-            'branch_id' => 'nullable|uuid|exists:branches,id',
+            'company_id' => 'nullable|exists:companies,id',
+            'branch_id' => 'nullable|exists:branches,id',
         ]);
 
         $this->normalizeCompanyPayload($request, $validated);
@@ -77,7 +77,7 @@ class UserManagementController extends Controller
             'role_ids' => 'sometimes|required|array|min:1',
             'role_ids.*' => [
                 'required',
-                'uuid',
+                'integer',
                 Rule::exists('roles', 'id')->where(function ($query) use ($request) {
                     $query->whereNull('company_id');
                     if ($request->user()?->company_id) {
@@ -85,8 +85,8 @@ class UserManagementController extends Controller
                     }
                 }),
             ],
-            'company_id' => 'nullable|uuid|exists:companies,id',
-            'branch_id' => 'nullable|uuid|exists:branches,id',
+            'company_id' => 'nullable|exists:companies,id',
+            'branch_id' => 'nullable|exists:branches,id',
         ]);
 
         $this->normalizeCompanyPayload($request, $validated, $user->company_id);

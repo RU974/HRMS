@@ -4,14 +4,14 @@ import {
   AlertCircle, BadgeCheck, Building2, ChevronRight, Globe, LockKeyhole,
   MapPinned, Palette, Plus, RefreshCw, Search, ScrollText, ShieldCheck,
   Trash2, Users, X, Eye, EyeOff, Check, Shield, Clock, Activity,
-  Edit2, Server, Layers,
+  Edit2, Server, Layers, Key,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth-store";
 import {
-  BranchItem, CompanyItem, PermissionGroup, RoleItem, ThemeItem, UserItem,
+  BranchItem, CompanyItem, PermissionGroup, PermissionItem, RoleItem, ThemeItem, UserItem,
   createBranch, createCompany, createRole, createTheme, createUser,
   deleteBranch, deleteCompany, deleteRole, deleteTheme, deleteUser,
   listBranches, listCompanies, listLogs, listPermissions, listRoles,
@@ -20,9 +20,20 @@ import {
 } from "@/services/settings-service";
 import { useThemeStore } from "@/store/theme-store";
 import { hasAllPermissions, hasAnyPermission, hasPermission } from "@/utils/permissions";
+import { LicensingTab } from "./licensing-tab";
+
+/** Resolve display label for a permission regardless of which fields the API returns */
+function permLabel(p: PermissionItem): string {
+  if (p.display_name) return p.display_name;
+  if (p.key) return p.key;
+  if (p.module && p.action) return `${p.module}.${p.action}`;
+  if (p.name) return p.name;
+  if (p.action) return p.action;
+  return String(p.id);
+}
 
 // ─────────────────────── types ───────────────────────
-type SettingsTab = "users" | "roles" | "company" | "branches" | "theme" | "logs";
+type SettingsTab = "users" | "roles" | "company" | "branches" | "theme" | "logs" | "licensing";
 
 type SettingsSection = {
   key: SettingsTab;
@@ -36,12 +47,13 @@ type SettingsSection = {
 
 // ─────────────────────── constants ───────────────────────
 const TABS: SettingsSection[] = [
-  { key: "users",    label: "User Management",    icon: Users,     color: "text-blue-500",   description: "Manage user accounts, roles, and company assignments.",    permissions: ["manage users", "user.manage"] },
-  { key: "roles",    label: "Roles & Permissions",icon: ShieldCheck,color: "text-violet-500",description: "Define access roles and fine-grained permission bundles.",   permissions: ["manage roles"] },
-  { key: "company",  label: "Company",            icon: Building2, color: "text-emerald-500",description: "Company profile, contact details, and status.",             permissions: ["manage settings"] },
-  { key: "branches", label: "Branches",           icon: MapPinned, color: "text-amber-500",  description: "Branch locations tied to companies and users.",             permissions: ["manage settings"] },
-  { key: "theme",    label: "Appearance",         icon: Palette,   color: "text-pink-500",   description: "User and company theme preferences.",                       permissions: ["manage settings"] },
-  { key: "logs",     label: "Audit Logs",         icon: ScrollText,color: "text-slate-500",  description: "Immutable audit trail for every system action.",            permissions: ["manage settings", "view audit logs"], requireAllPermissions: true },
+  { key: "users",    label: "User Management",    icon: Users,     color: "text-blue-500",   description: "Manage user accounts, roles, and company assignments.",    permissions: ["users.view", "users.create", "users.edit", "users.delete"] },
+  { key: "roles",    label: "Roles & Permissions",icon: ShieldCheck,color: "text-violet-500",description: "Define access roles and fine-grained permission bundles.",   permissions: ["settings.manage_settings"] },
+  { key: "company",  label: "Company",            icon: Building2, color: "text-emerald-500",description: "Company profile, contact details, and status.",             permissions: ["settings.manage_settings"] },
+  { key: "branches", label: "Branches",           icon: MapPinned, color: "text-amber-500",  description: "Branch locations tied to companies and users.",             permissions: ["settings.manage_settings"] },
+  { key: "theme",    label: "Appearance",         icon: Palette,   color: "text-pink-500",   description: "User and company theme preferences.",                       permissions: ["settings.manage_settings"] },
+  { key: "logs",      label: "Audit Logs",         icon: ScrollText,color: "text-slate-500",  description: "Immutable audit trail for every system action.",            permissions: ["settings.manage_settings", "audit_logs.view"], requireAllPermissions: true },
+  { key: "licensing", label: "Licensing",           icon: Key,       color: "text-amber-500",  description: "Manage license keys, edition limits, and module access.",   permissions: ["settings.manage_settings"] },
 ];
 
 // ─────────────────────── tiny helpers ───────────────────────
@@ -369,7 +381,7 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
   const filtered = useMemo(() => {
     const t = pq.toLowerCase();
     if (!t) return permissions;
-    return permissions.map(g => ({ ...g, permissions: g.permissions.filter(p => p.key.toLowerCase().includes(t)) })).filter(g => g.permissions.length > 0);
+    return permissions.map(g => ({ ...g, permissions: g.permissions.filter(p => permLabel(p).toLowerCase().includes(t)) })).filter(g => g.permissions.length > 0);
   }, [permissions, pq]);
 
   function toggle(id: string) {
@@ -427,7 +439,7 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
                           <div className={`grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition ${form.permission_ids.includes(p.id) ? "border-[var(--primary)] bg-[var(--primary)]" : "border-[var(--border)]"}`}>
                             {form.permission_ids.includes(p.id) && <Check className="h-2 w-2 text-white" />}
                           </div>
-                          <span className="truncate text-xs">{p.key}</span>
+                          <span className="truncate text-xs">{permLabel(p)}</span>
                         </button>
                       ))}
                     </div>
@@ -544,7 +556,7 @@ function RolesTab({ roles, permissions, onReload, busy }: {
                       <div className="flex flex-wrap gap-1.5">
                         {perms.map(p => (
                           <span key={p.id} className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">
-                            {p.key}
+                            {permLabel(p)}
                           </span>
                         ))}
                       </div>
@@ -1086,10 +1098,10 @@ export function SettingsPage() {
   const [themes, setThemes] = useState<ThemeItem[]>([]);
   const [logs, setLogs] = useState<LogItem[]>([]);
 
-  const canManageUsers    = hasAnyPermission(user, ["manage users", "user.manage"]);
-  const canManageRoles    = hasPermissionFor("manage roles");
-  const canManageSettings = hasPermissionFor("manage settings");
-  const canViewLogs       = hasAllPermissions(user, ["manage settings", "view audit logs"]);
+  const canManageUsers    = hasAnyPermission(user, ["users.view", "users.create", "users.edit", "users.delete"]);
+  const canManageRoles    = hasPermissionFor("settings.manage_settings");
+  const canManageSettings = hasPermissionFor("settings.manage_settings");
+  const canViewLogs       = hasAllPermissions(user, ["settings.manage_settings", "audit_logs.view"]);
 
   const visibleTabs = useMemo(() =>
     TABS.filter(t => t.requireAllPermissions ? hasAllPermissions(user, t.permissions) : hasAnyPermission(user, t.permissions)),
@@ -1223,7 +1235,8 @@ export function SettingsPage() {
                 {tab === "company"  && <CompanyTab  companies={companies} onReload={loadAll} busy={busy} />}
                 {tab === "branches" && <BranchesTab branches={branches} companies={companies} onReload={loadAll} busy={busy} />}
                 {tab === "theme"    && <AppearanceTab themes={themes} onReload={loadAll} busy={busy} />}
-                {tab === "logs"     && <LogsTab     logs={logs} />}
+                {tab === "logs"      && <LogsTab      logs={logs} />}
+                {tab === "licensing" && <LicensingTab />}
               </>
             )}
         </div>
