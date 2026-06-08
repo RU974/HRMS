@@ -157,9 +157,9 @@ function QuickButton({
     <>
       <div
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-        style={{ background: accent ? `${accent}18` : undefined }}
+        style={{ background: accent ? `${accent}18` : undefined, color: accent }}
       >
-        <Icon className="h-[14px] w-[14px]" style={{ color: accent } as React.CSSProperties} />
+        <Icon className="h-[14px] w-[14px]" />
       </div>
       {!collapsed && <span className="text-[var(--text)]">{loading ? "Working…" : label}</span>}
     </>

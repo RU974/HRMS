@@ -1,12 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { PageHeader } from "@/components/page-header/page-header";
+import { useAuthStore } from "@/store/auth-store";
 import { getDashboardInsights, getDashboardSummary } from "@/services/dashboard-service";
 import { apiClient } from "@/services/api-client";
 import { SummaryCard, ChartCard, TableWidget } from "./dashboard-widgets";
+import {
+  Users, Clock, CalendarX, Wallet, TrendingUp,
+  UserPlus, ClipboardList, CalendarDays, CheckSquare,
+  DollarSign, Briefcase, Target, BarChart3, ArrowRight,
+  AlertCircle,
+} from "lucide-react";
 
-// ─── Currency ───────────────────────────────────────────────────────────────
+// ─── Currency ────────────────────────────────────────────────────────────────
 const CURRENCY_OPTIONS = [
   { code: "USD", symbol: "$",   label: "USD – US Dollar" },
   { code: "PKR", symbol: "Rs",  label: "PKR – Pakistani Rupee" },
@@ -23,168 +29,135 @@ function formatPayroll(amount: number, currency: CurrencyCode) {
   return `${sym} ${Number(amount).toLocaleString()}`;
 }
 
-// ─── Chart helpers (Chart.js loaded from CDN via useEffect) ─────────────────
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Chart: any;
-  }
-}
+// ─── Chart.js loader ─────────────────────────────────────────────────────────
+declare global { interface Window { Chart: any; } }
 
 function useChartJs(cb: () => void, deps: unknown[]) {
   useEffect(() => {
     if (window.Chart) { cb(); return; }
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    script.onload = cb;
-    document.head.appendChild(script);
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    s.onload = cb;
+    document.head.appendChild(s);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
 
-// ─── Line chart: attendance trend ────────────────────────────────────────────
+// ─── Line chart ──────────────────────────────────────────────────────────────
 function AttendanceTrendChart({ points }: { points: Array<{ label: string; rate: number }> }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const instanceRef = useRef<any>(null);
+  const inst = useRef<any>(null);
 
   useChartJs(() => {
     if (!ref.current || !points.length) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const C = window.Chart;
-    if (instanceRef.current) instanceRef.current.destroy();
-    instanceRef.current = new C(ref.current, {
+    if (inst.current) inst.current.destroy();
+    inst.current = new window.Chart(ref.current, {
       type: "line",
       data: {
-        labels: points.map((p) => p.label),
+        labels: points.map(p => p.label),
         datasets: [{
           label: "Attendance %",
-          data: points.map((p) => p.rate),
-          borderColor: "rgb(99,102,241)",
-          backgroundColor: "rgba(99,102,241,0.08)",
+          data: points.map(p => p.rate),
+          borderColor: "#2563eb",
+          backgroundColor: "rgba(37,99,235,0.08)",
           borderWidth: 2.5,
-          pointRadius: 4,
-          pointBackgroundColor: "rgb(99,102,241)",
-          tension: 0.4,
+          pointRadius: 5,
+          pointBackgroundColor: "#fff",
+          pointBorderColor: "#2563eb",
+          pointBorderWidth: 2,
+          tension: 0.45,
           fill: true,
         }],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { mode: "index", intersect: false },
-        },
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false, backgroundColor: "#1e293b", titleColor: "#f8fafc", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8 } },
         scales: {
-          y: {
-            min: 0, max: 100,
-            ticks: { callback: (v: unknown) => `${v}%`, font: { size: 11 } },
-            grid: { color: "rgba(0,0,0,0.05)" },
-          },
-          x: { ticks: { font: { size: 11 } }, grid: { display: false } },
+          y: { min: 0, max: 100, ticks: { callback: (v: unknown) => `${v}%`, font: { size: 11 }, color: "#6b7280" }, grid: { color: "rgba(0,0,0,0.05)" } },
+          x: { ticks: { font: { size: 11 }, color: "#6b7280" }, grid: { display: false } },
         },
       },
     });
   }, [points]);
 
-  useEffect(() => () => { if (instanceRef.current) instanceRef.current.destroy(); }, []);
-
-  if (!points.length) return <p className="py-8 text-center text-sm text-[var(--muted)]">No attendance data yet.</p>;
+  useEffect(() => () => { if (inst.current) inst.current.destroy(); }, []);
+  if (!points.length) return <div className="flex h-48 items-center justify-center text-sm text-[var(--muted)]">No attendance data yet.</div>;
   return <div className="h-48"><canvas ref={ref} /></div>;
 }
 
-// ─── Horizontal bar chart: department distribution ────────────────────────────
+// ─── Bar chart ───────────────────────────────────────────────────────────────
 function DeptBarChart({ items }: { items: Array<{ label: string; value: number }> }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const instanceRef = useRef<any>(null);
+  const inst = useRef<any>(null);
+  const COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#f97316","#ec4899"];
 
   useChartJs(() => {
     if (!ref.current || !items.length) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const C = window.Chart;
-    if (instanceRef.current) instanceRef.current.destroy();
-    instanceRef.current = new C(ref.current, {
+    if (inst.current) inst.current.destroy();
+    inst.current = new window.Chart(ref.current, {
       type: "bar",
       data: {
-        labels: items.map((i) => i.label),
+        labels: items.map(i => i.label),
         datasets: [{
           label: "Employees",
-          data: items.map((i) => i.value),
-          backgroundColor: [
-            "rgba(99,102,241,0.75)","rgba(34,197,94,0.75)","rgba(245,158,11,0.75)",
-            "rgba(239,68,68,0.75)","rgba(14,165,233,0.75)","rgba(168,85,247,0.75)",
-          ],
+          data: items.map(i => i.value),
+          backgroundColor: items.map((_, idx) => COLORS[idx % COLORS.length] + "cc"),
+          borderColor:      items.map((_, idx) => COLORS[idx % COLORS.length]),
+          borderWidth: 1,
           borderRadius: 6,
           borderSkipped: false,
         }],
       },
       options: {
         indexAxis: "y",
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (ctx: { parsed: { x: number } }) => ` ${ctx.parsed.x} employees` } },
-        },
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: "#1e293b", titleColor: "#f8fafc", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8, callbacks: { label: (ctx: any) => ` ${ctx.parsed.x} employees` } } },
         scales: {
-          x: { ticks: { font: { size: 11 } }, grid: { color: "rgba(0,0,0,0.05)" } },
-          y: { ticks: { font: { size: 11 } }, grid: { display: false } },
+          x: { ticks: { font: { size: 11 }, color: "#6b7280" }, grid: { color: "rgba(0,0,0,0.04)" } },
+          y: { ticks: { font: { size: 11 }, color: "#6b7280" }, grid: { display: false } },
         },
       },
     });
   }, [items]);
 
-  useEffect(() => () => { if (instanceRef.current) instanceRef.current.destroy(); }, []);
-
-  if (!items.length) return <p className="py-8 text-center text-sm text-[var(--muted)]">No department data yet.</p>;
+  useEffect(() => () => { if (inst.current) inst.current.destroy(); }, []);
+  if (!items.length) return <div className="flex h-48 items-center justify-center text-sm text-[var(--muted)]">No department data yet.</div>;
   return <div className="h-48"><canvas ref={ref} /></div>;
 }
 
-// ─── Doughnut chart: leave breakdown ─────────────────────────────────────────
+// ─── Doughnut chart ───────────────────────────────────────────────────────────
 function LeaveDonut({ items }: { items: Array<{ label: string; value: number }> }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const instanceRef = useRef<any>(null);
-  const COLORS = ["#6366f1","#22c55e","#f59e0b","#ef4444","#0ea5e9","#a855f7"];
+  const inst = useRef<any>(null);
+  const COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4"];
 
   useChartJs(() => {
     if (!ref.current || !items.length) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const C = window.Chart;
-    if (instanceRef.current) instanceRef.current.destroy();
-    instanceRef.current = new C(ref.current, {
+    if (inst.current) inst.current.destroy();
+    inst.current = new window.Chart(ref.current, {
       type: "doughnut",
       data: {
-        labels: items.map((i) => i.label),
-        datasets: [{
-          data: items.map((i) => i.value),
-          backgroundColor: COLORS,
-          borderWidth: 2,
-          hoverOffset: 6,
-        }],
+        labels: items.map(i => i.label),
+        datasets: [{ data: items.map(i => i.value), backgroundColor: COLORS, borderWidth: 3, borderColor: "#fff", hoverOffset: 8 }],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "65%",
+        responsive: true, maintainAspectRatio: false, cutout: "68%",
         plugins: {
-          legend: { position: "bottom", labels: { font: { size: 11 }, padding: 12, usePointStyle: true } },
-          tooltip: { callbacks: { label: (ctx: { label: string; parsed: number }) => ` ${ctx.label}: ${ctx.parsed}` } },
+          legend: { position: "bottom", labels: { font: { size: 11 }, padding: 14, usePointStyle: true, boxWidth: 8 } },
+          tooltip: { backgroundColor: "#1e293b", titleColor: "#f8fafc", bodyColor: "#94a3b8", padding: 10, cornerRadius: 8, callbacks: { label: (ctx: any) => ` ${ctx.label}: ${ctx.parsed}` } },
         },
       },
     });
   }, [items]);
 
-  useEffect(() => () => { if (instanceRef.current) instanceRef.current.destroy(); }, []);
-
-  if (!items.length) return <p className="py-8 text-center text-sm text-[var(--muted)]">No leave data yet.</p>;
-  return <div className="h-48"><canvas ref={ref} /></div>;
+  useEffect(() => () => { if (inst.current) inst.current.destroy(); }, []);
+  if (!items.length) return <div className="flex h-48 items-center justify-center text-sm text-[var(--muted)]">No leave data yet.</div>;
+  return <div className="h-52"><canvas ref={ref} /></div>;
 }
 
-// ─── Pending approvals widget ─────────────────────────────────────────────────
+// ─── Pending approvals ────────────────────────────────────────────────────────
 interface PendingApproval {
-  id: number;
-  title: string;
-  type: string;
+  id: number; title: string; type: string;
   requester?: { name?: string } | null;
   created_at: string;
 }
@@ -192,65 +165,73 @@ interface PendingApproval {
 function PendingApprovalsWidget() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-pending-approvals"],
-    queryFn: () => apiClient<{ data: PendingApproval[] }>("/approvals?status=pending&per_page=5"),
+    queryFn: () => apiClient<{ data: PendingApproval[] }>("/approvals?status=pending&per_page=6"),
     retry: false,
   });
-
   const items = (data as { data?: PendingApproval[] } | undefined)?.data ?? [];
 
   return (
-    <ChartCard title="Pending Approvals" subtitle="Requests waiting for your action.">
+    <ChartCard
+      title="Pending Approvals"
+      subtitle="Requests awaiting your action"
+      action={
+        <Link to="/approvals" className="flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:underline">
+          View all <ArrowRight className="h-3 w-3" />
+        </Link>
+      }
+    >
       {isLoading && (
         <div className="space-y-2">
-          {[1,2,3].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-[var(--border)]" />)}
+          {[1,2,3].map(i => <div key={i} className="h-12 animate-pulse rounded-xl bg-[var(--border)]" />)}
         </div>
       )}
       {!isLoading && items.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <p className="text-2xl">✓</p>
-          <p className="mt-1 text-sm font-medium text-[var(--text)]">All clear</p>
-          <p className="text-xs text-[var(--muted)]">No pending approvals.</p>
+        <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100">
+            <CheckSquare className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-[var(--text)]">All clear</p>
+            <p className="text-xs text-[var(--muted)]">No pending approvals</p>
+          </div>
         </div>
       )}
       <div className="space-y-2">
-        {items.map((item) => (
-          <Link
-            key={item.id}
-            to={`/approvals/${item.id}`}
-            className="flex items-start justify-between gap-3 rounded-xl border border-[var(--border)] p-3 text-sm transition hover:bg-[var(--border)]/20"
-          >
+        {items.map(item => (
+          <Link key={item.id} to={`/approvals/${item.id}`}
+            className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 text-sm transition hover:border-amber-200 hover:bg-amber-50">
             <div className="min-w-0">
-              <p className="truncate font-medium leading-tight">{item.title}</p>
-              <p className="mt-0.5 text-xs text-[var(--muted)]">
-                {item.requester?.name ?? "Unknown"} · {item.type}
-              </p>
+              <p className="truncate font-medium text-[var(--text)]">{item.title}</p>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">{item.requester?.name ?? "Unknown"} · {item.type}</p>
             </div>
-            <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
-              Pending
-            </span>
+            <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">Pending</span>
           </Link>
         ))}
       </div>
-      {items.length > 0 && (
-        <Link to="/approvals" className="mt-3 block text-center text-xs font-medium text-[var(--primary)] hover:underline">
-          View all approvals →
-        </Link>
-      )}
     </ChartCard>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-export function ManagementDashboard({ roleName }: { roleName: string }) {
-  const [currency, setCurrency] = useState<CurrencyCode>(() => {
-    const stored = localStorage.getItem("dashboard-currency");
-    return CURRENCY_OPTIONS.some((c) => c.code === stored) ? (stored as CurrencyCode) : "PKR";
-  });
+// ─── Quick action card ────────────────────────────────────────────────────────
+function QuickAction({ label, to, icon: Icon, color }: { label: string; to: string; icon: React.ElementType; color: string }) {
+  return (
+    <Link to={to}
+      className={`group flex flex-col items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 text-center transition-all duration-150 hover:-translate-y-0.5 hover:border-transparent hover:shadow-md ${color}`}>
+      <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/80 shadow-sm">
+        <Icon className="h-4 w-4" />
+      </div>
+      <span className="text-xs font-semibold text-[var(--text)] group-hover:text-[var(--text)]">{label}</span>
+    </Link>
+  );
+}
 
-  function handleCurrencyChange(code: CurrencyCode) {
-    setCurrency(code);
-    localStorage.setItem("dashboard-currency", code);
-  }
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export function ManagementDashboard({ roleName }: { roleName: string }) {
+  const user = useAuthStore(s => s.user);
+  const [currency, setCurrency] = useState<CurrencyCode>(() => {
+    const s = localStorage.getItem("dashboard-currency");
+    return CURRENCY_OPTIONS.some(c => c.code === s) ? (s as CurrencyCode) : "PKR";
+  });
 
   const { data: summary, isLoading, error } = useQuery({
     queryKey: ["dashboard-summary"],
@@ -264,132 +245,158 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
     retry: false,
   });
 
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
+
   const quickActions = [
-    { label: "Add Employee",  to: "/employees/new" },
-    { label: "Attendance",    to: "/attendance" },
-    { label: "Leaves",        to: "/leaves" },
-    { label: "Approvals",     to: "/approvals" },
-    { label: "Payroll",       to: "/payroll" },
-    { label: "Recruitment",   to: "/recruitment" },
-    { label: "Performance",   to: "/performance" },
-    { label: "Reports",       to: "/reports" },
+    { label: "Add Employee",  to: "/employees/new",   icon: UserPlus,      color: "hover:bg-blue-50"   },
+    { label: "Attendance",    to: "/attendance",       icon: Clock,         color: "hover:bg-cyan-50"   },
+    { label: "Leaves",        to: "/leaves",           icon: CalendarDays,  color: "hover:bg-amber-50"  },
+    { label: "Approvals",     to: "/approvals",        icon: CheckSquare,   color: "hover:bg-violet-50" },
+    { label: "Payroll",       to: "/payroll",          icon: DollarSign,    color: "hover:bg-emerald-50"},
+    { label: "Recruitment",   to: "/recruitment",      icon: Briefcase,     color: "hover:bg-rose-50"   },
+    { label: "Performance",   to: "/performance",      icon: Target,        color: "hover:bg-orange-50" },
+    { label: "Reports",       to: "/reports",          icon: BarChart3,     color: "hover:bg-slate-50"  },
+  ];
+
+  const kpiCards = [
+    {
+      title: "Total Employees",
+      value: isLoading ? "…" : String(summary?.employees ?? 0),
+      hint: `${summary?.active_employees ?? 0} active`,
+      icon: <Users className="h-5 w-5" />,
+      accent: "blue" as const,
+    },
+    {
+      title: "Attendance Rate",
+      value: isLoading ? "…" : `${summary?.attendance_rate ?? 0}%`,
+      hint: "Present today",
+      icon: <Clock className="h-5 w-5" />,
+      accent: "cyan" as const,
+    },
+    {
+      title: "Pending Leaves",
+      value: isLoading ? "…" : String(summary?.pending_leaves ?? 0),
+      hint: "Awaiting approval",
+      icon: <CalendarX className="h-5 w-5" />,
+      accent: "amber" as const,
+    },
+    {
+      title: "Pending Payrolls",
+      value: isLoading ? "…" : String(summary?.pending_payrolls ?? 0),
+      hint: "Need processing",
+      icon: <ClipboardList className="h-5 w-5" />,
+      accent: "rose" as const,
+    },
+    {
+      title: "Monthly Payroll",
+      value: isLoading ? "…" : formatPayroll(Number(summary?.monthly_payroll ?? 0), currency),
+      hint: `${summary?.month ?? "—"} / ${summary?.year ?? "—"}`,
+      icon: <Wallet className="h-5 w-5" />,
+      accent: "emerald" as const,
+    },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <PageHeader
-          title={`${roleName} Dashboard`}
-          subtitle={`Workforce metrics as of ${insights?.as_of_date ?? new Date().toISOString().slice(0, 10)}.`}
-        />
-        {/* Currency selector */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[var(--muted)]">Currency</label>
-          <select
-            value={currency}
-            onChange={(e) => handleCurrencyChange(e.target.value as CurrencyCode)}
-            className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
-          >
-            {CURRENCY_OPTIONS.map((c) => (
-              <option key={c.code} value={c.code}>{c.label}</option>
-            ))}
-          </select>
+
+      {/* ── Hero banner ── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[var(--primary)] via-blue-600 to-indigo-700 p-6 text-white shadow-lg">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/5" />
+          <div className="absolute -bottom-20 -left-10 h-72 w-72 rounded-full bg-white/5" />
+          <div className="absolute right-1/3 top-0 h-px w-48 bg-white/20" />
+        </div>
+
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-blue-200">{greeting},</p>
+            <h1 className="mt-0.5 text-2xl font-bold tracking-tight">{user?.name ?? roleName}</h1>
+            <p className="mt-1 text-sm text-blue-200">
+              {roleName} · {insights?.as_of_date ?? new Date().toISOString().slice(0, 10)}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium">
+                <TrendingUp className="h-3 w-3" /> Workforce analytics
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium">
+                <Users className="h-3 w-3" /> {summary?.active_employees ?? "—"} active employees
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-blue-200">Currency</label>
+            <select
+              value={currency}
+              onChange={e => { setCurrency(e.target.value as CurrencyCode); localStorage.setItem("dashboard-currency", e.target.value); }}
+              className="rounded-lg border border-white/25 bg-white/15 px-3 py-1.5 text-xs text-white backdrop-blur focus:outline-none focus:ring-2 focus:ring-white/30"
+            >
+              {CURRENCY_OPTIONS.map(c => <option key={c.code} value={c.code} className="text-slate-800">{c.label}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-          Backend unavailable. Confirm Laravel is running and your token is valid.
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Backend unavailable — confirm Laravel is running and your token is valid.
         </div>
       )}
 
-      {/* KPI cards */}
+      {/* ── KPI cards ── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard
-          title="Total Employees"
-          value={isLoading ? "…" : String(summary?.employees ?? 0)}
-          hint={`${summary?.active_employees ?? 0} active`}
-          tone="from-slate-50 to-white"
-        />
-        <SummaryCard
-          title="Present Today"
-          value={isLoading ? "…" : `${summary?.attendance_rate ?? 0}%`}
-          hint="Attendance rate"
-          tone="from-cyan-50 to-white"
-        />
-        <SummaryCard
-          title="Pending Leaves"
-          value={isLoading ? "…" : String(summary?.pending_leaves ?? 0)}
-          hint="Awaiting approval"
-          tone="from-amber-50 to-white"
-        />
-        <SummaryCard
-          title="Pending Payrolls"
-          value={isLoading ? "…" : String(summary?.pending_payrolls ?? 0)}
-          hint="Need processing"
-          tone="from-rose-50 to-white"
-        />
-        <SummaryCard
-          title="Monthly Payroll"
-          value={isLoading ? "…" : formatPayroll(Number(summary?.monthly_payroll ?? 0), currency)}
-          hint={`${summary?.month ?? "—"} / ${summary?.year ?? "—"}`}
-          tone="from-emerald-50 to-white"
-        />
+        {kpiCards.map(card => (
+          <SummaryCard key={card.title} {...card} />
+        ))}
       </section>
 
-      {/* Charts row */}
+      {/* ── Quick actions ── */}
+      <section>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Quick Actions</p>
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+          {quickActions.map(a => <QuickAction key={a.to} {...a} />)}
+        </div>
+      </section>
+
+      {/* ── Charts row ── */}
       <section className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="Attendance Trend" subtitle="Last 7 days — daily attendance rate.">
+        <ChartCard title="Attendance Trend" subtitle="Daily rate — last 7 days">
           <AttendanceTrendChart points={insights?.attendance_trend ?? []} />
         </ChartCard>
-        <ChartCard title="Department Distribution" subtitle="Headcount per department.">
+        <ChartCard title="Department Headcount" subtitle="Employees per department">
           <DeptBarChart items={insights?.department_distribution ?? []} />
         </ChartCard>
-        <ChartCard title="Leave Status" subtitle="Breakdown by leave type.">
+        <ChartCard title="Leave Status" subtitle="Breakdown by type and status">
           <LeaveDonut items={insights?.leave_breakdown ?? []} />
         </ChartCard>
       </section>
 
-      {/* Bottom row */}
+      {/* ── Bottom row ── */}
       <section className="grid gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <TableWidget
             title="Recent Employees"
             headers={["#", "Name", "Department", "Status", "Joined"]}
-            rows={(insights?.recent_employees ?? []).map((row) => [
-              row.employee_number,
-              row.name,
+            rows={(insights?.recent_employees ?? []).map(row => [
+              <span key="num" className="font-mono text-xs text-[var(--muted)]">{row.employee_number}</span>,
+              <span key="name" className="font-semibold text-[var(--text)]">{row.name}</span>,
               row.department,
-              <span
-                key={row.id}
-                className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
-                  row.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                }`}
-              >
-                {row.status}
-              </span>,
-              row.joined_at ?? "—",
+              <span key="status" className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+                row.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+              }`}>{row.status}</span>,
+              <span key="joined" className="text-xs text-[var(--muted)]">{row.joined_at ?? "—"}</span>,
             ])}
           />
         </div>
 
         <div className="space-y-4">
           <PendingApprovalsWidget />
-
-          <ChartCard title="Quick Actions" subtitle="Jump into common admin workflows.">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {quickActions.map((action) => (
-                <Link
-                  key={action.to}
-                  to={action.to}
-                  className="rounded-xl border border-[var(--border)] bg-white/70 p-3 text-center text-sm font-medium text-[var(--text)] transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/5"
-                >
-                  {action.label}
-                </Link>
-              ))}
-            </div>
-          </ChartCard>
         </div>
       </section>
     </div>

@@ -1,313 +1,382 @@
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PageHeader } from "@/components/page-header/page-header";
 import { getWorkspaceDashboard } from "@/services/dashboard-service";
 import { isSuperAdminRole } from "@/config/rbac";
 import { useAuthStore } from "@/store/auth-store";
 import { apiClient } from "@/services/api-client";
 import {
-  SummaryCard,
-  ChartCard,
-  ActivityFeed,
-  AttendanceWidget,
-  AnnouncementWidget,
-  NotificationWidget,
-  TableWidget,
+  SummaryCard, ChartCard, ActivityFeed,
+  AttendanceWidget, AnnouncementWidget, NotificationWidget, TableWidget,
 } from "./dashboard-widgets";
+import {
+  LogIn, LogOut, CheckCircle2, Clock, CalendarRange,
+  FileText, MessageSquare, Bell, User, Briefcase,
+  TrendingUp, CalendarDays, ArrowRight, AlertCircle,
+  Wallet,
+} from "lucide-react";
 
-function formatClock(value?: string | null) {
-  if (!value) return "—";
-  return value.length >= 16 ? value.slice(11, 16) : value;
+function fmt(v?: string | null) { return v?.slice(11, 16) ?? "—"; }
+function fmtCurrency(v?: number | string | null) {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isNaN(n) ? String(v) : n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function formatCurrency(value?: number | string | null) {
-  if (value === null || value === undefined || value === "") return "—";
-  const amount = typeof value === "number" ? value : Number(value);
-  if (Number.isNaN(amount)) return String(value);
-  return amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-
-// ─── Check-in / Check-out card ────────────────────────────────────────────────
-function AttendanceActionCard({
-  today,
-  employeeId,
-}: {
-  today: { status: string; check_in?: string | null; check_out?: string | null; date?: string } | null;
-  employeeId: number;
-}) {
-  const queryClient = useQueryClient();
-
-  const checkInMutation = useMutation({
-    mutationFn: () => apiClient(`/attendance/check-in`, { method: "POST", body: JSON.stringify({ employee_id: employeeId }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard", "workspace"] }),
-  });
-
-  const checkOutMutation = useMutation({
-    mutationFn: () => apiClient(`/attendance/check-out`, { method: "POST", body: JSON.stringify({ employee_id: employeeId }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard", "workspace"] }),
-  });
-
-  const checkedIn  = !!today?.check_in;
-  const checkedOut = !!today?.check_out;
+// ─── Status ring ──────────────────────────────────────────────────────────────
+function StatusRing({ status }: { status: string | undefined }) {
+  const cfg = {
+    present: { color: "text-emerald-500", bg: "bg-emerald-50", ring: "ring-emerald-200", label: "Present" },
+    late:    { color: "text-amber-500",   bg: "bg-amber-50",   ring: "ring-amber-200",   label: "Late"    },
+    absent:  { color: "text-rose-500",    bg: "bg-rose-50",    ring: "ring-rose-200",    label: "Absent"  },
+  }[status ?? ""] ?? { color: "text-slate-400", bg: "bg-slate-50", ring: "ring-slate-200", label: "No record" };
 
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Today's attendance</p>
-        <p className="mt-1 text-sm font-medium text-[var(--text)]">{today?.date ?? new Date().toISOString().slice(0, 10)}</p>
-        <div className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--muted)]">
-          {today?.check_in  && <span>In:  <span className="font-medium text-[var(--text)]">{formatClock(today.check_in)}</span></span>}
-          {today?.check_out && <span>Out: <span className="font-medium text-[var(--text)]">{formatClock(today.check_out)}</span></span>}
-          {today?.status && (
-            <span className={`rounded-full px-2 py-0.5 font-semibold capitalize ${
-              today.status === "present" ? "bg-emerald-50 text-emerald-700" :
-              today.status === "late"    ? "bg-amber-50 text-amber-700" :
-              "bg-red-50 text-red-700"
-            }`}>
-              {today.status}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        {!checkedIn && (
-          <button
-            onClick={() => checkInMutation.mutate()}
-            disabled={checkInMutation.isPending}
-            className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
-          >
-            {checkInMutation.isPending ? "Checking in…" : "✓ Check In"}
-          </button>
-        )}
-        {checkedIn && !checkedOut && (
-          <button
-            onClick={() => checkOutMutation.mutate()}
-            disabled={checkOutMutation.isPending}
-            className="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:opacity-60"
-          >
-            {checkOutMutation.isPending ? "Checking out…" : "✗ Check Out"}
-          </button>
-        )}
-        {checkedIn && checkedOut && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
-            ✓ Day complete
-          </div>
-        )}
+    <div className={`grid h-24 w-24 place-items-center rounded-full ring-4 ${cfg.ring} ${cfg.bg} shrink-0`}>
+      <div className="text-center">
+        <p className={`text-2xl font-black ${cfg.color}`}>{cfg.label[0]}</p>
+        <p className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</p>
       </div>
     </div>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Check-in / out ───────────────────────────────────────────────────────────
+function CheckInCard({ today, employeeId }: {
+  today: { status: string; check_in?: string | null; check_out?: string | null; date?: string } | null;
+  employeeId: number;
+}) {
+  const qc = useQueryClient();
+
+  const checkIn = useMutation({
+    mutationFn: () => apiClient("/attendance/check-in", { method: "POST", body: JSON.stringify({ employee_id: employeeId }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard", "workspace"] }),
+  });
+  const checkOut = useMutation({
+    mutationFn: () => apiClient("/attendance/check-out", { method: "POST", body: JSON.stringify({ employee_id: employeeId }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard", "workspace"] }),
+  });
+
+  const checkedIn  = !!today?.check_in;
+  const checkedOut = !!today?.check_out;
+  const date = today?.date ?? new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
+      <div className="flex items-center gap-5">
+        <StatusRing status={today?.status} />
+
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Today's Attendance</p>
+          <p className="mt-0.5 text-sm font-bold text-[var(--text)]">{date}</p>
+
+          <div className="mt-3 flex flex-wrap gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+              <LogIn className="h-3.5 w-3.5 text-emerald-500" />
+              <span>In: <strong className="text-[var(--text)]">{fmt(today?.check_in)}</strong></span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+              <LogOut className="h-3.5 w-3.5 text-rose-500" />
+              <span>Out: <strong className="text-[var(--text)]">{fmt(today?.check_out)}</strong></span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {!checkedIn && (
+              <button onClick={() => checkIn.mutate()} disabled={checkIn.isPending}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60 shadow-sm">
+                <LogIn className="h-4 w-4" />
+                {checkIn.isPending ? "Checking in…" : "Check In"}
+              </button>
+            )}
+            {checkedIn && !checkedOut && (
+              <button onClick={() => checkOut.mutate()} disabled={checkOut.isPending}
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-rose-600 disabled:opacity-60 shadow-sm">
+                <LogOut className="h-4 w-4" />
+                {checkOut.isPending ? "Checking out…" : "Check Out"}
+              </button>
+            )}
+            {checkedIn && checkedOut && (
+              <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-bold text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" />
+                Day complete
+              </div>
+            )}
+            <Link to="/attendance" className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-4 py-2.5 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--background)]">
+              Full log <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Quick action button ───────────────────────────────────────────────────────
+function QAction({ label, to, icon: Icon, desc }: { label: string; to: string; icon: React.ElementType; desc: string }) {
+  return (
+    <Link to={to}
+      className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 transition hover:-translate-y-0.5 hover:border-[var(--primary)]/30 hover:shadow-sm">
+      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--primary)]/10">
+        <Icon className="h-4 w-4 text-[var(--primary)]" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-[var(--text)]">{label}</p>
+        <p className="text-xs text-[var(--muted)]">{desc}</p>
+      </div>
+      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+    </Link>
+  );
+}
+
+// ─── Leave balance bar ────────────────────────────────────────────────────────
+function LeaveBalanceBar({ name, remaining, total }: { name: string; remaining: number; total: number }) {
+  const pct = total > 0 ? Math.round((remaining / total) * 100) : 0;
+  const color = pct > 60 ? "bg-emerald-500" : pct > 30 ? "bg-amber-500" : "bg-rose-500";
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-[var(--text)]">{name}</span>
+        <span className="text-[var(--muted)]">{remaining}/{total} days</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-[var(--border)]">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export function EmployeeDashboard() {
-  const user = useAuthStore((state) => state.user);
+  const user = useAuthStore(s => s.user);
   const employeeId = user?.employee?.id ?? 0;
 
-  const workspaceQuery = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard", "workspace"],
     queryFn: getWorkspaceDashboard,
     retry: false,
   });
 
-  const data = workspaceQuery.data;
-  const totalRemainingLeave  = data?.leave.balances.reduce((acc, item) => acc + item.remaining_days, 0) ?? 0;
-  const unreadNotifications  = data?.notifications.filter((item) => !item.is_read).length ?? 0;
-  const latestPayslip        = data?.payroll.latest_payslip;
-  const todayLabel           = data?.attendance.today?.date ?? new Date().toISOString().slice(0, 10);
-  const departmentName       = data?.employee?.department?.name ?? "your team";
-  const showRestrictedLinks  = isSuperAdminRole(user);
+  const totalRemaining  = data?.leave.balances.reduce((a, b) => a + b.remaining_days, 0) ?? 0;
+  const unread          = data?.notifications.filter(n => !n.is_read).length ?? 0;
+  const latestPayslip   = data?.payroll.latest_payslip;
+  const dept            = data?.employee?.department?.name ?? "your team";
+  const showAdminLinks  = isSuperAdminRole(user);
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
 
   const quickActions = [
-    { label: "View Profile",   to: "/profile" },
-    { label: "Attendance",     to: "/attendance" },
-    { label: "Request Leave",  to: "/leaves" },
-    { label: "My Payslips",    to: "/payroll?tab=payslips" },
-    { label: "Documents",      to: "/employee-documents" },
-    ...(showRestrictedLinks ? [{ label: "Notifications", to: "/notifications" }] : []),
-    { label: "Chat",           to: "/chat" },
+    { label: "My Profile",    to: "/profile",                  icon: User,          desc: "Update your details" },
+    { label: "Attendance",    to: "/attendance",               icon: Clock,         desc: "View full log" },
+    { label: "Request Leave", to: "/leaves",                   icon: CalendarRange, desc: `${totalRemaining} days left` },
+    { label: "My Payslips",   to: "/payroll?tab=payslips",     icon: Wallet,        desc: "Download payslips" },
+    { label: "Documents",     to: "/employee-documents",       icon: FileText,      desc: "Your files" },
+    { label: "Chat",          to: "/chat",                     icon: MessageSquare, desc: "Team messaging" },
+    ...(showAdminLinks ? [{ label: "Notifications", to: "/notifications", icon: Bell, desc: `${unread} unread` }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Employee Dashboard"
-        subtitle={`Self-service workspace for ${data?.role_name ?? "Employee"} in ${departmentName}.`}
-      />
 
-      {/* Hero + quick actions */}
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)]">
-        <div className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-lg">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.2),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(34,197,94,0.14),transparent_35%)]" />
-          <div className="relative">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
-              <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">Employee workspace</span>
-              <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1">{todayLabel}</span>
-            </div>
-            <div className="mt-5 max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Welcome back, {data?.employee?.name ?? user?.name ?? "Employee"}.
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                Your day at a glance — attendance, leave balance, payroll status, and team updates are all below.
-              </p>
-            </div>
-            <div className="mt-6 flex flex-wrap gap-3 text-sm">
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">Department</p>
-                <p className="mt-1 font-medium">{departmentName}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">Today's status</p>
-                <p className="mt-1 font-medium capitalize">{data?.attendance.today?.status ?? "No record"}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-300">Unread notices</p>
-                <p className="mt-1 font-medium">{unreadNotifications}</p>
-              </div>
-            </div>
-          </div>
+      {/* ── Welcome banner ── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 text-white shadow-lg">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_80%_20%,rgba(56,189,248,0.15),transparent_50%)]" />
+          <div className="absolute bottom-0 left-0 h-3/4 w-1/2 bg-[radial-gradient(circle_at_20%_80%,rgba(34,197,94,0.12),transparent_50%)]" />
+          {/* grid lines */}
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px]" />
         </div>
 
-        <ChartCard title="Quick Actions" subtitle="Jump straight to the most-used tasks." className="border-white/70 bg-white/85 shadow-sm">
-          <div className="grid grid-cols-2 gap-3">
-            {quickActions.map((action) => (
-              <Link
-                key={action.to}
-                to={action.to}
-                className="flex min-h-14 items-center justify-center rounded-2xl border border-[var(--border)] bg-white/85 px-3 py-3 text-center text-sm font-medium text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[var(--primary)]/25 hover:bg-[var(--primary)]/6 hover:shadow-sm"
-              >
-                {action.label}
-              </Link>
+        <div className="relative flex flex-wrap items-center justify-between gap-6">
+          <div>
+            <p className="text-sm font-semibold text-slate-400">{greeting},</p>
+            <h1 className="mt-0.5 text-3xl font-black tracking-tight">
+              {data?.employee?.name ?? user?.name ?? "Employee"}
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <span className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium">
+                <Briefcase className="h-3 w-3 text-sky-400" />
+                {data?.employee?.designation?.name ?? "Employee"}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium">
+                <TrendingUp className="h-3 w-3 text-emerald-400" />
+                {dept}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium">
+                <CalendarDays className="h-3 w-3 text-amber-400" />
+                {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </span>
+            </div>
+          </div>
+
+          {/* Mini KPI strip */}
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: "Leave Left",     value: String(totalRemaining),                color: "text-emerald-400" },
+              { label: "Unread",         value: String(unread),                        color: "text-amber-400"   },
+              { label: "Today",          value: data?.attendance.today?.status ?? "—", color: "text-sky-400"     },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-center backdrop-blur-sm">
+                <p className={`text-xl font-black capitalize ${s.color}`}>{s.value}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+              </div>
             ))}
           </div>
-        </ChartCard>
-      </section>
+        </div>
+      </div>
 
-      {/* Check-in / check-out card — always visible */}
-      {employeeId > 0 && (
-        <AttendanceActionCard today={data?.attendance.today ?? null} employeeId={employeeId} />
+      {error && (
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Could not load workspace data — check your connection.
+        </div>
       )}
 
-      {/* KPI summary cards */}
+      {/* ── Check-in card ── */}
+      {employeeId > 0 && (
+        <CheckInCard today={data?.attendance.today ?? null} employeeId={employeeId} />
+      )}
+
+      {/* ── KPI row ── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
-          title="Today"
+          title="Today's Status"
           value={data?.attendance.today?.status ?? "No record"}
-          hint={`${formatClock(data?.attendance.today?.check_in)} in / ${formatClock(data?.attendance.today?.check_out)} out`}
-          tone="from-cyan-50 via-white to-white"
+          hint={`${fmt(data?.attendance.today?.check_in)} in · ${fmt(data?.attendance.today?.check_out)} out`}
+          icon={<Clock className="h-5 w-5" />}
+          accent="cyan"
         />
         <SummaryCard
-          title="Leave balance"
-          value={String(totalRemainingLeave)}
-          hint={`${data?.leave.balances.length ?? 0} leave types tracked`}
-          tone="from-emerald-50 via-white to-white"
+          title="Leave Balance"
+          value={String(totalRemaining)}
+          hint={`${data?.leave.balances.length ?? 0} leave types`}
+          icon={<CalendarRange className="h-5 w-5" />}
+          accent="emerald"
         />
         <SummaryCard
-          title="Unread notices"
-          value={String(unreadNotifications)}
-          hint="Notifications waiting in your inbox"
-          tone="from-amber-50 via-white to-white"
+          title="Unread Notices"
+          value={String(unread)}
+          hint="Notifications pending"
+          icon={<Bell className="h-5 w-5" />}
+          accent="amber"
         />
         <SummaryCard
-          title="Latest payslip"
-          value={latestPayslip ? formatCurrency(latestPayslip.payroll?.net_salary) : "Unavailable"}
+          title="Latest Payslip"
+          value={latestPayslip ? fmtCurrency(latestPayslip.payroll?.net_salary) : "—"}
           hint={latestPayslip ? `Issued ${latestPayslip.issue_date}` : "No payslip yet"}
-          tone="from-sky-50 via-white to-white"
+          icon={<Wallet className="h-5 w-5" />}
+          accent="violet"
         />
       </section>
 
-      {/* Attendance + payslip */}
+      {/* ── Quick actions ── */}
+      <section>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Quick Actions</p>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {quickActions.slice(0, 4).map(a => <QAction key={a.to} {...a} />)}
+        </div>
+        {quickActions.length > 4 && (
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {quickActions.slice(4).map(a => <QAction key={a.to} {...a} />)}
+          </div>
+        )}
+      </section>
+
+      {/* ── Attendance + payslip ── */}
       <section className="grid gap-4 xl:grid-cols-12">
         <div className="xl:col-span-7">
-          <AttendanceWidget title="Attendance snapshot" today={data?.attendance.today ?? null} recent={data?.attendance.recent ?? []} />
+          <AttendanceWidget title="Attendance Snapshot" today={data?.attendance.today ?? null} recent={data?.attendance.recent ?? []} />
         </div>
+
         <div className="space-y-4 xl:col-span-5">
-          <ChartCard title="Latest Payslip" subtitle="Your most recent payroll statement.">
+          {/* Leave balances visual */}
+          <ChartCard title="Leave Balances" subtitle="Remaining days per leave type">
+            {(data?.leave.balances ?? []).length === 0
+              ? <p className="py-6 text-center text-xs text-[var(--muted)]">No leave types configured</p>
+              : (
+                <div className="space-y-4">
+                  {(data?.leave.balances ?? []).map(b => (
+                    <LeaveBalanceBar key={b.id} name={b.name} remaining={b.remaining_days} total={b.default_days} />
+                  ))}
+                  <Link to="/leaves" className="flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-2 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--background)]">
+                    Request leave <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              )}
+          </ChartCard>
+
+          {/* Latest payslip */}
+          <ChartCard title="Latest Payslip" subtitle="Most recent payroll statement">
             {latestPayslip ? (
-              <div className="space-y-3 text-sm">
-                <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Slip number</p>
-                  <p className="mt-1 font-medium">{latestPayslip.slip_number}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Issue date</p>
-                    <p className="mt-1 font-medium">{latestPayslip.issue_date}</p>
-                  </div>
-                  <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Status</p>
-                    <p className="mt-1 font-medium capitalize">{latestPayslip.status}</p>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-white/75 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Net salary</p>
-                  <p className="mt-1 text-lg font-semibold">{formatCurrency(latestPayslip.payroll?.net_salary)}</p>
+              <div className="space-y-2.5 text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Slip #",      value: latestPayslip.slip_number },
+                    { label: "Status",      value: latestPayslip.status },
+                    { label: "Issue Date",  value: latestPayslip.issue_date },
+                    { label: "Net Salary",  value: fmtCurrency(latestPayslip.payroll?.net_salary) },
+                  ].map(row => (
+                    <div key={row.label} className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--muted)]">{row.label}</p>
+                      <p className="mt-0.5 font-bold capitalize text-[var(--text)]">{row.value}</p>
+                    </div>
+                  ))}
                 </div>
                 {latestPayslip.file_url && (
                   <a href={latestPayslip.file_url} target="_blank" rel="noreferrer"
-                    className="inline-flex rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90">
-                    Download payslip
+                    className="flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-2.5 text-sm font-bold text-white transition hover:opacity-90">
+                    <FileText className="h-4 w-4" /> Download Payslip
                   </a>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-[var(--muted)]">No payslip has been published yet.</p>
+              <p className="py-4 text-center text-sm text-[var(--muted)]">No payslip published yet</p>
             )}
           </ChartCard>
-
-          {/* Leave request shortcut */}
-          <Link
-            to="/leaves"
-            className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:bg-[var(--border)]/20"
-          >
-            <div>
-              <p className="text-sm font-semibold">Request Leave</p>
-              <p className="text-xs text-[var(--muted)]">{totalRemainingLeave} days remaining</p>
-            </div>
-            <span className="text-[var(--primary)]">→</span>
-          </Link>
         </div>
       </section>
 
-      {/* Leave balances + holidays */}
+      {/* ── Upcoming holidays + recent leave requests ── */}
       <section className="grid gap-4 xl:grid-cols-2">
         <TableWidget
-          title="Leave balances"
-          headers={["Type", "Allocated", "Used", "Remaining"]}
-          rows={(data?.leave.balances ?? []).map((item) => [
-            item.name,
-            item.default_days,
-            item.used_days,
-            <span key={item.id} className={`font-semibold ${item.remaining_days > 0 ? "text-emerald-600" : "text-red-500"}`}>
-              {item.remaining_days}
-            </span>,
+          title="Upcoming Holidays"
+          headers={["Holiday", "Date", "Type"]}
+          rows={(data?.calendar.upcoming_holidays ?? []).map(h => [
+            <span key="n" className="font-medium text-[var(--text)]">{h.name}</span>,
+            <span key="d" className="text-xs text-[var(--muted)]">{h.date}</span>,
+            h.is_optional
+              ? <span key="t" className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">Optional</span>
+              : <span key="t" className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Public</span>,
           ])}
         />
         <TableWidget
-          title="Upcoming holidays"
-          headers={["Name", "Date", "Optional"]}
-          rows={(data?.calendar.upcoming_holidays ?? []).map((item) => [
-            item.name,
-            item.date,
-            item.is_optional
-              ? <span key={item.id} className="text-amber-600">Optional</span>
-              : <span key={item.id} className="text-emerald-600">Public</span>,
+          title="Recent Leave Requests"
+          headers={["Type", "From", "To", "Status"]}
+          rows={(data?.leave.recent_requests ?? []).map(r => [
+            r.type,
+            r.from_date,
+            r.to_date,
+            <span key="s" className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+              r.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+              r.status === "rejected" ? "bg-rose-100 text-rose-700" :
+              "bg-amber-100 text-amber-700"
+            }`}>{r.status}</span>,
           ])}
         />
       </section>
 
-      {/* Announcements + notifications + tasks */}
+      {/* ── Announcements + notifications + tasks ── */}
       <section className="grid gap-4 xl:grid-cols-3">
         <AnnouncementWidget title="Announcements" announcements={data?.announcements ?? []} />
         <NotificationWidget title="Notifications" notifications={data?.notifications ?? []} />
         <ActivityFeed
-          title="Tasks and reminders"
-          items={(data?.tasks ?? []).map((item) => ({
-            id: item.id,
-            label: item.title,
-            description: item.details,
-            status: item.status,
+          title="Tasks & Reminders"
+          items={(data?.tasks ?? []).map(t => ({
+            id: t.id, label: t.title, description: t.details, status: t.status,
           }))}
         />
       </section>
