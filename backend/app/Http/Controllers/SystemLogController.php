@@ -10,7 +10,9 @@ class SystemLogController extends Controller
 {
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view audit logs');
+        // Fixed: was 'view audit logs' (freeform) — must match seeded permission keys.
+        // Grants access if the user has audit_logs:view OR settings:manage_settings (admins).
+        $this->authorizeAnyPermission($request, ['audit_logs:view', 'settings:manage_settings']);
 
         $q = AuditLog::query()->with('user')->latest();
         $this->scopeToCompany($request, $q);
@@ -37,7 +39,8 @@ class SystemLogController extends Controller
 
     public function show(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'view audit logs');
+        // Fixed: same permission mismatch as index
+        $this->authorizeAnyPermission($request, ['audit_logs:view', 'settings:manage_settings']);
         $q = AuditLog::query()->with('user');
         $this->scopeToCompany($request, $q);
 
@@ -46,7 +49,8 @@ class SystemLogController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        // Fixed: was 'manage settings' (freeform) — use the canonical seeded key
+        $this->authorizePermission($request, 'settings:manage_settings');
         abort(422, 'Audit logs are immutable and cannot be deleted.');
     }
 

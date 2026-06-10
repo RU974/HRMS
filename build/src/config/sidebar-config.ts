@@ -131,7 +131,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
         icon: WalletCards,
         permissions: ["payroll.view", "payroll.create", "payroll.edit", "payroll.approve", "payroll.manage_settings"],
         children: [
-          { label: "Salary Structure",    path: "/payroll?tab=salary-structure",    icon: BriefcaseBusiness, permissions: ["payroll.manage_settings"] },
+          { label: "Payroll Records",     path: "/payroll?tab=payroll-records",    icon: BriefcaseBusiness, permissions: ["payroll.manage_settings"] },
           { label: "Payroll Processing",  path: "/payroll?tab=payroll-processing",  icon: FolderKanban,      permissions: ["payroll.edit", "payroll.manage_settings"] },
           { label: "Payslips",            path: "/payroll?tab=payslips",            icon: FileText,          permissions: ["payroll.view", "payroll.create", "payroll.edit", "payroll.manage_settings"] },
           { label: "Bonuses",             path: "/payroll?tab=bonuses",             icon: BadgeInfo,         permissions: ["payroll.view", "payroll.edit", "payroll.manage_settings"] },
@@ -166,7 +166,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
         label: "Reports",
         path: "/reports",
         icon: FileText,
-        permissions: ["reports.view", "reports.export", "reports.manage_settings"],
+        permissions: ["reports.view", "reports.export", "reports.manage_settings", "reports.view_own"],
       },
     ],
   },
@@ -177,13 +177,15 @@ export const sidebarSections: SidebarSectionConfig[] = [
         label: "Departments",
         path: "/departments",
         icon: Building2,
-        permissions: ["settings.manage_settings", "employees.manage_settings"],
+        // Fixed: employees.manage_settings was never seeded. Use the real admin permission.
+        permissions: ["settings.manage_settings"],
       },
       {
         label: "Designations",
         path: "/designations",
         icon: BriefcaseBusiness,
-        permissions: ["settings.manage_settings", "employees.manage_settings"],
+        // Fixed: employees.manage_settings was never seeded. Use the real admin permission.
+        permissions: ["settings.manage_settings"],
       },
       {
         label: "Shifts",

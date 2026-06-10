@@ -4,8 +4,8 @@ import { useAuthStore } from "@/store/auth-store";
 import { me } from "@/services/auth-service";
 
 // Version bump — increment this whenever permission/user structure changes.
-// It clears stale localStorage sessions automatically.
-const SESSION_VERSION = "2";
+// It clears stale sessions automatically.
+const SESSION_VERSION = "3";
 const SESSION_VERSION_KEY = "hrms_session_v";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -13,10 +13,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const refreshed = useRef(false);
 
   useEffect(() => {
-    // Clear stale sessions from older app versions
+    // Clear stale sessions from older app versions.
+    // Still stored in localStorage (non-sensitive version string) so it
+    // survives tab closes and correctly invalidates old localStorage-based
+    // sessions left over from before the sessionStorage migration.
     const storedVersion = localStorage.getItem(SESSION_VERSION_KEY);
     if (storedVersion !== SESSION_VERSION) {
       logout();
+      // Also clear any legacy localStorage token/user left from v1/v2
+      localStorage.removeItem("hrms_token");
+      localStorage.removeItem("hrms_user");
       localStorage.setItem(SESSION_VERSION_KEY, SESSION_VERSION);
       return;
     }
@@ -27,7 +33,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       me()
         .then((user) => setUser(user))
         .catch(() => {
-          // Token is invalid — clear session and redirect to login
+          // Token is invalid or expired — clear session and redirect to login
           logout();
         });
     }

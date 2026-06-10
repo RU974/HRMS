@@ -18,7 +18,7 @@ class ReportController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $validated = $request->validate([
             'q' => 'nullable|string|max:100',
@@ -57,7 +57,7 @@ class ReportController extends Controller
 
     public function show($id)
     {
-        $this->authorizeAnyPermission(request(), ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission(request(), ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $report = Report::with(['creator:id,name,email', 'updater:id,name,email'])->findOrFail($id);
         $this->assertCompanyAccess(request(), $report);
@@ -125,7 +125,7 @@ class ReportController extends Controller
 
     public function employees(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $service = new ReportAnalyticsService();
         $data = $service->employeeSummary($request);
@@ -148,7 +148,7 @@ class ReportController extends Controller
 
     public function attendance(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -176,7 +176,7 @@ class ReportController extends Controller
 
     public function leave(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -204,7 +204,7 @@ class ReportController extends Controller
 
     public function payroll(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -237,7 +237,7 @@ class ReportController extends Controller
 
     public function analytics(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',

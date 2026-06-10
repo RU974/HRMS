@@ -2,9 +2,14 @@
 
 namespace App\Providers;
 
+use App\Events\LeaveRequested;
+use App\Events\LeaveStatusChanged;
+use App\Listeners\NotifyLeaveRequested;
+use App\Listeners\NotifyLeaveStatusChanged;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
@@ -47,6 +52,10 @@ class AppServiceProvider extends ServiceProvider
 
             return $frontendUrl . '/auth/reset-password?token=' . urlencode($token) . '&email=' . $email;
         });
+
+        // Leave request notifications
+        Event::listen(LeaveRequested::class, NotifyLeaveRequested::class);
+        Event::listen(LeaveStatusChanged::class, NotifyLeaveStatusChanged::class);
 
         // Grant Super Admin unconditional access to all policies and gates.
         Gate::before(function ($user, $ability) {

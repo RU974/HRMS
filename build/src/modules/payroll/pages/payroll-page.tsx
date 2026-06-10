@@ -38,20 +38,25 @@ import {
   updatePayslip
 } from "@/services/payroll-service";
 
-type Tab = "salary-structure" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "deductions";
+// "salary-structure" is kept as an alias in the URL map so existing bookmarks
+// and the sidebar link (?tab=salary-structure) still land on this tab.
+// The tab itself is now correctly named "payroll-records".
+type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "deductions";
 const TAB_PARAM_MAP: Record<string, Tab> = {
-  "salary-structure": "salary-structure",
-  "salary-slip": "salary-slip",
-  "payroll-processing": "payroll-processing",
-  payslips: "payslips",
-  bonuses: "bonuses",
-  deductions: "deductions",
+  "payroll-records":   "payroll-records",
+  // legacy alias — sidebar still links here; redirect silently
+  "salary-structure":  "payroll-records",
+  "salary-slip":       "salary-slip",
+  "payroll-processing":"payroll-processing",
+  payslips:            "payslips",
+  bonuses:             "bonuses",
+  deductions:          "deductions",
 };
 
 export function PayrollPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const initialTab = TAB_PARAM_MAP[searchParams.get("tab") ?? ""] ?? "salary-structure";
+  const initialTab = TAB_PARAM_MAP[searchParams.get("tab") ?? ""] ?? "payroll-records";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [error, setError] = useState<string | null>(null);
 
@@ -193,13 +198,15 @@ export function PayrollPage() {
 
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
         <div className="mb-4 flex flex-wrap gap-2">
-          {(["salary-structure", "salary-slip", "payroll-processing", "payslips", "bonuses", "deductions"] as Tab[]).map((t) => (
-            <Button key={t} variant={tab === t ? "primary" : "outline"} onClick={() => switchTab(t)}>{t.replace("-", " ").toUpperCase()}</Button>
+          {(["payroll-records", "salary-slip", "payroll-processing", "payslips", "bonuses", "deductions"] as Tab[]).map((t) => (
+            <Button key={t} variant={tab === t ? "primary" : "outline"} onClick={() => switchTab(t)}>
+              {t === "payroll-records" ? "Payroll Records" : t.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+            </Button>
           ))}
         </div>
         {error && <div className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-        {tab === "salary-structure" && (
+        {tab === "payroll-records" && (
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-3">
               <FormField label="Month"><FormInput type="number" min={1} max={12} value={generateMonth} onChange={(e) => setGenerateMonth(Number(e.target.value))} /></FormField>

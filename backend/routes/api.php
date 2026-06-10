@@ -196,7 +196,17 @@ $registerRoutes = function (): void {
         });
 
         // Leave routes
-        Route::apiResource('leaves', LeaveController::class);
+        // Read endpoints (index, show): employees with leaves:create can see their own
+        // records (controller scopes them); managers/HR need leaves:view or leaves:approve.
+        // Write endpoints (store): leaves:create for own requests, leaves:approve for others.
+        // Update/delete: leaves:approve or leaves:manage_settings.
+        // Using a broad OR-gate here as defence-in-depth; fine-grained checks remain in
+        // the controller — this layer ensures unauthenticated / zero-permission requests
+        // are rejected at the route level before reaching any controller logic.
+        Route::middleware('permission:leaves:create|leaves:view|leaves:approve|leaves:manage_settings')
+            ->group(function () {
+                Route::apiResource('leaves', LeaveController::class);
+            });
 
         // Attendance/Leave setup routes
         Route::middleware('permission:attendance:edit')->group(function () {

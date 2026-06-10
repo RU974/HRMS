@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\LeaveRequested;
+use App\Events\LeaveStatusChanged;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\User;
@@ -84,6 +86,13 @@ class LeaveController extends Controller
             return $this->fail($exception->getMessage(), 422);
         }
 
+        // Notify the department manager and HR that a new leave request needs attention.
+        // Only dispatched for pending requests — if an approver created an already-approved
+        // leave there is nothing to action.
+        if ($leave->status === 'pending') {
+            LeaveRequested::dispatch($leave);
+        }
+
         return $this->ok($leave, 'Leave request created successfully', 201);
     }
 
@@ -141,7 +150,14 @@ class LeaveController extends Controller
             return $this->fail($exception->getMessage(), 422);
         }
 
-        return $this->ok($leave->refresh(), 'Leave request updated successfully');
+        $refreshed = $leave->refresh();
+
+        // Notify the employee if their leave status changed to a terminal state.
+        if ($refreshed->status !== $originalStatus) {
+            LeaveStatusChanged::dispatch($refreshed, $originalStatus);
+        }
+
+        return $this->ok($refreshed, 'Leave request updated successfully');
     }
 
     public function destroy(Request $request, $id)

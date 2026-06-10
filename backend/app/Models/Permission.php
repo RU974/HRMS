@@ -21,6 +21,8 @@ class Permission extends Model
         'guard_name',
     ];
 
+    protected $appends = ['key'];
+
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class, 'permission_role')

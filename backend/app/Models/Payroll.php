@@ -12,6 +12,7 @@ class Payroll extends Model
         'month',
         'year',
         'base_salary',
+        'allowances',   // ← added: was missing, causing PayrollCalculator output to be silently dropped
         'bonus',
         'deductions',
         'tax',
@@ -20,12 +21,12 @@ class Payroll extends Model
         'status',
     ];
 
-    // Lifecycle states - keep backward compatible values and allow new enterprise states
-    public const STATUS_DRAFT = 'draft';
-    public const STATUS_REVIEWED = 'reviewed';
-    public const STATUS_APPROVED = 'approved';
-    public const STATUS_PAID = 'paid';
-    public const STATUS_PENDING = 'pending';
+    // ── Lifecycle states ──────────────────────────────────────────
+    public const STATUS_DRAFT     = 'draft';
+    public const STATUS_REVIEWED  = 'reviewed';
+    public const STATUS_APPROVED  = 'approved';
+    public const STATUS_PAID      = 'paid';
+    public const STATUS_PENDING   = 'pending';
     public const STATUS_PROCESSED = 'processed';
     public const STATUS_CANCELLED = 'cancelled';
 
@@ -42,14 +43,21 @@ class Payroll extends Model
         ];
     }
 
+    // ── Relationships ─────────────────────────────────────────────
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
     }
 
+    // ── Helpers ───────────────────────────────────────────────────
+
+    /**
+     * Transition to a new status and persist.
+     * Returns false if the target status is not a recognised lifecycle state.
+     */
     public function transitionTo(string $newStatus): bool
     {
-        if (!in_array($newStatus, self::lifecycleStates(), true)) {
+        if (! in_array($newStatus, self::lifecycleStates(), true)) {
             return false;
         }
 

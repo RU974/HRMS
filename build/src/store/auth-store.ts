@@ -36,15 +36,17 @@ interface AuthState {
 }
 
 function readStoredSession() {
-  const storedToken = localStorage.getItem("hrms_token");
-  const storedUser = localStorage.getItem("hrms_user");
+  // Use sessionStorage so the token is never accessible to other tabs or
+  // persisted beyond the browser session — mitigates XSS token theft.
+  const storedToken = sessionStorage.getItem("hrms_token");
+  const storedUser = sessionStorage.getItem("hrms_user");
 
   let parsedUser: AuthUser | null = null;
   if (storedUser) {
     try {
       parsedUser = JSON.parse(storedUser) as AuthUser;
     } catch {
-      localStorage.removeItem("hrms_user");
+      sessionStorage.removeItem("hrms_user");
     }
   }
 
@@ -58,24 +60,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: storedToken,
   user: parsedUser,
   setSession: (token, user) => {
-    localStorage.setItem("hrms_token", token);
-    localStorage.setItem("hrms_user", JSON.stringify(user));
+    sessionStorage.setItem("hrms_token", token);
+    sessionStorage.setItem("hrms_user", JSON.stringify(user));
     set({ isAuthenticated: true, token, user });
   },
   setUser: (user) => {
-    localStorage.setItem("hrms_user", JSON.stringify(user));
+    sessionStorage.setItem("hrms_user", JSON.stringify(user));
     set({ user, isAuthenticated: true });
   },
   hasPermission: (permission) => {
     return userHasPermission(get().user, permission);
   },
   logout: () => {
-    localStorage.removeItem("hrms_token");
-    localStorage.removeItem("hrms_user");
+    sessionStorage.removeItem("hrms_token");
+    sessionStorage.removeItem("hrms_user");
     set({ isAuthenticated: false, token: null, user: null });
   }
 }));
 
 export const getCurrentPermissionKeys = () => collectPermissionKeys(useAuthStore.getState().user);
-
-
