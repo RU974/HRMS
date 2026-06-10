@@ -2,359 +2,443 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Payroll;
+use App\Models\Designation;
 use App\Models\Employee;
+use App\Models\Role;
 use App\Models\User;
+use App\Models\Shift;
 use Illuminate\Http\Request;
-use Carbon\Carbon;
-use App\Services\PayrollCalculator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
-class PayrollController extends Controller
+class EmployeeController extends Controller
 {
-    /**
-     * Get all payroll records
-     */
     public function index(Request $request)
     {
-        $this->authorizeRead($request);
-        $user = $request->user();
-        $query = Payroll::with('employee');
-        $this->scopePayrollQueryToCompany($request, $query);
-        $this->applyManagedEmployeeScope($request, $query, 'employee');
+        $this->authorizePermission($request, 'employees:view');
 
-        $ownEmployeeId = $this->ownEmployeeId($user);
-        $viewOwnOnly = $this->viewOwnOnly($user);
-
-        if ($request->has('employee_id')) {
-            $employeeId = (int) $request->employee_id;
-            if ($viewOwnOnly) {
-                if ($ownEmployeeId === null) {
-                    abort(403, 'You are not authorized to access payroll data.');
-                }
-
-                $employeeId = $ownEmployeeId;
-            }
-
-            $this->assertEmployeeInActorCompany($request, $employeeId);
-            $query->where('employee_id', $employeeId);
-        } elseif ($viewOwnOnly) {
-            if ($ownEmployeeId === null) {
-                abort(403, 'You are not authorized to access payroll data.');
-            }
-
-            $query->where('employee_id', $ownEmployeeId);
-        }
-
-        if ($request->has('status')) {
+        $query = Employee::with(['department', 'designationRef', 'user']);
+        $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
+        if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
-
-        if ($request->has('month')) {
-            $query->whereMonth('payment_date', $request->month);
+        if ($request->filled('department_id')) {
+            $query->where('department_id', $request->department_id);
+        }
+        if ($request->filled('designation_id')) {
+            $query->where('designation_id', $request->designation_id);
+        }
+        if ($request->filled('designation')) {
+            $query->where('designation', 'like', '%' . $request->designation . '%');
+        }
+        if ($request->filled('created_from')) {
+            $query->whereDate('created_at', '>=', $request->created_from);
+        }
+        if ($request->filled('created_to')) {
+            $query->whereDate('created_at', '<=', $request->created_to);
         }
 
-        if ($request->has('year')) {
-            $query->whereYear('payment_date', $request->year);
+        $sortBy = $request->input('sort_by', 'created_at');
+        $sortDir = strtolower($request->input('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        if (!in_array($sortBy, ['created_at', 'name', 'email', 'salary', 'status'], true)) {
+            $sortBy = 'created_at';
         }
 
-        $payrolls = $query->paginate(15);
-
-        return $this->ok($payrolls);
+        return $this->ok($query->orderBy($sortBy, $sortDir)->paginate((int) $request->input('per_page', 15)));
     }
 
-    /**
-     * Get single payroll record
-     */
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $payroll = Payroll::with('employee')->findOrFail($id);
-        $this->authorizePayrollAccess(request(), $payroll);
+        $employee = Employee::with(['department', 'designationRef', 'user'])->findOrFail($id);
+        $this->authorizeEmployeeRead($request, $employee);
+        $this->assertEmployeeInCompany($request, $employee);
 
-        return $this->ok($payroll);
+        return $this->ok($employee);
     }
 
-    /**
-     * Create payroll record
-     */
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage payroll');
+        $this->authorizePermission($request, 'employees:create');
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'month' => 'required|integer|min:1|max:12',
-            'year' => 'required|integer|min:2020',
-            'base_salary' => 'required|numeric|min:0',
-            'bonus' => 'nullable|numeric|min:0',
-            'deductions' => 'nullable|numeric|min:0',
-            'tax' => 'nullable|numeric|min:0',
-            'net_salary' => 'required|numeric|min:0',
-            'payment_date' => 'required|date',
-            'status' => 'required|in:draft,reviewed,approved,pending,processed,paid,cancelled',
+            'user_id' => ['nullable', 'exists:users,id', Rule::unique('employees', 'user_id')],
+            'name' => 'nullable|string|max:255',
+            'first_name' => 'nullable|string|max:255',
+            'last_name' => 'nullable|string|max:255',
+            'email' => 'required|string|email|max:255|unique:employees',
+            'username' => 'nullable|string|max:255|unique:users,username',
+            'phone' => 'nullable|string|max:20',
+            'cnic' => 'nullable|string|max:25',
+            'date_of_birth' => 'nullable|date',
+            'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
+            'address' => 'nullable|string|max:1000',
+            'designation' => 'nullable|string|max:255',
+            'designation_id' => 'nullable|exists:designations,id',
+            'employee_number' => 'nullable|string|max:50|unique:employees,employee_number',
+            'position' => 'nullable|string|max:255',
+            'joining_date' => 'nullable|date',
+            'employment_type' => 'nullable|string|max:100',
+            'shift_id' => 'nullable|exists:shifts,id',
+            'manager_id' => 'nullable|exists:employees,id',
+            'salary' => 'required|numeric|min:0',
+            'basic_salary' => 'nullable|numeric|min:0',
+            'allowances' => 'nullable|numeric|min:0',
+            'department_id' => 'required|exists:departments,id',
+            'status' => 'nullable|in:active,inactive',
+            'create_user' => 'nullable|boolean',
+            'password' => 'nullable|string|min:8',
+            'role' => 'nullable|string|in:' . implode(',', User::availableRoles()),
         ]);
-        $this->assertEmployeeInActorCompany($request, (int) $validated['employee_id']);
 
-        $payroll = Payroll::create($validated);
+        $this->assertUserCompanyMatch($request, $validated['user_id'] ?? null);
+        $this->assertEmployeeReferenceInCompany($request, $validated['manager_id'] ?? null);
+        $name = $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
+        $employee = DB::transaction(function () use ($validated, $name, $request) {
+            $linkedUserId = $validated['user_id'] ?? null;
+            $createUser = $validated['create_user'] ?? true;
+            $roleName = $validated['role'] ?? User::ROLE_EMPLOYEE;
 
-        return $this->ok($payroll, 'Payroll record created successfully', 201);
+            if (!$linkedUserId && $createUser) {
+                $existingUser = User::where('email', $validated['email'])->first();
+                if ($existingUser) {
+                    $this->assertUserCompanyMatch($request, $existingUser);
+                    $linkedUserId = $existingUser->id;
+                } else {
+                    $linkedUser = User::create([
+                        'name' => $name,
+                        'email' => $validated['email'],
+                        'username' => $validated['username'] ?? explode('@', $validated['email'])[0],
+                        'password' => Hash::make($validated['password'] ?? Str::password(12)),
+                        'company_id' => $request->user()?->company_id,
+                ]);
+                $linkedUserId = $linkedUser->id;
+            }
+            }
+
+            if (!$linkedUserId) {
+                throw ValidationException::withMessages([
+                    'user_id' => ['user_id is required when create_user is false.'],
+                ]);
+            }
+            if (Employee::where('user_id', $linkedUserId)->exists()) {
+                throw ValidationException::withMessages([
+                    'user_id' => ['This user is already linked to another employee.'],
+                ]);
+            }
+
+            $user = User::findOrFail($linkedUserId);
+            $this->assertUserCompanyMatch($request, $user);
+            $this->assignRoleToUser($user, $roleName);
+
+            $designationLabel = $validated['designation'] ?? ($validated['position'] ?? '');
+            if (!empty($validated['designation_id'])) {
+                $designationLabel = Designation::find($validated['designation_id'])?->name ?? $designationLabel;
+            }
+
+            return Employee::create([
+                'user_id' => $linkedUserId,
+                'name' => $name,
+                'email' => $validated['email'],
+                'phone' => $validated['phone'] ?? null,
+                'first_name' => $validated['first_name'] ?? null,
+                'last_name' => $validated['last_name'] ?? null,
+                'cnic' => $validated['cnic'] ?? null,
+                'date_of_birth' => $validated['date_of_birth'] ?? null,
+                'gender' => $validated['gender'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'employee_number' => $validated['employee_number'] ?? null,
+                'joining_date' => $validated['joining_date'] ?? null,
+                'employment_type' => $validated['employment_type'] ?? null,
+                'shift_id' => $validated['shift_id'] ?? null,
+                'manager_id' => $validated['manager_id'] ?? null,
+                'department_id' => $validated['department_id'],
+                'designation_id' => $validated['designation_id'] ?? null,
+                'designation' => $designationLabel,
+                'basic_salary' => $validated['basic_salary'] ?? $validated['salary'],
+                'allowances' => $validated['allowances'] ?? 0,
+                'salary' => ($validated['basic_salary'] ?? $validated['salary']) + ($validated['allowances'] ?? 0),
+                'profile_image' => $request->hasFile('profile_image') ? Storage::disk('public')->putFile('employee-profiles', $request->file('profile_image')) : null,
+                'status' => $validated['status'] ?? 'active',
+            ]);
+        });
+
+        return $this->ok($employee->load(['department', 'designationRef', 'user']), 'Employee created successfully', 201);
     }
 
-    /**
-     * Update payroll record
-     */
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage payroll');
-        $payroll = Payroll::findOrFail($id);
-        $this->assertPayrollInActorCompany($request, $payroll);
-
+        $this->authorizePermission($request, 'employees:edit');
+        $employee = Employee::findOrFail($id);
+        $this->assertEmployeeInCompany($request, $employee);
+        $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $validated = $request->validate([
-            'bonus' => 'nullable|numeric|min:0',
-            'deductions' => 'nullable|numeric|min:0',
-            'tax' => 'nullable|numeric|min:0',
-            'net_salary' => 'numeric|min:0',
-            'payment_date' => 'date',
-            'status' => 'in:draft,reviewed,approved,pending,processed,paid,cancelled',
+            'user_id' => ['sometimes', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($id)],
+            'name' => 'sometimes|string|max:255',
+            'first_name' => 'sometimes|string|max:255',
+            'last_name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|string|email|max:255|unique:employees,email,' . $id,
+            'username' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($request->user()?->id)],
+            'phone' => 'nullable|string|max:20',
+            'cnic' => 'nullable|string|max:25',
+            'date_of_birth' => 'nullable|date',
+            'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
+            'address' => 'nullable|string|max:1000',
+            'designation' => 'sometimes|string|max:255',
+            'designation_id' => 'sometimes|nullable|exists:designations,id',
+            'employee_number' => ['sometimes', 'nullable', 'string', 'max:50', Rule::unique('employees', 'employee_number')->ignore($id)],
+            'position' => 'sometimes|string|max:255',
+            'joining_date' => 'nullable|date',
+            'employment_type' => 'nullable|string|max:100',
+            'shift_id' => 'nullable|exists:shifts,id',
+            'manager_id' => 'nullable|exists:employees,id',
+            'salary' => 'sometimes|numeric|min:0',
+            'basic_salary' => 'sometimes|numeric|min:0',
+            'allowances' => 'sometimes|numeric|min:0',
+            'department_id' => 'sometimes|exists:departments,id',
+            'status' => 'sometimes|in:active,inactive',
         ]);
+        $this->assertEmployeeReferenceInCompany($request, $validated['manager_id'] ?? null);
 
-        $payroll->update($validated);
-
-        return $this->ok($payroll, 'Payroll record updated successfully');
-    }
-
-    /**
-     * Delete payroll record
-     */
-    public function destroy($id)
-    {
-        $this->authorizePermission(request(), 'manage payroll');
-        $payroll = Payroll::findOrFail($id);
-        $this->assertPayrollInActorCompany(request(), $payroll);
-        $payroll->delete();
-
-        return $this->ok(null, 'Payroll record deleted successfully');
-    }
-
-    /**
-     * Get payroll by employee
-     */
-    public function getByEmployee($employeeId, Request $request)
-    {
-        $this->authorizeEmployeeScopedAccess($request, (int) $employeeId);
-        $this->assertEmployeeInActorCompany($request, (int) $employeeId);
-        $query = Payroll::where('employee_id', $employeeId);
-        $this->scopePayrollQueryToCompany($request, $query);
-        $this->applyManagedEmployeeScope($request, $query, 'employee');
-
-        if ($request->has('year')) {
-            $query->whereYear('payment_date', $request->year);
+        $updatePayload = $validated;
+        if (!isset($updatePayload['name']) && (isset($updatePayload['first_name']) || isset($updatePayload['last_name']))) {
+            $updatePayload['name'] = trim(($updatePayload['first_name'] ?? '') . ' ' . ($updatePayload['last_name'] ?? ''));
+        }
+        if (!isset($updatePayload['designation']) && isset($updatePayload['position'])) {
+            $updatePayload['designation'] = $updatePayload['position'];
+        }
+        if (isset($updatePayload['basic_salary']) || isset($updatePayload['allowances'])) {
+            $basic = $updatePayload['basic_salary'] ?? $employee->basic_salary ?? 0;
+            $allowances = $updatePayload['allowances'] ?? $employee->allowances ?? 0;
+            $updatePayload['salary'] = $basic + $allowances;
+        }
+        if (array_key_exists('designation_id', $updatePayload) && $updatePayload['designation_id']) {
+            $updatePayload['designation'] = Designation::find($updatePayload['designation_id'])?->name ?? ($updatePayload['designation'] ?? $employee->designation);
+        }
+        if ($request->hasFile('profile_image')) {
+            $updatePayload['profile_image'] = Storage::disk('public')->putFile('employee-profiles', $request->file('profile_image'));
         }
 
-        $payrolls = $query->orderBy('payment_date', 'desc')->paginate(12);
+        unset($updatePayload['first_name'], $updatePayload['last_name'], $updatePayload['position']);
+        $employee->update($updatePayload);
 
-        return $this->ok($payrolls);
+        return $this->ok($employee->load(['department', 'designationRef', 'user']), 'Employee updated successfully');
     }
 
-    /**
-     * Generate payroll for employees
-     */
-    public function generatePayroll(Request $request)
+    public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'process payroll');
-        $validated = $request->validate([
-            'month' => 'required|integer|min:1|max:12',
-            'year' => 'required|integer|min:2020',
-            'department_id' => 'nullable|exists:departments,id',
-        ]);
+        $this->authorizePermission($request, 'employees:delete');
+        $employee = Employee::findOrFail($id);
+        $this->assertEmployeeInCompany($request, $employee);
+        $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
+        $employee->delete();
+        return $this->ok(null, 'Employee deleted successfully');
+    }
 
-        $employees = Employee::when($request->has('department_id'), function ($query) use ($validated) {
-            return $query->where('department_id', $validated['department_id']);
+    public function getByDepartment(Request $request, $departmentId)
+    {
+        $this->authorizePermission($request, 'employees:view');
+
+        $query = Employee::with(['department', 'designationRef', 'user'])
+            ->where('department_id', $departmentId);
+        $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
+
+        return $this->ok($query->paginate((int) $request->input('per_page', 15)));
+    }
+
+    public function search(Request $request)
+    {
+        $this->authorizePermission($request, 'employees:view');
+
+        $term = $request->input('q', '');
+        $query = Employee::where(function ($search) use ($term): void {
+            $search->where('name', 'like', "%$term%")
+                ->orWhere('email', 'like', "%$term%")
+                ->orWhere('designation', 'like', "%$term%");
         })
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
-            ->where('status', 'active')
-            ->get();
+            ->with(['department', 'designationRef', 'user']);
+        $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
 
-        $created = 0;
-        $failed = 0;
-        $skipped = 0;
+        return $this->ok($query->paginate((int) $request->input('per_page', 15)));
+    }
 
-        $calculator = new PayrollCalculator();
+    public function setUserPassword(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'employees:edit');
+        $employee = Employee::with('user')->findOrFail($id);
+        $this->assertEmployeeInCompany($request, $employee);
+        $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
+        $validated = $request->validate(['password' => 'required|string|min:8|confirmed']);
 
-        foreach ($employees as $employee) {
-            try {
-                $alreadyExists = Payroll::where('employee_id', $employee->id)
-                    ->where('month', $validated['month'])
-                    ->where('year', $validated['year'])
-                    ->exists();
-
-                if ($alreadyExists) {
-                    $skipped++;
-                    continue;
-                }
-
-                $calc = $calculator->calculateForEmployee($employee, (int) $validated['month'], (int) $validated['year']);
-
-                Payroll::create([
-                    'employee_id' => $employee->id,
-                    'month' => $validated['month'],
-                    'year' => $validated['year'],
-                    'base_salary' => $calc['base_salary'],
-                    'bonus' => $calc['bonuses'],
-                    'deductions' => $calc['deductions'],
-                    'tax' => $calc['tax'],
-                    'net_salary' => $calc['net_salary'],
-                    'payment_date' => Carbon::createFromDate($validated['year'], $validated['month'], 1)->endOfMonth(),
-                    'status' => 'pending',
-                ]);
-                $created++;
-            } catch (\Exception $e) {
-                $failed++;
-            }
+        if (!$employee->user) {
+            return $this->fail('Linked user not found for this employee.', 404);
         }
 
-        return $this->ok([
-            'created' => $created,
-            'skipped' => $skipped,
-            'failed' => $failed,
-        ], 'Payroll generation completed');
+        $employee->user->update(['password' => Hash::make($validated['password'])]);
+        return $this->ok(null, 'Employee user password updated successfully');
     }
 
-    /**
-     * Mark payroll as paid
-     */
-    public function markAsPaid($id)
+    public function bulkAction(Request $request)
     {
-        $this->authorizePermission(request(), 'manage payroll');
-        $payroll = Payroll::findOrFail($id);
-        $this->assertPayrollInActorCompany(request(), $payroll);
-        $payroll->update(['status' => 'paid']);
-
-        return $this->ok($payroll, 'Payroll marked as paid');
-    }
-
-    /**
-     * Get payroll summary for a month
-     */
-    public function getMonthlySummary(Request $request)
-    {
-        $this->authorizePermission($request, 'view payroll');
+        $this->authorizePermission($request, 'employees:delete');
         $validated = $request->validate([
-            'month' => 'required|integer|min:1|max:12',
-            'year' => 'required|integer|min:2020',
+            'action' => 'required|in:activate,deactivate,delete',
+            'employee_ids' => 'required|array|min:1',
+            'employee_ids.*' => 'integer|exists:employees,id',
         ]);
 
-        $summary = Payroll::whereMonth('payment_date', $validated['month'])
-            ->whereYear('payment_date', $validated['year'])
-            ->selectRaw('
-                COUNT(*) as total_employees,
-                SUM(base_salary) as total_base_salary,
-                SUM(bonus) as total_bonus,
-                SUM(deductions) as total_deductions,
-                SUM(tax) as total_tax,
-                SUM(net_salary) as total_net_salary,
-                status
-            ')
-            ->groupBy('status')
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
-            ->get();
-
-        return $this->ok($summary);
-    }
-
-    private function authorizeRead(Request $request): void
-    {
-        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll') || $request->user()?->can('view own payroll')) {
-            return;
+        $query = Employee::whereIn('id', $validated['employee_ids']);
+        $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query);
+        if ($validated['action'] === 'activate') {
+            $query->update(['status' => 'active']);
+        } elseif ($validated['action'] === 'deactivate') {
+            $query->update(['status' => 'inactive']);
+        } else {
+            $query->delete();
         }
 
-        abort(403, 'You are not authorized to access payroll data.');
+        return $this->ok(null, 'Bulk action executed successfully');
     }
 
-    private function authorizeEmployeeScopedAccess(Request $request, int $employeeId): void
+    public function export(Request $request)
     {
-        if ($request->user()?->can('manage payroll')) {
-            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'payroll record');
-            return;
-        }
+        $this->authorizePermission($request, 'employees:export');
 
-        if ($request->user()?->can('view own payroll')) {
-            $ownEmployeeId = $this->ownEmployeeId($request->user());
-            if ($ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
-                return;
+        $rows = Employee::query()
+            ->with(['department', 'designationRef'])
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
+            ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id));
+
+        $this->scopeToCompany($request, $rows);
+        $this->applyManagedEmployeeScope($request, $rows);
+
+        $rows = $rows->orderBy('created_at', 'desc')->get();
+
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="employees.csv"',
+        ];
+
+        $callback = function () use ($rows): void {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['ID', 'Name', 'Email', 'Phone', 'Department', 'Designation', 'Status', 'Salary', 'Created At']);
+            foreach ($rows as $row) {
+                fputcsv($out, [
+                    $row->id,
+                    $row->name,
+                    $row->email,
+                    $row->phone,
+                    $row->department?->name,
+                    $row->designationRef?->name ?? $row->designation,
+                    $row->status,
+                    $row->salary,
+                    $row->created_at,
+                ]);
             }
-        }
+            fclose($out);
+        };
 
-        abort(403, 'You are not authorized to access this payroll record.');
+        return response()->stream($callback, 200, $headers);
     }
 
-    private function authorizePayrollAccess(Request $request, Payroll $payroll): void
+
+    private function authorizeEmployeeRead(Request $request, Employee $employee): void
     {
-        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll')) {
-            $this->assertPayrollInActorCompany($request, $payroll);
-            if ($request->user()?->can('manage payroll')) {
-                $this->authorizeManagedEmployeeAccess($request, (int) $payroll->employee_id, 'payroll record');
-            }
+        if ($request->user()?->can('employees:view')) {
+            $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
             return;
         }
-
-        $this->authorizeEmployeeScopedAccess($request, (int) $payroll->employee_id);
-        $this->assertPayrollInActorCompany($request, $payroll);
-    }
-
-    private function ownEmployeeId(?\App\Models\User $user): ?int
-    {
-        if (!$user) {
-            return null;
+        if ($request->user()?->id === $employee->user_id) {
+            return;
         }
-
-        return (int) (Employee::where('user_id', $user->id)->value('id') ?: 0) ?: null;
+        abort(403, 'You are not authorized to access this employee.');
     }
 
-    private function viewOwnOnly(?\App\Models\User $user): bool
-    {
-        return (bool) $user?->can('view own payroll')
-            && !$user?->can('view payroll')
-            && !$user?->can('manage payroll');
-    }
-
-    private function scopePayrollQueryToCompany(Request $request, $query): void
+    private function scopeToCompany(Request $request, $query): void
     {
         $companyId = $request->user()?->company_id;
         if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
+            $query->whereHas('user', function ($userQuery) use ($companyId): void {
                 $userQuery->where('company_id', $companyId);
             });
         }
     }
 
-    private function assertEmployeeInActorCompany(Request $request, int $employeeId): void
+    private function assertEmployeeInCompany(Request $request, Employee $employee): void
     {
         $companyId = $request->user()?->company_id;
         if (!$companyId) {
             return;
         }
 
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to access this payroll record.');
+        if ((string) ($employee->user?->company_id ?? '') !== (string) $companyId) {
+            abort(403, 'You are not authorized to access this employee.');
         }
     }
 
-    private function assertPayrollInActorCompany(Request $request, Payroll $payroll): void
+    private function assertUserCompanyMatch(Request $request, mixed $userOrId): void
     {
-        $this->assertEmployeeInActorCompany($request, (int) $payroll->employee_id);
+        $companyId = $request->user()?->company_id;
+        if (!$companyId || empty($userOrId)) {
+            return;
+        }
+
+        $user = $userOrId instanceof User
+            ? $userOrId
+            : User::query()->select(['id', 'company_id'])->find($userOrId);
+
+        if (!$user || (string) ($user->company_id ?? '') !== (string) $companyId) {
+            abort(403, 'You are not authorized to use this user account.');
+        }
+    }
+
+    private function assertEmployeeReferenceInCompany(Request $request, mixed $employeeId): void
+    {
+        if (empty($employeeId)) {
+            return;
+        }
+
+        $employee = Employee::with('user')->find($employeeId);
+        if ($employee) {
+            $this->assertEmployeeInCompany($request, $employee);
+        }
+    }
+
+    private function assignRoleToUser(User $user, ?string $roleName): void
+    {
+        $resolvedRoleName = $roleName ?: User::ROLE_EMPLOYEE;
+
+        if ($resolvedRoleName === User::ROLE_EMPLOYEE) {
+            $role = Role::firstOrCreate(
+                ['name' => User::ROLE_EMPLOYEE, 'company_id' => null],
+                ['guard_name' => 'web', 'description' => 'Default employee role', 'is_system' => true]
+            );
+        } else {
+            $role = Role::query()
+                ->where('name', $resolvedRoleName)
+                ->where('guard_name', 'web')
+                ->where(function ($query) use ($user): void {
+                    $query->whereNull('company_id');
+
+                    if ($user->company_id) {
+                        $query->orWhere('company_id', $user->company_id);
+                    }
+                })
+                ->first();
+        }
+
+        if (!$role) {
+            throw ValidationException::withMessages([
+                'role' => ['Selected role could not be assigned to the employee account.'],
+            ]);
+        }
+
+        $user->assignRole($role);
     }
 }

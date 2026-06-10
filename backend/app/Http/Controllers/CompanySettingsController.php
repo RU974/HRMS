@@ -14,7 +14,7 @@ class CompanySettingsController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $query = Company::query()->withCount(['branches', 'users'])->orderBy('name');
         if ($request->user()?->company_id) {
             $query->whereKey($request->user()->company_id);
@@ -25,7 +25,15 @@ class CompanySettingsController extends Controller
 
     public function show(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $user = $request->user();
+
+        // Any authenticated user can view their own company
+        $isOwnCompany = $user?->company_id && (string) $user->company_id === (string) $id;
+
+        if (!$isOwnCompany) {
+            $this->authorizePermission($request, 'settings:manage_settings');
+        }
+
         $company = Company::withCount(['branches', 'users'])->findOrFail($id);
         $this->assertCompanyAccess($request, $company);
 
@@ -34,7 +42,7 @@ class CompanySettingsController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'nullable|email|max:255',
@@ -53,7 +61,7 @@ class CompanySettingsController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $company = Company::findOrFail($id);
         $this->assertCompanyAccess($request, $company);
         $validated = $request->validate([
@@ -71,7 +79,7 @@ class CompanySettingsController extends Controller
 
     public function destroy(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $company = Company::withCount(['branches', 'users'])->findOrFail($id);
         $this->assertCompanyAccess($request, $company);
 

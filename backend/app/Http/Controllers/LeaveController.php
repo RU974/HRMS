@@ -18,7 +18,7 @@ class LeaveController extends Controller
         $this->scopeToCompany($request, $query);
         $this->applyManagedEmployeeScope($request, $query, 'employee');
 
-        if ($user?->can('view leaves') || $user?->can('approve leaves')) {
+        if ($user?->can('leaves:view') || $user?->can('leaves:approve')) {
             if ($request->filled('employee_id')) {
                 $this->assertEmployeeInCompany($request, (int) $request->employee_id);
                 $query->where('employee_id', $request->employee_id);
@@ -27,7 +27,11 @@ class LeaveController extends Controller
                 $query->where('status', $request->status);
             }
         } else {
-            $employee = Employee::where('user_id', $user?->id)->firstOrFail();
+            // Regular employees: scope to own records only
+            $employee = Employee::where('user_id', $user?->id)->first();
+            if (!$employee) {
+                return $this->ok(['data' => [], 'total' => 0]);
+            }
             $query->where('employee_id', $employee->id);
         }
 
@@ -62,7 +66,7 @@ class LeaveController extends Controller
                 $leave = Leave::create(array_merge($validated, ['approval_step' => 1]));
                 $policyService = new LeavePolicyService();
                 $leaveType = $policyService->findLeaveTypeByName($leave->type);
-                $isApproverCreatedApproved = $request->user()?->can('approve leaves') && $leave->status === 'approved';
+                $isApproverCreatedApproved = $request->user()?->can('leaves:approve') && $leave->status === 'approved';
                 if ($isApproverCreatedApproved && $leaveType && (int) $leaveType->required_approval_levels > 1) {
                     $leave->status = 'pending';
                     $leave->save();
@@ -86,7 +90,7 @@ class LeaveController extends Controller
     public function update(Request $request, $id)
     {
         $leave = Leave::findOrFail($id);
-        if (!$request->user()?->can('approve leaves')) {
+        if (!$request->user()?->can('leaves:approve')) {
             abort(403, 'You are not authorized to update this leave request.');
         }
         $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
@@ -144,7 +148,7 @@ class LeaveController extends Controller
     {
         $leave = Leave::findOrFail($id);
 
-        if ($request->user()?->can('approve leaves')) {
+        if ($request->user()?->can('leaves:approve')) {
             $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
             $this->authorizeManagedEmployeeAccess($request, (int) $leave->employee_id, 'leave request');
 
@@ -157,8 +161,8 @@ class LeaveController extends Controller
             return $this->ok(null, 'Leave request deleted successfully');
         }
 
-        $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
-        if ((int) $leave->employee_id !== (int) $employee->id || $leave->status !== 'pending') {
+        $employee = Employee::where('user_id', $request->user()?->id)->first();
+        if (!$employee || (int) $leave->employee_id !== (int) $employee->id || $leave->status !== 'pending') {
             abort(403, 'You can only delete your own pending leave request.');
         }
 
@@ -173,7 +177,7 @@ class LeaveController extends Controller
 
     private function authorizeRead(Request $request, Leave $leave): void
     {
-        if ($request->user()?->can('view leaves') || $request->user()?->can('approve leaves')) {
+        if ($request->user()?->can('leaves:view') || $request->user()?->can('leaves:approve')) {
             $this->assertEmployeeInCompany($request, (int) $leave->employee_id);
             $this->authorizeManagedEmployeeAccess($request, (int) $leave->employee_id, 'leave request');
             return;
@@ -189,14 +193,14 @@ class LeaveController extends Controller
 
     private function authorizeCreate(Request $request, int $employeeId): void
     {
-        if ($request->user()?->can('manage leaves') || $request->user()?->can('approve leaves')) {
+        if ($request->user()?->can('leaves:manage_settings') || $request->user()?->can('leaves:approve')) {
             $this->assertEmployeeInCompany($request, $employeeId);
             $this->authorizeManagedEmployeeAccess($request, $employeeId, 'leave request');
             return;
         }
 
         $employee = Employee::where('user_id', $request->user()?->id)->first();
-        if ($request->user()?->can('request own leave') && $employee && (int) $employee->id === $employeeId) {
+        if ($request->user()?->can('leaves:create') && $employee && (int) $employee->id === $employeeId) {
             return;
         }
 

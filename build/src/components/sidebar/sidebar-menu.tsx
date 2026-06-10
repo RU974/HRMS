@@ -210,8 +210,8 @@ function EmployeeShortcuts({ collapsed }: { collapsed: boolean }) {
     onError: (e: Error) => setFeedback({ type: "error", msg: e.message }),
   });
 
-  const leaveLinkVisible   = hasPermission("request own leave") || hasPermission("view leaves") || hasPermission("approve leaves");
-  const payrollLinkVisible = hasPermission("view own payroll") || hasPermission("view payroll") || hasPermission("manage payroll");
+  const leaveLinkVisible   = hasPermission("leaves:view") || hasPermission("leaves:approve");
+  const payrollLinkVisible = hasPermission("payroll:view") || hasPermission("payroll:manage_settings");
   const showComms          = isSuperAdminRole(user);
 
   if (!employeeId) return null;

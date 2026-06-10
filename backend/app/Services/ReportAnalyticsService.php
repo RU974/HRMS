@@ -256,22 +256,22 @@ class ReportAnalyticsService
             return false;
         }
 
-        return $user->can('view employees')
-            || $user->can('export employees')
-            || $user->can('view attendance')
-            || $user->can('manage attendance')
-            || $user->can('approve attendance')
-            || $user->can('view leaves')
-            || $user->can('manage leaves')
-            || $user->can('approve leaves')
-            || $user->can('view payroll')
-            || $user->can('manage payroll')
-            || $user->can('view performance')
-            || $user->can('manage performance')
-            || $user->can('view reports')
-            || $user->can('export reports')
-            || $user->can('manage reports')
-            || $user->can('view team employees');
+        return $user->can('employees:view')
+            || $user->can('employees:export')
+            || $user->can('attendance:view')
+            || $user->can('attendance:manage_settings')
+            || $user->can('attendance:approve')
+            || $user->can('leaves:view')
+            || $user->can('leaves:manage_settings')
+            || $user->can('leaves:approve')
+            || $user->can('payroll:view')
+            || $user->can('payroll:manage_settings')
+            || $user->can('performance:view')
+            || $user->can('performance:manage_settings')
+            || $user->can('reports:view')
+            || $user->can('reports:export')
+            || $user->can('reports:manage_settings')
+            || $user->can('employees:view');
     }
 
     private function userIsCompanyAdmin(Request $request): bool

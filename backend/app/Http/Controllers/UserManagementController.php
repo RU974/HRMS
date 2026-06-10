@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Branch;
 use App\Services\UserManagementService;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class UserManagementController extends Controller
 {
@@ -15,160 +13,97 @@ class UserManagementController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'manage users');
-        $q = \App\Models\User::query()->with(['company', 'branch', 'roles.permissions', 'permissions']);
-        $this->applyCompanyScope($request, $q);
-        if ($request->filled('search')) {
-            $search = (string) $request->input('search');
-            $q->where(function ($w) use ($search) {
-                $w->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-        return $this->ok($q->orderBy('name')->get());
-    }
+        $this->authorizePermission($request, 'users:view');
 
-    public function show(Request $request, int $id)
-    {
-        $this->authorizePermission($request, 'manage users');
-        $user = \App\Models\User::with(['company', 'branch', 'roles.permissions', 'permissions'])->findOrFail($id);
-        $this->assertCompanyAccess($request, $user);
+        $users = \App\Models\User::with(['roles.permissions', 'permissions', 'company', 'branch'])
+            ->when($request->user()?->company_id, fn ($q) => $q->where('company_id', $request->user()->company_id))
+            ->orderBy('name')
+            ->get();
 
-        return $this->ok($user);
+        return $this->ok($users);
     }
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage users');
+        $this->authorizePermission($request, 'users:create');
+
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email',
-            'password' => 'required|string|min:8',
-            'role_ids' => 'required|array|min:1',
-            'role_ids.*' => [
-                'required',
-                'integer',
-                Rule::exists('roles', 'id')->where(function ($query) use ($request) {
-                    $query->whereNull('company_id');
-                    if ($request->user()?->company_id) {
-                        $query->orWhere('company_id', $request->user()?->company_id);
-                    }
-                }),
-            ],
-            'company_id' => 'nullable|exists:companies,id',
-            'branch_id' => 'nullable|exists:branches,id',
+            'name'       => 'required|string|max:255',
+            'email'      => 'required|email|unique:users,email',
+            'username'   => 'nullable|string|max:255|unique:users,username',
+            'password'   => 'required|string|min:8',
+            'company_id' => 'nullable|uuid|exists:companies,id',
+            'branch_id'  => 'nullable|uuid|exists:branches,id',
+            'role_ids'   => 'nullable|array',
+            'role_ids.*' => 'uuid|exists:roles,id',
         ]);
 
-        $this->normalizeCompanyPayload($request, $validated);
-        $this->assertBranchMatchesCompany($validated);
+        // Non-super-admins can only create users in their own company
+        if ($request->user()?->company_id) {
+            $validated['company_id'] = $request->user()->company_id;
+        }
 
         $user = $this->service->create($validated, $request->user());
+
         return $this->ok($user, 'User created successfully', 201);
     }
 
-    public function update(Request $request, int $id)
+    public function show(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage users');
+        $this->authorizePermission($request, 'users:view');
+
+        $user = \App\Models\User::with(['roles.permissions', 'permissions', 'company', 'branch'])
+            ->findOrFail($id);
+
+        if ($request->user()?->company_id && (string) $user->company_id !== (string) $request->user()->company_id) {
+            abort(403, 'You are not authorized to view this user.');
+        }
+
+        return $this->ok($user);
+    }
+
+    public function update(Request $request, string $id)
+    {
+        $this->authorizePermission($request, 'users:edit');
+
         $user = \App\Models\User::findOrFail($id);
-        $this->assertCompanyAccess($request, $user);
+
+        if ($request->user()?->company_id && (string) $user->company_id !== (string) $request->user()->company_id) {
+            abort(403, 'You are not authorized to update this user.');
+        }
+
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password' => 'nullable|string|min:8',
-            'role_ids' => 'sometimes|required|array|min:1',
-            'role_ids.*' => [
-                'required',
-                'integer',
-                Rule::exists('roles', 'id')->where(function ($query) use ($request) {
-                    $query->whereNull('company_id');
-                    if ($request->user()?->company_id) {
-                        $query->orWhere('company_id', $request->user()?->company_id);
-                    }
-                }),
-            ],
-            'company_id' => 'nullable|exists:companies,id',
-            'branch_id' => 'nullable|exists:branches,id',
+            'name'       => 'sometimes|required|string|max:255',
+            'email'      => 'sometimes|required|email|unique:users,email,' . $id,
+            'username'   => 'nullable|string|max:255|unique:users,username,' . $id,
+            'password'   => 'nullable|string|min:8',
+            'company_id' => 'nullable|uuid|exists:companies,id',
+            'branch_id'  => 'nullable|uuid|exists:branches,id',
+            'role_ids'   => 'nullable|array',
+            'role_ids.*' => 'uuid|exists:roles,id',
         ]);
 
-        $this->normalizeCompanyPayload($request, $validated, $user->company_id);
-        $this->assertBranchMatchesCompany($validated, $user->company_id);
+        $user = $this->service->update($user, $validated, $request->user());
 
-        return $this->ok($this->service->update($user, $validated, $request->user()), 'User updated successfully');
+        return $this->ok($user, 'User updated successfully');
     }
 
-    public function destroy(Request $request, int $id)
+    public function destroy(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage users');
+        $this->authorizePermission($request, 'users:delete');
+
         $user = \App\Models\User::findOrFail($id);
-        $this->assertCompanyAccess($request, $user);
-        if ($request->user()?->id === $user->id) {
+
+        if ($request->user()?->company_id && (string) $user->company_id !== (string) $request->user()->company_id) {
+            abort(403, 'You are not authorized to delete this user.');
+        }
+
+        if ((string) $user->id === (string) $request->user()->id) {
             return $this->fail('You cannot delete your own account.', 422);
         }
+
         $user->delete();
+
         return $this->ok(null, 'User deleted successfully');
-    }
-
-    /**
-     * @param  array<string, mixed>  $validated
-     */
-    private function assertBranchMatchesCompany(array $validated, ?string $fallbackCompanyId = null): void
-    {
-        if (empty($validated['branch_id'])) {
-            return;
-        }
-
-        $companyId = $validated['company_id'] ?? $fallbackCompanyId ?? null;
-        if (!$companyId) {
-            abort(422, 'Select a company before assigning a branch.');
-        }
-
-        $branchExists = Branch::query()
-            ->whereKey($validated['branch_id'])
-            ->where('company_id', $companyId)
-            ->exists();
-
-        if (!$branchExists) {
-            abort(422, 'Selected branch does not belong to the selected company.');
-        }
-    }
-
-    private function applyCompanyScope(Request $request, \Illuminate\Database\Eloquent\Builder $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->where('company_id', $companyId);
-        }
-    }
-
-    private function assertCompanyAccess(Request $request, \App\Models\User $targetUser): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        if ((string) ($targetUser->company_id ?? '') !== (string) $companyId) {
-            abort(403, 'You are not authorized to access this user.');
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $validated
-     */
-    private function normalizeCompanyPayload(Request $request, array &$validated, ?string $fallbackCompanyId = null): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        if (!empty($validated['company_id']) && (string) $validated['company_id'] !== (string) $companyId) {
-            abort(403, 'You are not authorized to assign users outside your company.');
-        }
-
-        if ($fallbackCompanyId !== null && (string) $fallbackCompanyId !== (string) $companyId) {
-            abort(403, 'You are not authorized to modify users outside your company.');
-        }
-
-        $validated['company_id'] = $companyId;
     }
 }

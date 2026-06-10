@@ -22,7 +22,7 @@ class UserRoleController extends Controller
 
     public function getUserRoles(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'assign roles');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $user = User::with('roles.permissions', 'permissions')->findOrFail($id);
         $this->assertSameCompanyUser($request, $user);
 
@@ -36,7 +36,7 @@ class UserRoleController extends Controller
     {
         $validated = $request->validated();
 
-        $this->authorizePermission($request, 'assign roles');
+        $this->authorizePermission($request, 'settings:manage_settings');
 
         $user = User::findOrFail($id);
         $this->assertSameCompanyUser($request, $user);
@@ -64,7 +64,7 @@ class UserRoleController extends Controller
     {
         $validated = $request->validated();
 
-        $this->authorizePermission($request, 'assign roles');
+        $this->authorizePermission($request, 'settings:manage_settings');
 
         $user = User::findOrFail($id);
         $this->assertSameCompanyUser($request, $user);
@@ -97,7 +97,7 @@ class UserRoleController extends Controller
     {
         $validated = $request->validated();
 
-        $this->authorizePermission($request, 'assign roles');
+        $this->authorizePermission($request, 'settings:manage_settings');
 
         $user = User::findOrFail($id);
         $this->assertSameCompanyUser($request, $user);

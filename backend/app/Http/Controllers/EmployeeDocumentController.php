@@ -36,7 +36,7 @@ class EmployeeDocumentController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage employee documents');
+        $this->authorizePermission($request, 'documents:edit');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'title' => 'required|string|max:255',
@@ -59,7 +59,7 @@ class EmployeeDocumentController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage employee documents');
+        $this->authorizePermission($request, 'documents:edit');
         $document = EmployeeDocument::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $document->employee_id);
         $validated = $request->validate([
@@ -91,7 +91,7 @@ class EmployeeDocumentController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage employee documents');
+        $this->authorizePermission($request, 'documents:edit');
         $document = EmployeeDocument::with('versions')->findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $document->employee_id);
 
@@ -137,7 +137,7 @@ class EmployeeDocumentController extends Controller
 
     private function ensureAccess(Request $request, EmployeeDocument $document): void
     {
-        if ($request->user()?->can('manage employee documents')) {
+        if ($request->user()?->can('documents:edit')) {
             $this->authorizeManagedEmployeeAccess($request, (int) $document->employee_id, 'employee document');
             return;
         }
@@ -150,13 +150,13 @@ class EmployeeDocumentController extends Controller
     private function canAccess(Request $request, EmployeeDocument $document): bool
     {
         $user = $request->user();
-        if ($user?->can('manage employee documents')) {
+        if ($user?->can('documents:edit')) {
             return $this->isInCompany($request, $document->employee_id);
         }
         if ($document->visibility === 'manager_only') {
             // Manager-only documents require actual management hierarchy relationship
             // Not just generic view employees/attendance permissions
-            if (!($user?->can('view employees') || $user?->can('view attendance'))) {
+            if (!($user?->can('employees:view') || $user?->can('attendance:view'))) {
                 return false;
             }
 

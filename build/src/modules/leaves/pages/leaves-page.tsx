@@ -46,11 +46,11 @@ const leaveStatusOptions: Array<{ value: LeaveItem["status"]; label: string }> =
 export function LeavesPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const hasApproveLeaves = useAuthStore((state) => state.hasPermission("approve leaves"));
-  const hasViewLeaves = useAuthStore((state) => state.hasPermission("view leaves"));
-  const canRequestOwnLeave = useAuthStore((state) => state.hasPermission("request own leave"));
-  const canManageLeaves = useAuthStore((state) => state.hasPermission("manage leaves"));
-  const canManageTypes = canManageLeaves || useAuthStore((state) => state.hasPermission("manage settings"));
+  const hasApproveLeaves = useAuthStore((state) => state.hasPermission("leaves:approve"));
+  const hasViewLeaves = useAuthStore((state) => state.hasPermission("leaves:view"));
+  const canRequestOwnLeave = useAuthStore((state) => state.hasPermission("leaves:view"));
+  const canManageLeaves = useAuthStore((state) => state.hasPermission("leaves:manage_settings"));
+  const canManageTypes = canManageLeaves || useAuthStore((state) => state.hasPermission("settings:manage_settings"));
 
   const currentEmployeeId = user?.employee?.id ?? 0;
   const [error, setError] = useState<string | null>(null);

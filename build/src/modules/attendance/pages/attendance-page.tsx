@@ -47,7 +47,7 @@ const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var
 export function AttendancePage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const canManage = useAuthStore((s) => s.hasPermission("manage attendance"));
+  const canManage = useAuthStore((s) => s.hasPermission("attendance:manage_settings"));
   const now = useLiveClock();
   const today = now.toISOString().slice(0, 10);
 

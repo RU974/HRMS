@@ -38,7 +38,7 @@ function getInitials(name: string) {
 
 export function AnnouncementsPage() {
   const queryClient = useQueryClient();
-  const canManage = useAuthStore((s) => s.hasPermission("manage announcements"));
+  const canManage = useAuthStore((s) => s.hasPermission("announcement:edit"));
 
   const [search, setSearch]                       = useState("");
   const [publishedFilter, setPublishedFilter]     = useState<FilterState>("published");

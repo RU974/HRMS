@@ -32,6 +32,7 @@ use App\Http\Controllers\CompanySettingsController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\ThemeSettingsController;
 use App\Http\Controllers\SystemLogController;
+use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\WorkflowController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AnnouncementController;
@@ -78,19 +79,19 @@ $registerRoutes = function (): void {
         Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search');
         Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
         Route::get('settings/themes/current', [ThemeSettingsController::class, 'current']);
-        Route::get('settings/themes/company', [ThemeSettingsController::class, 'company'])->middleware('permission:manage settings');
+        Route::get('settings/themes/company', [ThemeSettingsController::class, 'company'])->middleware('permission:settings:manage_settings');
         Route::put('settings/themes/current', [ThemeSettingsController::class, 'saveCurrent']);
         Route::delete('settings/themes/current', [ThemeSettingsController::class, 'resetCurrent']);
-        Route::middleware('permission:view reports')->prefix('reports')->group(function () {
+        Route::middleware('permission:reports:view')->prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
             Route::get('/attendance', [ReportController::class, 'attendance']);
             Route::get('/leave', [ReportController::class, 'leave']);
             Route::get('/payroll', [ReportController::class, 'payroll']);
             Route::get('/analytics', [ReportController::class, 'analytics']);
         });
-        Route::middleware('permission:view reports|manage reports')->apiResource('reports', ReportController::class);
+        Route::middleware('permission:reports:view|reports:manage_settings')->apiResource('reports', ReportController::class);
 
-        Route::middleware('permission:manage roles')->group(function () {
+        Route::middleware('permission:settings:manage_settings')->group(function () {
             Route::get('permissions', [RolePermissionController::class, 'permissions']);
             Route::get('roles', [RolePermissionController::class, 'roles']);
             Route::post('roles', [RolePermissionController::class, 'storeRole']);
@@ -103,18 +104,22 @@ $registerRoutes = function (): void {
             Route::put('users/{id}/roles', [UserRoleController::class, 'updateUserRoles']);
         });
 
-        Route::middleware('permission:user.manage')->group(function () {
+        Route::middleware('permission:users:view')->group(function () {
             Route::apiResource('settings/users', UserManagementController::class);
         });
 
-        Route::middleware('permission:manage settings')->group(function () {
+        Route::middleware('permission:settings:manage_settings')->group(function () {
             Route::apiResource('settings/companies', CompanySettingsController::class);
             Route::apiResource('settings/branches', BranchController::class);
             Route::apiResource('settings/themes', ThemeSettingsController::class);
-            Route::middleware('permission:view audit logs')->group(function () {
+            Route::middleware('permission:audit_logs:view')->group(function () {
                 Route::get('settings/system-logs', [SystemLogController::class, 'index']);
                 Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
             });
+            // Licensing
+            Route::get('settings/licenses/usage', [LicenseController::class, 'usage']);
+            Route::post('settings/licenses/activate', [LicenseController::class, 'activate']);
+            Route::apiResource('settings/licenses', LicenseController::class);
         });
 
         Route::middleware('permission:approvals:view')->group(function () {
@@ -140,11 +145,11 @@ $registerRoutes = function (): void {
         });
 
         // Department routes
-        Route::middleware('permission:manage settings')->group(function () {
+        Route::middleware('permission:settings:manage_settings')->group(function () {
             Route::post('departments/{id}/restore', [DepartmentController::class, 'restore']);
             Route::delete('departments/{id}/force', [DepartmentController::class, 'forceDelete']);
         });
-        Route::middleware('permission:manage employees')->post('departments/{id}/reassign-employees', [DepartmentController::class, 'reassignEmployees']);
+        Route::middleware('permission:employees:manage_settings')->post('departments/{id}/reassign-employees', [DepartmentController::class, 'reassignEmployees']);
         Route::apiResource('departments', DepartmentController::class);
 
         // Designation routes
@@ -160,7 +165,7 @@ $registerRoutes = function (): void {
             Route::post('attendance/{attendance}/review-correction', [AttendanceController::class, 'reviewCorrection']);
             Route::apiResource('attendance', AttendanceController::class);
         });
-        Route::middleware('permission:manage attendance')->group(function () {
+        Route::middleware('permission:attendance:manage_settings')->group(function () {
             Route::get('attendance/policy', [AttendanceController::class, 'getPolicy']);
             Route::put('attendance/policy', [AttendanceController::class, 'updatePolicy']);
         });
@@ -183,7 +188,7 @@ $registerRoutes = function (): void {
             Route::apiResource('bonuses', BonusController::class);
             Route::apiResource('deductions', DeductionController::class);
         });
-        Route::middleware('permission:manage payroll')->group(function () {
+        Route::middleware('permission:payroll:manage_settings')->group(function () {
             Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
             Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
             Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
@@ -194,14 +199,14 @@ $registerRoutes = function (): void {
         Route::apiResource('leaves', LeaveController::class);
 
         // Attendance/Leave setup routes
-        Route::middleware('permission:attendance.edit')->group(function () {
+        Route::middleware('permission:attendance:edit')->group(function () {
             Route::apiResource('holidays', HolidayController::class);
             Route::apiResource('shifts', ShiftController::class);
             Route::apiResource('leave-types', LeaveTypeController::class);
         });
 
         // Recruitment routes
-        Route::middleware('permission:recruitment.view')->group(function () {
+        Route::middleware('permission:recruitment:view')->group(function () {
             Route::get('recruitment/pipeline-summary', [RecruitmentCandidateController::class, 'pipelineSummary']);
             Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->only(['index', 'show']);
             Route::apiResource('candidates', RecruitmentCandidateController::class)->only(['index', 'show']);
@@ -209,7 +214,7 @@ $registerRoutes = function (): void {
             Route::apiResource('onboarding', RecruitmentOnboardingController::class)->only(['index', 'show']);
         });
 
-        Route::middleware('permission:manage recruitment|edit recruitment|schedule interviews|send offers')->group(function () {
+        Route::middleware('permission:recruitment:create|recruitment:edit|recruitment:delete')->group(function () {
             Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->except(['index', 'show']);
             Route::apiResource('candidates', RecruitmentCandidateController::class)->except(['index', 'show']);
             Route::apiResource('interviews', RecruitmentInterviewController::class)->except(['index', 'show']);
@@ -225,7 +230,7 @@ $registerRoutes = function (): void {
         });
 
         // Performance routes
-        Route::middleware('permission:view performance|manage performance')->group(function () {
+        Route::middleware('permission:performance:view|performance:manage_settings')->group(function () {
             Route::apiResource('performance-reviews', PerformanceReviewController::class);
             Route::apiResource('performance-kpis', PerformanceKpiController::class);
             Route::apiResource('performance-goals', PerformanceGoalController::class);

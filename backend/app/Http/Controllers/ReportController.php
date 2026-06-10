@@ -18,7 +18,7 @@ class ReportController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
 
         $validated = $request->validate([
             'q' => 'nullable|string|max:100',
@@ -57,7 +57,7 @@ class ReportController extends Controller
 
     public function show($id)
     {
-        $this->authorizeAnyPermission(request(), ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission(request(), ['reports:view', 'reports:manage_settings']);
 
         $report = Report::with(['creator:id,name,email', 'updater:id,name,email'])->findOrFail($id);
         $this->assertCompanyAccess(request(), $report);
@@ -68,7 +68,7 @@ class ReportController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage reports');
+        $this->authorizePermission($request, 'reports:manage_settings');
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -90,7 +90,7 @@ class ReportController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage reports');
+        $this->authorizePermission($request, 'reports:manage_settings');
 
         $report = Report::findOrFail($id);
         $this->assertCompanyAccess($request, $report);
@@ -114,7 +114,7 @@ class ReportController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage reports');
+        $this->authorizePermission($request, 'reports:manage_settings');
 
         $report = Report::findOrFail($id);
         $this->assertCompanyAccess($request, $report);
@@ -125,7 +125,7 @@ class ReportController extends Controller
 
     public function employees(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
 
         $service = new ReportAnalyticsService();
         $data = $service->employeeSummary($request);
@@ -148,7 +148,7 @@ class ReportController extends Controller
 
     public function attendance(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -176,7 +176,7 @@ class ReportController extends Controller
 
     public function leave(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -204,7 +204,7 @@ class ReportController extends Controller
 
     public function payroll(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -237,7 +237,7 @@ class ReportController extends Controller
 
     public function analytics(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['view reports', 'manage reports']);
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings']);
 
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
@@ -270,7 +270,7 @@ class ReportController extends Controller
             return null;
         }
 
-        if (!$request->user()?->can('export reports')) {
+        if (!$request->user()?->can('reports:export')) {
             abort(403, 'You are not authorized to export reports.');
         }
 

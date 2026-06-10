@@ -37,7 +37,7 @@ class ChatMessageController extends Controller
             $builder->where('sender_id', $user->id)
                 ->orWhere('receiver_id', $user->id);
 
-            if ($user->can('view chat messages') || $user->can('manage chat messages')) {
+            if ($user->can('chat:view') || $user->can('chat:manage_settings')) {
                 if ($user->company_id) {
                     if ($this->supportsCompanyScope()) {
                         $builder->orWhere('company_id', $user->company_id);

@@ -8,14 +8,20 @@ import type { CompanyItem } from "@/services/settings-service";
 
 function useCompanyName() {
   const user = useAuthStore((s) => s.user);
+
+  // Use the company name already on the user object (from login response)
+  const nameFromUser = (user as any)?.company?.name ?? null;
+
   const { data } = useQuery({
     queryKey: ["company-name", user?.company_id],
     queryFn: () => apiClient<CompanyItem>(`/settings/companies/${user?.company_id}`),
-    enabled: !!user?.company_id,
-    staleTime: 5 * 60 * 1000,
+    // Only call the API if we don't already have the name — avoids 403 for non-admins
+    enabled: !!user?.company_id && !nameFromUser,
+    staleTime: 10 * 60 * 1000,
     retry: false,
   });
-  return (data as CompanyItem | undefined)?.name ?? "Enterprise";
+
+  return nameFromUser ?? (data as CompanyItem | undefined)?.name ?? "Enterprise";
 }
 
 export function Sidebar() {

@@ -22,13 +22,19 @@ class AttendanceController extends Controller
 
         if ($request->has('employee_id')) {
             $employeeId = (int) $request->employee_id;
-            if (!$user?->can('manage attendance')) {
+            if (!$user?->can('attendance:manage_settings')) {
                 $this->authorizeAttendanceAccess($request, $employeeId);
             }
             $this->assertEmployeeInCompany($request, $employeeId);
             $query->where('employee_id', $employeeId);
-        } elseif (!$user?->can('manage attendance')) {
-            $employee = Employee::where('user_id', $request->user()?->id)->firstOrFail();
+        } elseif ($user?->can('attendance:view') || $user?->can('attendance:edit')) {
+            // Users with view/edit can see all company records (already scoped by company above)
+        } else {
+            // Regular employees: scope to own records only
+            $employee = Employee::where('user_id', $request->user()?->id)->first();
+            if (!$employee) {
+                return $this->ok(['data' => [], 'total' => 0]);
+            }
             $query->where('employee_id', $employee->id);
         }
 
@@ -54,7 +60,7 @@ class AttendanceController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage attendance');
+        $this->authorizePermission($request, 'attendance:manage_settings');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'date' => 'required|date',
@@ -98,7 +104,7 @@ class AttendanceController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'approve attendance');
+        $this->authorizePermission($request, 'attendance:approve');
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
         $validated = $request->validate([
@@ -141,7 +147,7 @@ class AttendanceController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage attendance');
+        $this->authorizePermission($request, 'attendance:manage_settings');
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
         $attendance->delete();
@@ -266,13 +272,18 @@ class AttendanceController extends Controller
 
         if ($request->has('employee_id')) {
             $employeeId = (int) $request->employee_id;
-            if (!$user?->can('manage attendance') && !$user?->can('approve attendance')) {
+            if (!$user?->can('attendance:manage_settings') && !$user?->can('attendance:approve')) {
                 $this->authorizeAttendanceAccess($request, $employeeId);
             }
             $this->assertEmployeeInCompany($request, $employeeId);
             $query->where('employee_id', $employeeId);
-        } elseif (!$user?->can('manage attendance') && !$user?->can('approve attendance')) {
-            $employee = Employee::where('user_id', $user?->id)->firstOrFail();
+        } elseif ($user?->can('attendance:view') || $user?->can('attendance:edit')) {
+            // Users with view/edit can see all company corrections
+        } else {
+            $employee = Employee::where('user_id', $user?->id)->first();
+            if (!$employee) {
+                return $this->ok(['data' => [], 'total' => 0]);
+            }
             $query->where('employee_id', $employee->id);
         }
 
@@ -287,7 +298,7 @@ class AttendanceController extends Controller
             $query->whereYear('date', $request->year);
         }
 
-        if ($user?->can('manage attendance') || $user?->can('approve attendance')) {
+        if ($user?->can('attendance:manage_settings') || $user?->can('attendance:approve')) {
             $this->applyManagedEmployeeScope($request, $query, 'employee');
         }
 
@@ -296,7 +307,7 @@ class AttendanceController extends Controller
 
     public function companyMonthlySummary(Request $request)
     {
-        $this->authorizePermission($request, 'view attendance');
+        $this->authorizePermission($request, 'attendance:view');
         $validated = $request->validate([
             'month' => 'required|integer|min:1|max:12',
             'year' => 'required|integer|min:2000',
@@ -330,13 +341,13 @@ class AttendanceController extends Controller
 
     public function getPolicy(Request $request)
     {
-        $this->authorizePermission($request, 'manage attendance');
+        $this->authorizePermission($request, 'attendance:manage_settings');
         return $this->ok(AttendancePolicy::query()->first());
     }
 
     public function updatePolicy(Request $request)
     {
-        $this->authorizePermission($request, 'manage attendance');
+        $this->authorizePermission($request, 'attendance:manage_settings');
         $validated = $request->validate([
             'late_after_time' => 'required|date_format:H:i',
             'allow_manual_status_override' => 'required|boolean',
@@ -378,7 +389,7 @@ class AttendanceController extends Controller
 
     public function reviewCorrection(Request $request, $id)
     {
-        $this->authorizePermission($request, 'approve attendance');
+        $this->authorizePermission($request, 'attendance:approve');
 
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
@@ -418,14 +429,21 @@ class AttendanceController extends Controller
 
     private function authorizeAttendanceAccess(Request $request, int $employeeId): void
     {
-        if ($request->user()?->can('manage attendance')) {
+        // Full managers can access any employee record within their scope
+        if ($request->user()?->can('attendance:manage_settings')
+            || $request->user()?->can('attendance:view')
+            || $request->user()?->can('attendance:edit')
+            || $request->user()?->can('attendance:approve')) {
             $this->assertEmployeeInCompany($request, $employeeId);
-            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'attendance record');
+            if ($request->user()?->can('attendance:manage_settings')) {
+                $this->authorizeManagedEmployeeAccess($request, $employeeId, 'attendance record');
+            }
             return;
         }
 
+        // Regular employees can only access their own records
         $employee = Employee::where('user_id', $request->user()?->id)->first();
-        if (!$employee || $employee->id !== $employeeId) {
+        if (!$employee || (int)$employee->id !== $employeeId) {
             abort(403, 'You are not authorized to perform this action for this employee.');
         }
     }

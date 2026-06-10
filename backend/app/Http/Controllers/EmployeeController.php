@@ -19,7 +19,7 @@ class EmployeeController extends Controller
 {
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view employees');
+        $this->authorizePermission($request, 'employees:view');
 
         $query = Employee::with(['department', 'designationRef', 'user']);
         $this->scopeToCompany($request, $query);
@@ -63,7 +63,7 @@ class EmployeeController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'create employees');
+        $this->authorizePermission($request, 'employees:create');
         $validated = $request->validate([
             'user_id' => ['nullable', 'exists:users,id', Rule::unique('employees', 'user_id')],
             'name' => 'nullable|string|max:255',
@@ -171,7 +171,7 @@ class EmployeeController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'edit employees');
+        $this->authorizePermission($request, 'employees:edit');
         $employee = Employee::findOrFail($id);
         $this->assertEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
@@ -230,7 +230,7 @@ class EmployeeController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'delete employees');
+        $this->authorizePermission($request, 'employees:delete');
         $employee = Employee::findOrFail($id);
         $this->assertEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
@@ -240,7 +240,7 @@ class EmployeeController extends Controller
 
     public function getByDepartment(Request $request, $departmentId)
     {
-        $this->authorizePermission($request, 'view employees');
+        $this->authorizePermission($request, 'employees:view');
 
         $query = Employee::with(['department', 'designationRef', 'user'])
             ->where('department_id', $departmentId);
@@ -252,7 +252,7 @@ class EmployeeController extends Controller
 
     public function search(Request $request)
     {
-        $this->authorizePermission($request, 'view employees');
+        $this->authorizePermission($request, 'employees:view');
 
         $term = $request->input('q', '');
         $query = Employee::where(function ($search) use ($term): void {
@@ -269,7 +269,7 @@ class EmployeeController extends Controller
 
     public function setUserPassword(Request $request, $id)
     {
-        $this->authorizePermission($request, 'edit employees');
+        $this->authorizePermission($request, 'employees:edit');
         $employee = Employee::with('user')->findOrFail($id);
         $this->assertEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
@@ -285,7 +285,7 @@ class EmployeeController extends Controller
 
     public function bulkAction(Request $request)
     {
-        $this->authorizePermission($request, 'delete employees');
+        $this->authorizePermission($request, 'employees:delete');
         $validated = $request->validate([
             'action' => 'required|in:activate,deactivate,delete',
             'employee_ids' => 'required|array|min:1',
@@ -308,7 +308,7 @@ class EmployeeController extends Controller
 
     public function export(Request $request)
     {
-        $this->authorizePermission($request, 'export employees');
+        $this->authorizePermission($request, 'employees:export');
 
         $rows = Employee::query()
             ->with(['department', 'designationRef'])
@@ -350,7 +350,7 @@ class EmployeeController extends Controller
 
     private function authorizeEmployeeRead(Request $request, Employee $employee): void
     {
-        if ($request->user()?->can('view employees')) {
+        if ($request->user()?->can('employees:view')) {
             $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
             return;
         }

@@ -53,14 +53,14 @@ class SearchController extends Controller
         $categories = [];
 
         $this->appendCategory($categories, 'employees', 'Employees', $this->searchEmployees($request, $query, $employee?->id));
-        $this->appendCategory($categories, 'departments', 'Departments', $this->searchDepartments($query), $request->user()?->can('manage settings'));
-        $this->appendCategory($categories, 'designations', 'Designations', $this->searchDesignations($query), $request->user()?->can('manage settings'));
-        $this->appendCategory($categories, 'shifts', 'Shifts', $this->searchShifts($query), $request->user()?->can('attendance.edit') || $request->user()?->can('manage settings'));
-        $this->appendCategory($categories, 'holidays', 'Holidays', $this->searchHolidays($query), $request->user()?->can('attendance.edit') || $request->user()?->can('manage settings'));
+        $this->appendCategory($categories, 'departments', 'Departments', $this->searchDepartments($query), $request->user()?->can('settings:manage_settings'));
+        $this->appendCategory($categories, 'designations', 'Designations', $this->searchDesignations($query), $request->user()?->can('settings:manage_settings'));
+        $this->appendCategory($categories, 'shifts', 'Shifts', $this->searchShifts($query), $request->user()?->can('attendance:edit') || $request->user()?->can('settings:manage_settings'));
+        $this->appendCategory($categories, 'holidays', 'Holidays', $this->searchHolidays($query), $request->user()?->can('attendance:edit') || $request->user()?->can('settings:manage_settings'));
         $this->appendCategory($categories, 'attendance', 'Attendance', $this->searchAttendance($request, $query, $employee?->id));
         $this->appendCategory($categories, 'leaves', 'Leaves', $this->searchLeaves($request, $query, $employee?->id));
         $this->appendCategory($categories, 'payroll', 'Payroll', $this->searchPayroll($request, $query, $employee?->id));
-        $this->appendCategory($categories, 'reports', 'Reports', $this->searchReports($query), $request->user()?->can('view reports') || $request->user()?->can('export reports') || $request->user()?->can('manage payroll') || $request->user()?->can('manage performance') || $request->user()?->can('view performance') || $request->user()?->can('recruitment.view'));
+        $this->appendCategory($categories, 'reports', 'Reports', $this->searchReports($query), $request->user()?->can('reports:view') || $request->user()?->can('reports:export') || $request->user()?->can('payroll:manage_settings') || $request->user()?->can('performance:manage_settings') || $request->user()?->can('performance:view') || $request->user()?->can('recruitment:view'));
         $this->appendCategory($categories, 'announcements', 'Announcements', $this->searchAnnouncements($request, $query));
         $this->appendCategory($categories, 'notifications', 'Notifications', $this->searchNotifications($request, $query));
         $this->appendCategory($categories, 'chat', 'Chat Messages', $this->searchChatMessages($request, $query));
@@ -102,7 +102,7 @@ class SearchController extends Controller
     private function searchEmployees(Request $request, string $query, ?int $employeeId): array
     {
         $user = $request->user();
-        $canViewAll = (bool) $user?->can('view employees');
+        $canViewAll = (bool) $user?->can('employees:view');
         $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
@@ -233,7 +233,7 @@ class SearchController extends Controller
     private function searchAttendance(Request $request, string $query, ?int $employeeId): array
     {
         $user = $request->user();
-        $canViewAll = (bool) ($user?->can('manage attendance') || $user?->can('view attendance'));
+        $canViewAll = (bool) ($user?->can('attendance:manage_settings') || $user?->can('attendance:view'));
         $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
@@ -282,7 +282,7 @@ class SearchController extends Controller
     private function searchLeaves(Request $request, string $query, ?int $employeeId): array
     {
         $user = $request->user();
-        $canViewAll = (bool) ($user?->can('view leaves') || $user?->can('approve leaves'));
+        $canViewAll = (bool) ($user?->can('leaves:view') || $user?->can('leaves:approve'));
         $canViewOwn = (bool) $user?->can('request own leave');
         $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
@@ -331,8 +331,8 @@ class SearchController extends Controller
     private function searchPayroll(Request $request, string $query, ?int $employeeId): array
     {
         $user = $request->user();
-        $canViewAll = (bool) ($user?->can('manage payroll') || $user?->can('view payroll'));
-        $canViewOwn = (bool) $user?->can('view own payroll');
+        $canViewAll = (bool) ($user?->can('payroll:manage_settings') || $user?->can('payroll:view'));
+        $canViewOwn = (bool) $user?->can('payroll:view');
         $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
             return [];
@@ -424,7 +424,7 @@ class SearchController extends Controller
 
     private function searchJobOpenings(Request $request, string $query): array
     {
-        if (!$request->user()?->can('recruitment.view')) {
+        if (!$request->user()?->can('recruitment:view')) {
             return [];
         }
 
@@ -455,7 +455,7 @@ class SearchController extends Controller
 
     private function searchCandidates(Request $request, string $query): array
     {
-        if (!$request->user()?->can('recruitment.view')) {
+        if (!$request->user()?->can('recruitment:view')) {
             return [];
         }
 
@@ -487,7 +487,7 @@ class SearchController extends Controller
 
     private function searchInterviews(Request $request, string $query): array
     {
-        if (!$request->user()?->can('recruitment.view')) {
+        if (!$request->user()?->can('recruitment:view')) {
             return [];
         }
 
@@ -518,7 +518,7 @@ class SearchController extends Controller
 
     private function searchOnboarding(Request $request, string $query): array
     {
-        if (!$request->user()?->can('recruitment.view')) {
+        if (!$request->user()?->can('recruitment:view')) {
             return [];
         }
 
@@ -551,7 +551,7 @@ class SearchController extends Controller
 
     private function searchPerformanceReviews(Request $request, string $query): array
     {
-        if (!$request->user()?->can('view performance') && !$request->user()?->can('manage performance')) {
+        if (!$request->user()?->can('performance:view') && !$request->user()?->can('performance:manage_settings')) {
             return [];
         }
 
@@ -587,7 +587,7 @@ class SearchController extends Controller
 
     private function searchPerformanceKpis(Request $request, string $query): array
     {
-        if (!$request->user()?->can('view performance') && !$request->user()?->can('manage performance')) {
+        if (!$request->user()?->can('performance:view') && !$request->user()?->can('performance:manage_settings')) {
             return [];
         }
 
@@ -622,7 +622,7 @@ class SearchController extends Controller
 
     private function searchPerformanceGoals(Request $request, string $query): array
     {
-        if (!$request->user()?->can('view performance') && !$request->user()?->can('manage performance')) {
+        if (!$request->user()?->can('performance:view') && !$request->user()?->can('performance:manage_settings')) {
             return [];
         }
 
@@ -658,7 +658,7 @@ class SearchController extends Controller
 
     private function searchPerformanceAppraisals(Request $request, string $query): array
     {
-        if (!$request->user()?->can('view performance') && !$request->user()?->can('manage performance')) {
+        if (!$request->user()?->can('performance:view') && !$request->user()?->can('performance:manage_settings')) {
             return [];
         }
 

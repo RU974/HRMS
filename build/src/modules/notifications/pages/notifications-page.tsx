@@ -43,7 +43,7 @@ function formatTime(ts: string) {
 
 export function NotificationsPage() {
   const queryClient = useQueryClient();
-  const canManage = useAuthStore((s) => s.hasPermission("manage notifications"));
+  const canManage = useAuthStore((s) => s.hasPermission("notification:edit"));
 
   const [search, setSearch]           = useState("");
   const [readFilter, setReadFilter]   = useState<ReadFilter>("all");

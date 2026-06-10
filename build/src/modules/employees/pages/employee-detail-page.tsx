@@ -68,7 +68,7 @@ export function EmployeeDetailPage() {
   const employeeId = Number(id);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const canManage = useAuthStore((s) => s.hasPermission("manage employees"));
+  const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
 
   const [tab, setTab] = useState<Tab>("overview");
   const [editOpen, setEditOpen] = useState(false);

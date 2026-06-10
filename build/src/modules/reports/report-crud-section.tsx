@@ -22,7 +22,7 @@ const defaultForm: ReportFormState = {
 
 export function ReportCrudSection({ reportType, moduleKey }: { reportType: ReportType; moduleKey?: string }) {
   const queryClient = useQueryClient();
-  const canManageReports = useAuthStore((state) => state.hasPermission("export reports"));
+  const canManageReports = useAuthStore((state) => state.hasPermission("reports:export"));
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ReportStatus | "">("");
   const [editing, setEditing] = useState<Report | null>(null);

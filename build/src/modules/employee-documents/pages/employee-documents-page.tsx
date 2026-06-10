@@ -57,8 +57,8 @@ function groupDocumentsByEmployee(documents: EmployeeDocumentItem[]) {
 export function EmployeeDocumentsPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const canManageDocuments = useAuthStore((state) => state.hasPermission("manage employee documents"));
-  const canViewEmployees = useAuthStore((state) => state.hasPermission("view employees"));
+  const canManageDocuments = useAuthStore((state) => state.hasPermission("documents:edit"));
+  const canViewEmployees = useAuthStore((state) => state.hasPermission("employees:view"));
 
   const currentEmployeeId = user?.employee?.id ?? 0;
   const [error, setError] = useState<string | null>(null);

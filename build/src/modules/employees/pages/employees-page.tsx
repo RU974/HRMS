@@ -39,7 +39,7 @@ function StatusBadge({ status }: { status: string }) {
 export function EmployeesPage() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
-  const canManage = useAuthStore((s) => s.hasPermission("manage employees"));
+  const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");

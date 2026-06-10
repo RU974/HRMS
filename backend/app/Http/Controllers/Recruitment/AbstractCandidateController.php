@@ -24,7 +24,7 @@ abstract class AbstractCandidateController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view recruitment');
+        $this->authorizePermission($request, 'recruitment:view');
 
         $query = Candidate::with(['jobOpening', 'interviews'])->latest();
 
@@ -51,7 +51,7 @@ abstract class AbstractCandidateController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage recruitment');
+        $this->authorizePermission($request, 'recruitment:create');
 
         $workflowService = app(CandidateWorkflowService::class);
 
@@ -105,14 +105,14 @@ abstract class AbstractCandidateController extends Controller
 
     public function show($id)
     {
-        $this->authorizePermission(request(), 'view recruitment');
+        $this->authorizePermission(request(), 'recruitment:view');
 
         return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load(['jobOpening', 'interviews']));
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizeAnyPermission($request, ['manage recruitment', 'edit recruitment']);
+        $this->authorizeAnyPermission($request, ['recruitment:create', 'recruitment:edit']);
 
         $candidate = $this->resolveTenantModel(Candidate::class, $id);
 
@@ -163,7 +163,7 @@ abstract class AbstractCandidateController extends Controller
 
     public function destroy($id)
     {
-        $this->authorizePermission(request(), 'manage recruitment');
+        $this->authorizePermission(request(), 'recruitment:create');
 
         $this->resolveTenantModel(Candidate::class, $id)->delete();
 
@@ -172,7 +172,7 @@ abstract class AbstractCandidateController extends Controller
 
     public function pipelineSummary()
     {
-        $this->authorizePermission(request(), 'view recruitment');
+        $this->authorizePermission(request(), 'recruitment:view');
 
         $summary = Candidate::query()
             ->selectRaw('stage, COUNT(*) as count')

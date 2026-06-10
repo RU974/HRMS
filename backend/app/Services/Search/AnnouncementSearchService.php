@@ -67,7 +67,7 @@ class AnnouncementSearchService
 
     private function canSeeAnnouncement(User $user, Announcement $announcement): bool
     {
-        if ($this->canManage($user) || $user->can('manage settings')) {
+        if ($this->canManage($user) || $user->can('settings:manage_settings')) {
             return $this->sameCompany($user, $announcement);
         }
 
