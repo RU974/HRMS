@@ -212,8 +212,21 @@ $registerRoutes = function (): void {
         Route::middleware('permission:attendance:edit')->group(function () {
             Route::apiResource('holidays', HolidayController::class);
             Route::apiResource('shifts', ShiftController::class);
-            Route::apiResource('leave-types', LeaveTypeController::class);
         });
+
+        // Leave-types READ: any user that can interact with leaves needs to load
+        // the type list to populate the leave-request form dropdown.
+        // WRITE ops remain restricted to attendance admins / leave settings managers.
+        Route::middleware('permission:leaves:create|leaves:view|leaves:approve|leaves:manage_settings|attendance:edit')
+            ->group(function () {
+                Route::apiResource('leave-types', LeaveTypeController::class)
+                    ->only(['index', 'show']);
+            });
+        Route::middleware('permission:attendance:edit|leaves:manage_settings')
+            ->group(function () {
+                Route::apiResource('leave-types', LeaveTypeController::class)
+                    ->only(['store', 'update', 'destroy']);
+            });
 
         // Recruitment routes
         Route::middleware('permission:recruitment:view')->group(function () {

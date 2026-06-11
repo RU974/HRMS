@@ -391,22 +391,31 @@ export function LeavesPage() {
               </FormField>
             )}
 
-            <FormField label="Type">
-              {leaveTypeOptions.length > 0 ? (
-                <select
-                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
-                  value={form.type}
-                  onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
-                >
-                  <option value="">Select leave type</option>
-                  {leaveTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <FormInput value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))} />
+            <FormField label="Leave Type">
+              <select
+                required
+                disabled={leaveTypesQuery.isLoading}
+                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm disabled:opacity-50"
+                value={form.type}
+                onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
+              >
+                <option value="">
+                  {leaveTypesQuery.isLoading
+                    ? "Loading leave types…"
+                    : leaveTypeOptions.length === 0
+                      ? "No leave types configured"
+                      : "Select leave type"}
+                </option>
+                {leaveTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {!leaveTypesQuery.isLoading && leaveTypeOptions.length === 0 && (
+                <p className="mt-1 text-xs text-amber-600">
+                  No leave types have been set up yet. Please contact your HR admin.
+                </p>
               )}
             </FormField>
 

@@ -14,7 +14,7 @@ class LeaveTypeController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'attendance:edit');
+        $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
         $validated = $request->validate([
             'name' => 'required|string|max:120|unique:leave_types,name',
             'default_days' => 'nullable|integer|min:0|max:365',
@@ -53,7 +53,7 @@ class LeaveTypeController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'attendance:edit');
+        $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
         $leaveType = LeaveType::findOrFail($id);
         $validated = $request->validate([
             'name' => 'sometimes|string|max:120|unique:leave_types,name,' . $id,
@@ -75,7 +75,7 @@ class LeaveTypeController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'attendance:edit');
+        $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
         LeaveType::findOrFail($id)->delete();
         return $this->ok(null, 'Leave type deleted successfully');
     }
