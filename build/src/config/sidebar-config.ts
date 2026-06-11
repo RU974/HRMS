@@ -63,23 +63,6 @@ export const sidebarSections: SidebarSectionConfig[] = [
     ],
   },
   {
-    title: "Self Service",
-    items: [
-      {
-        label: "Attendance",
-        path: "/attendance",
-        icon: Clock3,
-        permissions: ["attendance.view", "attendance.create", "attendance.edit", "attendance.manage_settings"],
-      },
-      {
-        label: "Leave Management",
-        path: "/leaves",
-        icon: CalendarRange,
-        permissions: ["leaves.view", "leaves.approve", "leaves.create", "leaves.manage_settings"],
-      },
-    ],
-  },
-  {
     title: "Communication",
     items: [
       { label: "Announcements", path: "/announcements", icon: Megaphone, permissions: ["announcement.view"] },
