@@ -27,8 +27,8 @@ class AttendanceController extends Controller
             }
             $this->assertEmployeeInCompany($request, $employeeId);
             $query->where('employee_id', $employeeId);
-        } elseif ($user?->can('attendance:view') || $user?->can('attendance:edit')) {
-            // Users with view/edit can see all company records (already scoped by company above)
+        } elseif ($user?->can('attendance:manage_settings') || $user?->can('attendance:approve')) {
+            // Only managers/admins can see all company records
         } else {
             // Regular employees: scope to own records only
             $employee = Employee::where('user_id', $request->user()?->id)->first();
@@ -277,8 +277,8 @@ class AttendanceController extends Controller
             }
             $this->assertEmployeeInCompany($request, $employeeId);
             $query->where('employee_id', $employeeId);
-        } elseif ($user?->can('attendance:view') || $user?->can('attendance:edit')) {
-            // Users with view/edit can see all company corrections
+        } elseif ($user?->can('attendance:manage_settings') || $user?->can('attendance:approve')) {
+            // Only managers/admins can see all company corrections
         } else {
             $employee = Employee::where('user_id', $user?->id)->first();
             if (!$employee) {
@@ -431,8 +431,6 @@ class AttendanceController extends Controller
     {
         // Full managers can access any employee record within their scope
         if ($request->user()?->can('attendance:manage_settings')
-            || $request->user()?->can('attendance:view')
-            || $request->user()?->can('attendance:edit')
             || $request->user()?->can('attendance:approve')) {
             $this->assertEmployeeInCompany($request, $employeeId);
             if ($request->user()?->can('attendance:manage_settings')) {

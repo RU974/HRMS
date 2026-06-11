@@ -70,8 +70,14 @@ export function AttendancePage() {
   const employeeId = user?.employee?.id ?? 0;
 
   const query = useQuery({
-    queryKey: ["attendance", page],
-    queryFn: () => apiClient<{ data: AttendanceItem[]; current_page: number; last_page: number; total: number }>(`/attendance?per_page=20&page=${page}`),
+    queryKey: ["attendance", page, canManage ? null : employeeId],
+    queryFn: () => {
+      const base = `/attendance?per_page=20&page=${page}`;
+      return apiClient<{ data: AttendanceItem[]; current_page: number; last_page: number; total: number }>(
+        canManage ? base : `${base}&employee_id=${employeeId}`
+      );
+    },
+    enabled: canManage || employeeId > 0,
   });
 
   const todayRecord = useQuery({

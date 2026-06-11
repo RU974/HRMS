@@ -60,7 +60,7 @@ export const appRouter = createBrowserRouter([
       { path: "employees",                 element: withPermission(<EmployeesPage />,              ["employees:view", "employees:edit"]) },
       { path: "employees/new",             element: withPermission(<EmployeeFormPage />,           ["employees:create"]) },
       { path: "employees/:id",             element: withPermission(<EmployeeDetailPage />,         ["employees:view", "employees:edit"]) },
-      { path: "attendance",                element: withPermission(<AttendancePage />,             ["attendance:view", "attendance:manage_settings"]) },
+      { path: "attendance",                element: withPermission(<AttendancePage />,             ["attendance:view", "attendance:manage_settings", "attendance:approve"]) },
       { path: "payroll",                   element: withPermission(<PayrollPage />,                ["payroll:view", "payroll:manage_settings"]) },
       { path: "recruitment",               element: withPermission(<RecruitmentPage />,            ["recruitment:view"]) },
       { path: "recruitment/jobs",          element: withPermission(<JobsPage />,                  ["recruitment:view"]) },

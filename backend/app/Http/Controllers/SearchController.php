@@ -233,7 +233,7 @@ class SearchController extends Controller
     private function searchAttendance(Request $request, string $query, ?int $employeeId): array
     {
         $user = $request->user();
-        $canViewAll = (bool) ($user?->can('attendance:manage_settings') || $user?->can('attendance:view'));
+        $canViewAll = (bool) ($user?->can('attendance:manage_settings') || $user?->can('attendance:approve'));
         $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
