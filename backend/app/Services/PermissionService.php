@@ -20,8 +20,14 @@ class PermissionService
 
         return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($user) {
             $loaded = $user->loadMissing(['roles.permissions', 'permissions']);
+            $companyId = $user->company_id;
 
-            return $loaded->roles
+            // Only include roles that belong to this company or are global (company_id = null)
+            $roles = $loaded->roles->filter(function ($role) use ($companyId) {
+                return $role->company_id === null || (string) $role->company_id === (string) $companyId;
+            });
+
+            return $roles
                 ->flatMap(function ($role) {
                     return $role->permissions->flatMap(function ($permission) {
                         return [

@@ -20,7 +20,7 @@ abstract class AbstractJobOpeningController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view recruitment');
+        $this->authorizePermission($request, 'recruitment:view');
 
         $query = JobOpening::with('department')->latest();
 
@@ -42,7 +42,7 @@ abstract class AbstractJobOpeningController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage recruitment');
+        $this->authorizePermission($request, 'recruitment:manage_settings');
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -69,14 +69,14 @@ abstract class AbstractJobOpeningController extends Controller
 
     public function show($id)
     {
-        $this->authorizePermission(request(), 'view recruitment');
+        $this->authorizePermission(request(), 'recruitment:view');
 
         return $this->ok($this->resolveTenantModel(JobOpening::class, $id)->load(['department', 'candidates']));
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizeAnyPermission($request, ['manage recruitment', 'edit recruitment']);
+        $this->authorizeAnyPermission($request, ['recruitment:manage_settings', 'edit recruitment']);
 
         $job = $this->resolveTenantModel(JobOpening::class, $id);
 
@@ -99,7 +99,7 @@ abstract class AbstractJobOpeningController extends Controller
 
     public function destroy($id)
     {
-        $this->authorizePermission(request(), 'manage recruitment');
+        $this->authorizePermission(request(), 'recruitment:manage_settings');
 
         $this->resolveTenantModel(JobOpening::class, $id)->delete();
 

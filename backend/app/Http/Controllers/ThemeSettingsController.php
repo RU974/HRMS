@@ -25,13 +25,13 @@ class ThemeSettingsController extends Controller
 
     public function company(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         return $this->ok($this->service->companyTheme($request->user()));
     }
 
     public function show(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $setting = ThemeSetting::findOrFail($id);
         $this->assertAccessible($request, $setting);
         return $this->ok($setting);
@@ -39,7 +39,7 @@ class ThemeSettingsController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $validated = $request->validate([
             'theme' => ['required', 'string', Rule::in(['light', 'dark', 'system'])],
             'preferences' => 'nullable|array',
@@ -59,7 +59,7 @@ class ThemeSettingsController extends Controller
 
     public function update(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $setting = ThemeSetting::findOrFail($id);
         $this->assertAccessible($request, $setting);
 
@@ -74,7 +74,7 @@ class ThemeSettingsController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $setting = ThemeSetting::findOrFail($id);
         $this->assertAccessible($request, $setting);
         $setting->delete();

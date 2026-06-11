@@ -10,7 +10,7 @@ class PerformanceReviewController extends Controller
 {
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view performance');
+        $this->authorizePermission($request, 'performance:view');
         $query = PerformanceReview::query()->with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email']);
         $this->scopeToCompany($request, $query);
 
@@ -33,7 +33,7 @@ class PerformanceReviewController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage performance');
+        $this->authorizePermission($request, 'performance:manage_settings');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'period' => 'required|string|max:100',
@@ -53,7 +53,7 @@ class PerformanceReviewController extends Controller
 
     public function show(Request $request, $id)
     {
-        $this->authorizePermission($request, 'view performance');
+        $this->authorizePermission($request, 'performance:view');
         $item = PerformanceReview::with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email'])->findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         return $this->ok($item);
@@ -61,7 +61,7 @@ class PerformanceReviewController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'edit performance');
+        $this->authorizePermission($request, 'performance:edit');
         $item = PerformanceReview::findOrFail($id);
         $validated = $request->validate([
             'employee_id' => 'sometimes|exists:employees,id',
@@ -78,7 +78,7 @@ class PerformanceReviewController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage performance');
+        $this->authorizePermission($request, 'performance:manage_settings');
         $item = PerformanceReview::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         $item->delete();

@@ -6,6 +6,8 @@ use App\Events\LeaveRequested;
 use App\Events\LeaveStatusChanged;
 use App\Listeners\NotifyLeaveRequested;
 use App\Listeners\NotifyLeaveStatusChanged;
+use App\Models\ChatMessage;
+use App\Policies\ChatMessagePolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -56,6 +58,9 @@ class AppServiceProvider extends ServiceProvider
         // Leave request notifications
         Event::listen(LeaveRequested::class, NotifyLeaveRequested::class);
         Event::listen(LeaveStatusChanged::class, NotifyLeaveStatusChanged::class);
+
+        // Explicitly register policies to avoid implicit resolution surprises
+        Gate::policy(ChatMessage::class, ChatMessagePolicy::class);
 
         // Grant Super Admin unconditional access to all policies and gates.
         Gate::before(function ($user, $ability) {

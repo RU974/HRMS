@@ -52,7 +52,7 @@ class DeductionController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage payroll');
+        $this->authorizePermission($request, 'payroll:manage_settings');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'payroll_id' => 'nullable|exists:payrolls,id',
@@ -78,7 +78,7 @@ class DeductionController extends Controller
 
     public function update(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'manage payroll');
+        $this->authorizePermission($request, 'payroll:manage_settings');
         $item = Deduction::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         $validated = $request->validate([
@@ -97,7 +97,7 @@ class DeductionController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        $this->authorizePermission($request, 'manage payroll');
+        $this->authorizePermission($request, 'payroll:manage_settings');
         $item = Deduction::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         $item->delete();
@@ -106,7 +106,7 @@ class DeductionController extends Controller
 
     private function authorizeRead(Request $request): void
     {
-        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll') || $request->user()?->can('view own payroll')) {
+        if ($request->user()?->can('payroll:manage_settings') || $request->user()?->can('payroll:view') || $request->user()?->can('payroll:view')) {
             return;
         }
         abort(403, 'You are not authorized to access deductions.');
@@ -114,16 +114,16 @@ class DeductionController extends Controller
 
     private function authorizeRecordAccess(Request $request, int $employeeId): void
     {
-        if ($request->user()?->can('manage payroll') || $request->user()?->can('view payroll')) {
+        if ($request->user()?->can('payroll:manage_settings') || $request->user()?->can('payroll:view')) {
             $this->assertEmployeeInCompany($request, $employeeId);
-            if ($request->user()?->can('manage payroll')) {
+            if ($request->user()?->can('payroll:manage_settings')) {
                 $this->authorizeManagedEmployeeAccess($request, $employeeId, 'deduction record');
             }
             return;
         }
 
         $ownEmployeeId = $this->ownEmployeeId($request->user());
-        if ($request->user()?->can('view own payroll') && $ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
+        if ($request->user()?->can('payroll:view') && $ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
             return;
         }
         abort(403, 'You are not authorized to access this deduction.');
@@ -151,9 +151,9 @@ class DeductionController extends Controller
 
     private function viewOwnOnly(?User $user): bool
     {
-        return (bool) $user?->can('view own payroll')
-            && !$user?->can('view payroll')
-            && !$user?->can('manage payroll');
+        return (bool) $user?->can('payroll:view')
+            && !$user?->can('payroll:view')
+            && !$user?->can('payroll:manage_settings');
     }
 
     private function assertEmployeeInCompany(Request $request, int $employeeId): void

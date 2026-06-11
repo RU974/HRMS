@@ -31,11 +31,13 @@ class RolePermissionSeeder extends Seeder
                 'employees:view', 'employees:create', 'employees:edit',
                 'leaves:view', 'leaves:approve', 'leaves:manage_settings',
                 'attendance:view', 'attendance:edit',
+                'payroll:view',
                 'recruitment:view', 'recruitment:create', 'recruitment:edit',
                 'documents:view', 'documents:create', 'documents:edit', 'documents:delete',
                 'approvals:view', 'approvals:approve', 'approvals:manage_settings',
                 'reports:view', 'announcement:view', 'announcement:create', 'announcement:edit',
                 'performance:view', 'performance:edit',
+                'chat:view', 'chat:create',
             ],
             'HR Executive' => [
                 'dashboard:view',
@@ -66,9 +68,10 @@ class RolePermissionSeeder extends Seeder
             ],
             'Recruiter' => [
                 'dashboard:view',
-                'recruitment:view', 'recruitment:create', 'recruitment:edit',
+                'recruitment:view', 'recruitment:create', 'recruitment:edit', 'recruitment:delete', 'recruitment:manage_settings',
                 'employees:view',
                 'approvals:view',
+                'chat:view', 'chat:create',
             ],
             'Department Manager' => [
                 'dashboard:view',
@@ -82,17 +85,17 @@ class RolePermissionSeeder extends Seeder
                 'dashboard:view',
                 'users:view', 'users:edit',
                 'documents:view',
-                'settings:view',
+                'settings:manage_settings',
                 'reports:view',
             ],
             'Employee' => [
                 'dashboard:view',
-                'leaves:view', 'leaves:create', 'leaves:approve',
+                'leaves:view', 'leaves:create',
                 'attendance:view',
-                'reports:view',
                 'documents:view',
                 'announcement:view',
                 'notification:view',
+                'chat:view', 'chat:create',
             ],
         ];
 

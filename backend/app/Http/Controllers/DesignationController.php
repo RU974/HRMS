@@ -11,28 +11,28 @@ class DesignationController extends Controller
 {
     public function index()
     {
-        $this->authorizeAnyPermission(request(), ['manage settings', 'manage employees']);
+        $this->authorizeAnyPermission(request(), ['settings:manage_settings', 'employees:edit']);
 
         return $this->ok(Designation::orderBy('name')->get());
     }
 
     public function show($id)
     {
-        $this->authorizeAnyPermission(request(), ['manage settings', 'manage employees']);
+        $this->authorizeAnyPermission(request(), ['settings:manage_settings', 'employees:edit']);
 
         return $this->ok(Designation::findOrFail($id));
     }
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $validated = $request->validate(['name' => 'required|string|max:255|unique:designations,name']);
         return $this->ok(Designation::create($validated), 'Designation created successfully', 201);
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $designation = Designation::findOrFail($id);
         $validated = $request->validate(['name' => 'required|string|max:255|unique:designations,name,' . $id]);
         $designation->update($validated);
@@ -41,7 +41,7 @@ class DesignationController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $designation = Designation::findOrFail($id);
         $inUse = Employee::where('designation_id', $designation->id)->count();
         if ($inUse > 0) {

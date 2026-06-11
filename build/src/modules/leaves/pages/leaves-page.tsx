@@ -48,7 +48,7 @@ export function LeavesPage() {
   const user = useAuthStore((state) => state.user);
   const hasApproveLeaves = useAuthStore((state) => state.hasPermission("leaves:approve"));
   const hasViewLeaves = useAuthStore((state) => state.hasPermission("leaves:view"));
-  const canRequestOwnLeave = useAuthStore((state) => state.hasPermission("leaves:view"));
+  const canRequestOwnLeave = useAuthStore((state) => state.hasPermission("leaves:create"));
   const canManageLeaves = useAuthStore((state) => state.hasPermission("leaves:manage_settings"));
   const canManageTypes = canManageLeaves || useAuthStore((state) => state.hasPermission("settings:manage_settings"));
 
@@ -374,10 +374,9 @@ export function LeavesPage() {
       {leaveModalOpen && (
         <Modal title={editingLeave ? "Review Leave" : "Request Leave"} onClose={() => setLeaveModalOpen(false)}>
           <form className="space-y-3" onSubmit={handleLeaveSubmit}>
-            {(canSelectEmployee || !isOwnRequestOnly) && (
+            {canSelectEmployee && (
               <FormField label="Employee">
                 <select
-                  disabled={!canSelectEmployee}
                   className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
                   value={form.employee_id}
                   onChange={(e) => setForm((p) => ({ ...p, employee_id: Number(e.target.value) }))}

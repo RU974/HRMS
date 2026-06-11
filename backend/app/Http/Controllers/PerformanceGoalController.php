@@ -11,7 +11,7 @@ class PerformanceGoalController extends Controller
 {
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view performance');
+        $this->authorizePermission($request, 'performance:view');
         $query = PerformanceGoal::query()->with('employee:id,first_name,last_name,employee_number');
         $this->scopeToCompany($request, $query);
 
@@ -38,7 +38,7 @@ class PerformanceGoalController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage performance');
+        $this->authorizePermission($request, 'performance:manage_settings');
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
             'title' => 'required|string|max:255',
@@ -60,7 +60,7 @@ class PerformanceGoalController extends Controller
 
     public function show(Request $request, $id)
     {
-        $this->authorizePermission($request, 'view performance');
+        $this->authorizePermission($request, 'performance:view');
         $item = PerformanceGoal::with('employee:id,first_name,last_name,employee_number')->findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         return $this->ok($item);
@@ -68,7 +68,7 @@ class PerformanceGoalController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'edit performance');
+        $this->authorizePermission($request, 'performance:edit');
         $item = PerformanceGoal::findOrFail($id);
         $validated = $request->validate([
             'employee_id' => 'sometimes|exists:employees,id',
@@ -86,7 +86,7 @@ class PerformanceGoalController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        $this->authorizePermission($request, 'manage performance');
+        $this->authorizePermission($request, 'performance:manage_settings');
         $item = PerformanceGoal::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $item->employee_id);
         $item->delete();

@@ -49,7 +49,7 @@ class SystemLogController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        // Fixed: was 'manage settings' (freeform) — use the canonical seeded key
+        // Fixed: was 'settings:manage_settings' (freeform) — use the canonical seeded key
         $this->authorizePermission($request, 'settings:manage_settings');
         abort(422, 'Audit logs are immutable and cannot be deleted.');
     }

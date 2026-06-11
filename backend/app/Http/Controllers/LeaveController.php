@@ -61,7 +61,14 @@ class LeaveController extends Controller
 
         $this->authorizeCreate($request, (int) $validated['employee_id']);
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
-        $validated['status'] = $validated['status'] ?? 'pending';
+
+        // Non-approvers (regular employees) cannot set an arbitrary status.
+        // Force every employee-created request to 'pending' regardless of what was submitted.
+        if (!$request->user()?->can('leaves:approve')) {
+            $validated['status'] = 'pending';
+        } else {
+            $validated['status'] = $validated['status'] ?? 'pending';
+        }
 
         try {
             $leave = DB::transaction(function () use ($validated, $request) {

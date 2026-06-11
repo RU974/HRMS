@@ -25,7 +25,7 @@ abstract class AbstractInterviewController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view recruitment');
+        $this->authorizePermission($request, 'recruitment:view');
 
         $query = Interview::with('candidate')->orderBy('scheduled_at', 'desc');
 
@@ -52,7 +52,7 @@ abstract class AbstractInterviewController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizeAnyPermission($request, ['manage recruitment', 'schedule interviews']);
+        $this->authorizeAnyPermission($request, ['recruitment:manage_settings', 'schedule interviews']);
 
         $validated = $request->validate([
             'candidate_id' => ['required', $this->validateCandidateBelongsToCompany($request)],
@@ -77,14 +77,14 @@ abstract class AbstractInterviewController extends Controller
 
     public function show($id)
     {
-        $this->authorizePermission(request(), 'view recruitment');
+        $this->authorizePermission(request(), 'recruitment:view');
 
         return $this->ok($this->resolveTenantModel(Interview::class, $id)->load('candidate'));
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizeAnyPermission($request, ['manage recruitment', 'schedule interviews']);
+        $this->authorizeAnyPermission($request, ['recruitment:manage_settings', 'schedule interviews']);
 
         $interview = $this->resolveTenantModel(Interview::class, $id);
 
@@ -104,7 +104,7 @@ abstract class AbstractInterviewController extends Controller
 
     public function destroy($id)
     {
-        $this->authorizeAnyPermission(request(), ['manage recruitment', 'schedule interviews']);
+        $this->authorizeAnyPermission(request(), ['recruitment:manage_settings', 'schedule interviews']);
 
         $this->resolveTenantModel(Interview::class, $id)->delete();
 

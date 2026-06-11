@@ -14,7 +14,7 @@ class BranchController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $q = Branch::query()->with('company')->withCount('users')->orderBy('name');
         $companyId = $request->user()?->company_id;
         if ($companyId) {
@@ -31,7 +31,7 @@ class BranchController extends Controller
 
     public function show(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $branch = Branch::with('company')->withCount('users')->findOrFail($id);
         $this->assertCompanyAccess($request, $branch);
 
@@ -40,7 +40,7 @@ class BranchController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $validated = $request->validate([
             'company_id' => 'required|uuid|exists:companies,id',
             'name' => ['required', 'string', 'max:255'],
@@ -58,7 +58,7 @@ class BranchController extends Controller
 
     public function update(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $branch = Branch::findOrFail($id);
         $this->assertCompanyAccess($request, $branch);
         $validated = $request->validate([
@@ -78,7 +78,7 @@ class BranchController extends Controller
 
     public function destroy(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage settings');
+        $this->authorizePermission($request, 'settings:manage_settings');
         $branch = Branch::withCount('users')->findOrFail($id);
         $this->assertCompanyAccess($request, $branch);
 

@@ -37,12 +37,12 @@ class ChatMessagePolicy
 
     private function canView(User $user): bool
     {
-        return $user->can('manage chat messages') || $user->can('view chat messages');
+        return $user->can('chat:manage_settings') || $user->can('chat:view');
     }
 
     private function canManage(User $user): bool
     {
-        return $user->can('manage chat messages');
+        return $user->can('chat:manage_settings');
     }
 
     private function isParticipant(User $user, ChatMessage $message): bool

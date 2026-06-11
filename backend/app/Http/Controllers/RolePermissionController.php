@@ -16,7 +16,7 @@ class RolePermissionController extends Controller
 
     public function permissions(Request $request)
     {
-        $this->authorizePermission($request, 'manage roles');
+        $this->authorizePermission($request, 'users:manage_settings');
         $grouped = Permission::query()
             ->orderBy('module')
             ->orderBy('action')
@@ -33,7 +33,7 @@ class RolePermissionController extends Controller
 
     public function roles(Request $request)
     {
-        $this->authorizePermission($request, 'manage roles');
+        $this->authorizePermission($request, 'users:manage_settings');
         $companyId = $request->user()?->company_id;
 
         $roles = Role::with('permissions')
@@ -52,7 +52,7 @@ class RolePermissionController extends Controller
 
     public function storeRole(Request $request)
     {
-        $this->authorizePermission($request, 'manage roles');
+        $this->authorizePermission($request, 'users:manage_settings');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -81,7 +81,7 @@ class RolePermissionController extends Controller
 
     public function updateRole(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage roles');
+        $this->authorizePermission($request, 'users:manage_settings');
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -89,7 +89,7 @@ class RolePermissionController extends Controller
             'permission_ids.*' => 'required|exists:permissions,id',
         ]);
 
-        $role = Role::with('users')->findOrFail($id);
+        $role = Role::findOrFail($id);
         $companyId = $request->user()?->company_id;
         if ($role->company_id !== null && $role->company_id !== $companyId) {
             return $this->fail('You are not allowed to modify this role.', 403);
@@ -97,6 +97,9 @@ class RolePermissionController extends Controller
         if ($role->is_system) {
             return $this->fail('System roles cannot be edited.', 422);
         }
+
+        // Collect affected users BEFORE the transaction so the list is accurate
+        $affectedUsers = $role->users()->get();
 
         DB::transaction(function () use ($role, $validated) {
             $role->update([
@@ -106,14 +109,15 @@ class RolePermissionController extends Controller
             $role->permissions()->sync($validated['permission_ids']);
         });
 
-        $role->users->each(fn ($user) => $this->permissionService->flushUserPermissionCache($user));
+        // Flush cache for every user that has this role, using a fresh query
+        $affectedUsers->each(fn ($user) => $this->permissionService->flushUserPermissionCache($user));
 
         return $this->ok($role->fresh('permissions'), 'Role updated successfully');
     }
 
     public function deleteRole(Request $request, string $id)
     {
-        $this->authorizePermission($request, 'manage roles');
+        $this->authorizePermission($request, 'users:manage_settings');
         $role = Role::with('users')->withCount('users')->findOrFail($id);
         $companyId = $request->user()?->company_id;
         if ($role->company_id !== null && $role->company_id !== $companyId) {

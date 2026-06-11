@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useAuthStore } from "@/store/auth-store";
-import { hasAnyPermission } from "@/utils/permissions";
+import { hasAnyPermission, hasAllPermissions } from "@/utils/permissions";
 
 type PermissionGuardProps = {
   permissions: string[];
@@ -22,7 +22,7 @@ export function PermissionGuard({
   const user = useAuthStore((state) => state.user);
 
   const allowed = requireAll
-    ? permissions.every((permission) => useAuthStore.getState().hasPermission(permission))
+    ? hasAllPermissions(user, permissions)
     : hasAnyPermission(user, permissions);
 
   if (allowed) {

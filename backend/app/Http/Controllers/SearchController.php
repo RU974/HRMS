@@ -283,7 +283,7 @@ class SearchController extends Controller
     {
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('leaves:view') || $user?->can('leaves:approve'));
-        $canViewOwn = (bool) $user?->can('request own leave');
+        $canViewOwn = (bool) $user?->can('leaves:create');
         $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
             return [];

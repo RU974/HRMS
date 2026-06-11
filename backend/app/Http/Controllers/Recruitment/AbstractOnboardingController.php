@@ -24,7 +24,7 @@ abstract class AbstractOnboardingController extends Controller
 
     public function index(Request $request)
     {
-        $this->authorizePermission($request, 'view recruitment');
+        $this->authorizePermission($request, 'recruitment:view');
 
         $query = Candidate::with('jobOpening')
             ->where('stage', 'hired')
@@ -48,7 +48,7 @@ abstract class AbstractOnboardingController extends Controller
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'manage recruitment');
+        $this->authorizePermission($request, 'recruitment:manage_settings');
 
         $workflowService = app(CandidateWorkflowService::class);
 
@@ -82,14 +82,14 @@ abstract class AbstractOnboardingController extends Controller
 
     public function show($id)
     {
-        $this->authorizePermission(request(), 'view recruitment');
+        $this->authorizePermission(request(), 'recruitment:view');
 
         return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load('jobOpening'));
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizeAnyPermission($request, ['manage recruitment', 'edit recruitment']);
+        $this->authorizeAnyPermission($request, ['recruitment:manage_settings', 'edit recruitment']);
 
         $candidate = $this->resolveTenantModel(Candidate::class, $id);
 
@@ -119,7 +119,7 @@ abstract class AbstractOnboardingController extends Controller
 
     public function destroy($id)
     {
-        $this->authorizeAnyPermission(request(), ['manage recruitment', 'edit recruitment']);
+        $this->authorizeAnyPermission(request(), ['recruitment:manage_settings', 'edit recruitment']);
 
         $candidate = $this->resolveTenantModel(Candidate::class, $id);
         $candidate->update([
