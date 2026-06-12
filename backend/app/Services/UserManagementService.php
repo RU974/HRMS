@@ -41,14 +41,12 @@ class UserManagementService
         return $user->fresh(['company', 'branch', 'roles.permissions', 'permissions']);
     }
 
-    /**
-     * @param  array<int, string>  $roleIds
-     */
     private function syncAssignableRoles(User $user, array $roleIds, ?User $actor): void
     {
+        // Cast every incoming value to int — handles strings like "1", "2" from JSON
         $requestedRoleIds = collect($roleIds)
-            ->filter(fn ($roleId) => filled($roleId))
-            ->map(fn ($roleId) => trim((string) $roleId))
+            ->filter(fn ($id) => filled($id) && is_numeric($id))
+            ->map(fn ($id) => (int) $id)
             ->unique()
             ->values()
             ->all();
@@ -59,8 +57,8 @@ class UserManagementService
 
         $validRoleIds = $this->resolveAssignableRoleIds($requestedRoleIds, $actor);
 
-        if (count($validRoleIds) !== count($requestedRoleIds)) {
-            abort(422, 'One or more selected roles could not be assigned.');
+        if (empty($validRoleIds)) {
+            abort(422, 'None of the selected roles could be assigned.');
         }
 
         $user->syncRoles($validRoleIds);
@@ -69,7 +67,7 @@ class UserManagementService
 
     private function resolveAssignableRoleIds(array $roleIds, ?User $actor): array
     {
-        if (!$actor || (! $actor->can('settings:manage_settings') && ! $actor->can('users:edit'))) {
+        if (!$actor || (!$actor->can('settings:manage_settings') && !$actor->can('users:edit'))) {
             abort(403, 'You are not authorized to assign roles.');
         }
 
@@ -82,6 +80,7 @@ class UserManagementService
                 }
             })
             ->pluck('id')
+            ->map(fn ($id) => (int) $id)
             ->all();
     }
 }

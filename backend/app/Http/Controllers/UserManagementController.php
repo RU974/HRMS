@@ -35,7 +35,8 @@ class UserManagementController extends Controller
             'company_id' => 'nullable|uuid|exists:companies,id',
             'branch_id'  => 'nullable|uuid|exists:branches,id',
             'role_ids'   => 'nullable|array',
-            'role_ids.*' => 'uuid|exists:roles,id',
+            'role_ids.*' => 'integer|exists:roles,id',
+            'is_active'  => 'nullable|boolean',
         ]);
 
         // Non-super-admins can only create users in their own company
@@ -80,7 +81,8 @@ class UserManagementController extends Controller
             'company_id' => 'nullable|uuid|exists:companies,id',
             'branch_id'  => 'nullable|uuid|exists:branches,id',
             'role_ids'   => 'nullable|array',
-            'role_ids.*' => 'nullable|exists:roles,id',
+            'role_ids.*' => 'integer|exists:roles,id',
+            'is_active'  => 'nullable|boolean',
         ]);
 
         $user = $this->service->update($user, $validated, $request->user());

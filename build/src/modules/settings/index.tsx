@@ -79,11 +79,11 @@ function getUserRoles(u: UserItem) {
   return u.roles ?? u.rolesRelation ?? u.roles_relation ?? [];
 }
 
-function getUserRoleIds(u: UserItem, roles: RoleItem[]) {
-  if (u.role_ids && u.role_ids.length > 0) return u.role_ids;
+function getUserRoleIds(u: UserItem, roles: RoleItem[]): number[] {
+  if (u.role_ids && u.role_ids.length > 0) return u.role_ids.map(Number);
   const assigned = getUserRoles(u);
-  if (assigned.length > 0) return assigned.map(r => r.id);
-  if (u.role) { const m = roles.find(r => r.name === u.role); if (m) return [m.id]; }
+  if (assigned.length > 0) return assigned.map(r => Number(r.id));
+  if (u.role) { const m = roles.find(r => r.name === u.role); if (m) return [Number(m.id)]; }
   return [];
 }
 
@@ -159,7 +159,7 @@ function EmptyState({ icon: Icon, title, body }: { icon: LucideIcon; title: stri
 function UserModal({ open, onClose, user, roles, companies, branches, onSave, busy }:
   { open: boolean; onClose: () => void; user: UserItem | null; roles: RoleItem[]; companies: CompanyItem[]; branches: BranchItem[]; onSave: (data: Record<string, unknown>) => Promise<void>; busy: boolean }) {
   const isEdit = Boolean(user);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role_ids: [] as string[], company_id: "", branch_id: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role_ids: [] as number[], company_id: "", branch_id: "", is_active: true });
   const [showPw, setShowPw] = useState(false);
 
   useEffect(() => {
@@ -169,15 +169,15 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
         role_ids: getUserRoleIds(user, roles),
         company_id: user.company_id ?? "",
         branch_id: user.branch_id ?? "",
-      } : { name: "", email: "", password: "", role_ids: [], company_id: "", branch_id: "" });
+        is_active: user.is_active ?? true,
+      } : { name: "", email: "", password: "", role_ids: [] as number[], company_id: "", branch_id: "", is_active: true });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, user, roles]); // roles included so pre-selection resolves after async load
 
   const availBranches = branches.filter(b => b.company_id === form.company_id);
   const valid = form.name && form.email && form.role_ids.length > 0 && (isEdit || form.password.length >= 8);
 
-  function toggle(id: string) {
+  function toggle(id: number) {
     setForm(p => ({ ...p, role_ids: p.role_ids.includes(id) ? p.role_ids.filter(x => x !== id) : [...p.role_ids, id] }));
   }
 
@@ -187,6 +187,7 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
       role_ids: form.role_ids,
       company_id: form.company_id || null,
       branch_id: form.branch_id || null,
+      is_active: form.is_active,
     };
     if (!isEdit || form.password) payload.password = form.password;
     await onSave(payload);
@@ -238,10 +239,10 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
             {roles.length === 0
               ? <p className="py-3 text-center text-xs text-[var(--muted)]">No roles available yet</p>
               : roles.map(r => (
-                <button key={r.id} type="button" onClick={() => toggle(r.id)}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition text-left ${form.role_ids.includes(r.id) ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "hover:bg-[var(--border)]/40 text-[var(--text)]"}`}>
-                  <div className={`grid h-4 w-4 shrink-0 place-items-center rounded border transition ${form.role_ids.includes(r.id) ? "border-[var(--primary)] bg-[var(--primary)]" : "border-[var(--border)]"}`}>
-                    {form.role_ids.includes(r.id) && <Check className="h-2.5 w-2.5 text-white" />}
+                <button key={r.id} type="button" onClick={() => toggle(Number(r.id))}
+                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition text-left ${form.role_ids.includes(Number(r.id)) ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "hover:bg-[var(--border)]/40 text-[var(--text)]"}`}>
+                  <div className={`grid h-4 w-4 shrink-0 place-items-center rounded border transition ${form.role_ids.includes(Number(r.id)) ? "border-[var(--primary)] bg-[var(--primary)]" : "border-[var(--border)]"}`}>
+                    {form.role_ids.includes(Number(r.id)) && <Check className="h-2.5 w-2.5 text-white" />}
                   </div>
                   <span className="font-medium">{r.name}</span>
                   {r.is_system && <Badge variant="system">System</Badge>}
@@ -249,6 +250,17 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
               ))}
           </div>
         </FormField>
+
+        <label className="flex items-center gap-3 cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3">
+          <div className={`relative h-5 w-9 rounded-full transition ${form.is_active ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}
+               onClick={() => setForm(p => ({ ...p, is_active: !p.is_active }))}>
+            <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${form.is_active ? "translate-x-4" : "translate-x-0.5"}`} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[var(--text)]">Active</p>
+            <p className="text-xs text-[var(--muted)]">Inactive users cannot log in</p>
+          </div>
+        </label>
 
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -343,7 +355,9 @@ function UsersTab({ users, roles, companies, branches, onReload, busy }: {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="success">Active</Badge>
+                      <Badge variant={u.is_active === false ? "danger" : "success"}>
+                        {u.is_active === false ? "Inactive" : "Active"}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -380,8 +394,11 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
 
   const filtered = useMemo(() => {
     const t = pq.toLowerCase();
-    if (!t) return permissions;
-    return permissions.map(g => ({ ...g, permissions: g.permissions.filter(p => permLabel(p).toLowerCase().includes(t)) })).filter(g => g.permissions.length > 0);
+    const safePermissions = Array.isArray(permissions) ? permissions : [];
+    if (!t) return safePermissions;
+    return safePermissions
+      .map(g => ({ ...g, permissions: (g.permissions ?? []).filter(p => permLabel(p).toLowerCase().includes(t)) }))
+      .filter(g => g.permissions.length > 0);
   }, [permissions, pq]);
 
   function toggle(id: string) {
@@ -389,12 +406,12 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
   }
 
   function toggleGroup(group: PermissionGroup) {
-    const ids = group.permissions.map(p => p.id);
+    const ids = (group.permissions ?? []).map(p => p.id);
     const allSelected = ids.every(id => form.permission_ids.includes(id));
     setForm(p => ({ ...p, permission_ids: allSelected ? p.permission_ids.filter(id => !ids.includes(id)) : [...new Set([...p.permission_ids, ...ids])] }));
   }
 
-  const allPermissionIds = permissions.flatMap(g => g.permissions.map(p => p.id));
+  const allPermissionIds = Array.isArray(permissions) ? permissions.flatMap(g => (g.permissions ?? []).map(p => p.id)) : [];
 
   return (
     <Modal open={open} onClose={onClose} title={role ? `Edit Role — ${role.name}` : "Create Role"} width="max-w-2xl">
@@ -419,7 +436,7 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
             {filtered.length === 0
               ? <p className="py-4 text-center text-xs text-[var(--muted)]">No permissions match</p>
               : filtered.map(group => {
-                const ids = group.permissions.map(p => p.id);
+                const ids = (group.permissions ?? []).map(p => p.id);
                 const allSel = ids.every(id => form.permission_ids.includes(id));
                 const someSel = ids.some(id => form.permission_ids.includes(id));
                 return (
@@ -433,7 +450,7 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
                       <span className="ml-auto text-xs text-[var(--muted)]">{ids.filter(id => form.permission_ids.includes(id)).length}/{ids.length}</span>
                     </button>
                     <div className="ml-6 mt-1 grid grid-cols-2 gap-1">
-                      {group.permissions.map(p => (
+                      {(group.permissions ?? []).map(p => (
                         <button key={p.id} type="button" onClick={() => toggle(p.id)}
                           className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition text-left ${form.permission_ids.includes(p.id) ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "hover:bg-[var(--border)]/40 text-[var(--text)]"}`}>
                           <div className={`grid h-3.5 w-3.5 shrink-0 place-items-center rounded border transition ${form.permission_ids.includes(p.id) ? "border-[var(--primary)] bg-[var(--primary)]" : "border-[var(--border)]"}`}>
@@ -467,13 +484,13 @@ function RolesTab({ roles, permissions, onReload, busy }: {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<RoleItem | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const filtered = useMemo(() => roles.filter(r =>
     `${r.name} ${r.description ?? ""}`.toLowerCase().includes(q.toLowerCase())
   ), [roles, q]);
 
-  const allPermissions = useMemo(() => permissions.flatMap(g => g.permissions), [permissions]);
+  const allPermissions = useMemo(() => Array.isArray(permissions) ? permissions.flatMap(g => g.permissions ?? []) : [], [permissions]);
 
   async function handleSave(data: { name: string; description: string; permission_ids: string[] }) {
     try {
@@ -512,7 +529,7 @@ function RolesTab({ roles, permissions, onReload, busy }: {
           <div className="space-y-2">
             {filtered.map(r => {
               const perms = r.permissions ?? [];
-              const expanded = expandedId === r.id;
+              const expanded = expandedId === Number(r.id);
               const coverage = allPermissions.length > 0 ? Math.round((perms.length / allPermissions.length) * 100) : 0;
               return (
                 <div key={r.id} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
@@ -537,7 +554,7 @@ function RolesTab({ roles, permissions, onReload, busy }: {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button onClick={() => setExpandedId(expanded ? null : r.id)}
+                      <button onClick={() => setExpandedId(expanded ? null : Number(r.id))}
                         className="rounded-lg p-2 text-[var(--muted)] transition hover:bg-[var(--border)]/40">
                         <Layers className="h-4 w-4" />
                       </button>
@@ -581,7 +598,29 @@ function CompanyModal({ open, onClose, company, onSave, busy }:
       : { name: "", email: "", phone: "", website: "", address: "", timezone: "Asia/Karachi", is_active: true });
   }, [open, company]);
 
-  const timezones = ["UTC", "Asia/Karachi", "Asia/Kolkata", "Asia/Dubai", "Europe/London", "America/New_York", "America/Los_Angeles"];
+  const timezones = [
+    "UTC",
+    "Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos", "Africa/Nairobi",
+    "America/Anchorage", "America/Argentina/Buenos_Aires", "America/Bogota",
+    "America/Chicago", "America/Denver", "America/Halifax", "America/Los_Angeles",
+    "America/Mexico_City", "America/New_York", "America/Phoenix", "America/Santiago",
+    "America/Sao_Paulo", "America/St_Johns", "America/Toronto", "America/Vancouver",
+    "Asia/Bangkok", "Asia/Colombo", "Asia/Dhaka", "Asia/Dubai", "Asia/Hong_Kong",
+    "Asia/Jakarta", "Asia/Kabul", "Asia/Karachi", "Asia/Kathmandu", "Asia/Kolkata",
+    "Asia/Kuala_Lumpur", "Asia/Kuwait", "Asia/Manila", "Asia/Riyadh", "Asia/Seoul",
+    "Asia/Shanghai", "Asia/Singapore", "Asia/Taipei", "Asia/Tehran", "Asia/Tokyo",
+    "Asia/Tashkent", "Asia/Yekaterinburg",
+    "Atlantic/Azores", "Atlantic/Cape_Verde",
+    "Australia/Adelaide", "Australia/Brisbane", "Australia/Darwin",
+    "Australia/Perth", "Australia/Sydney",
+    "Europe/Amsterdam", "Europe/Athens", "Europe/Berlin", "Europe/Brussels",
+    "Europe/Bucharest", "Europe/Dublin", "Europe/Helsinki", "Europe/Istanbul",
+    "Europe/Kiev", "Europe/Lisbon", "Europe/London", "Europe/Madrid",
+    "Europe/Moscow", "Europe/Paris", "Europe/Prague", "Europe/Rome",
+    "Europe/Stockholm", "Europe/Warsaw", "Europe/Zurich",
+    "Pacific/Auckland", "Pacific/Fiji", "Pacific/Guam", "Pacific/Honolulu",
+    "Pacific/Midway", "Pacific/Port_Moresby",
+  ];
 
   return (
     <Modal open={open} onClose={onClose} title={company ? `Edit — ${company.name}` : "Create Company"}>
@@ -973,7 +1012,7 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
 }
 
 // ═══════════════════ AUDIT LOGS ═══════════════════
-function LogsTab({ logs }: { logs: LogItem[] }) {
+function LogsTab({ logs, page, totalPages, onPageChange }: { logs: LogItem[]; page: number; totalPages: number; onPageChange: (p: number) => void }) {
   const [q, setQ] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   const [selected, setSelected] = useState<LogItem | null>(logs[0] ?? null);
@@ -1075,11 +1114,29 @@ function LogsTab({ logs }: { logs: LogItem[] }) {
           )}
         </div>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <button
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition hover:bg-[var(--background)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-[var(--muted)]">Page {page} of {totalPages}</span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition hover:bg-[var(--background)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
-
-// ═══════════════════ MAIN SETTINGS PAGE ═══════════════════
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore(s => s.user);
@@ -1097,6 +1154,8 @@ export function SettingsPage() {
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [themes, setThemes] = useState<ThemeItem[]>([]);
   const [logs, setLogs] = useState<LogItem[]>([]);
+  const [logsPage, setLogsPage] = useState(1);
+  const [logsTotalPages, setLogsTotalPages] = useState(1);
 
   const canManageUsers    = hasAnyPermission(user, ["users.view", "users.create", "users.edit", "users.delete"]);
   const canManageRoles    = hasPermissionFor("settings.manage_settings");
@@ -1110,10 +1169,10 @@ export function SettingsPage() {
   const activeTab = visibleTabs.find(t => t.key === tab) ?? visibleTabs[0];
 
   const stats = [
-    { label: "Users",       value: users.length,       icon: Users,      color: "bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" },
-    { label: "Roles",       value: roles.length,        icon: ShieldCheck, color: "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400" },
-    { label: "Branches",    value: branches.length,     icon: MapPinned,  color: "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400" },
-    { label: "Permissions", value: permissions.flatMap(g => g.permissions).length, icon: LockKeyhole, color: "bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400" },
+    { label: "Users",       value: (users ?? []).length,       icon: Users,      color: "bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400" },
+    { label: "Roles",       value: (roles ?? []).length,        icon: ShieldCheck, color: "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400" },
+    { label: "Branches",    value: (branches ?? []).length,     icon: MapPinned,  color: "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400" },
+    { label: "Permissions", value: Array.isArray(permissions) ? permissions.flatMap(g => g.permissions ?? []).length : 0, icon: LockKeyhole, color: "bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400" },
   ];
 
   async function loadAll() {
@@ -1126,14 +1185,25 @@ export function SettingsPage() {
         canManageSettings ? listCompanies()    : Promise.resolve([] as CompanyItem[]),
         canManageSettings ? listBranches()     : Promise.resolve([] as BranchItem[]),
         canManageSettings ? listThemes()       : Promise.resolve([] as ThemeItem[]),
-        canViewLogs       ? listLogs()         : Promise.resolve([] as LogItem[]),
+        canViewLogs       ? listLogs(logsPage) : Promise.resolve({ data: [] as LogItem[], current_page: 1, last_page: 1, total: 0 }),
       ]);
-      setUsers(u); setRoles(r); setPermissions(p); setCompanies(c); setBranches(b); setThemes(th); setLogs(lg);
+      setUsers(Array.isArray(u) ? u : []); setRoles(Array.isArray(r) ? r : []); setPermissions(Array.isArray(p) ? p : []); setCompanies(Array.isArray(c) ? c : []); setBranches(Array.isArray(b) ? b : []); setThemes(Array.isArray(th) ? th : []);
+      setLogs(lg.data); setLogsTotalPages(lg.last_page);
     } catch (e) { setError(e instanceof Error ? e.message : "Failed to load settings."); }
     finally { setBusy(false); }
   }
 
   useEffect(() => { void loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!canViewLogs) return;
+    setBusy(true);
+    listLogs(logsPage)
+      .then(lg => { setLogs(lg.data); setLogsTotalPages(lg.last_page); })
+      .catch(() => {/* silently ignore page fetch errors */})
+      .finally(() => setBusy(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logsPage]);
 
   useEffect(() => {
     const nextTab = (searchParams.get("tab") as SettingsTab | null) ?? "users";
@@ -1212,7 +1282,7 @@ export function SettingsPage() {
           {visibleTabs.map(t => {
             const Icon = t.icon;
             const active = tab === t.key;
-            const count = t.key === "users" ? users.length : t.key === "roles" ? roles.length : t.key === "company" ? companies.length : t.key === "branches" ? branches.length : t.key === "theme" ? themes.length : logs.length;
+            const count = t.key === "users" ? (users ?? []).length : t.key === "roles" ? (roles ?? []).length : t.key === "company" ? (companies ?? []).length : t.key === "branches" ? (branches ?? []).length : t.key === "theme" ? (themes ?? []).length : (logs ?? []).length;
             return (
               <button key={t.key} type="button" onClick={() => changeTab(t.key)}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active ? "bg-[var(--primary)] text-white shadow-sm" : "text-[var(--text)] hover:bg-[var(--background)]"}`}>
@@ -1226,7 +1296,7 @@ export function SettingsPage() {
 
         {/* Content panel */}
         <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-          {busy && !users.length && !roles.length
+          {busy && !(users ?? []).length && !(roles ?? []).length
             ? <div className="flex items-center gap-2 text-sm text-[var(--muted)]"><RefreshCw className="h-4 w-4 animate-spin" /> Loading…</div>
             : (
               <>
@@ -1235,7 +1305,7 @@ export function SettingsPage() {
                 {tab === "company"  && <CompanyTab  companies={companies} onReload={loadAll} busy={busy} />}
                 {tab === "branches" && <BranchesTab branches={branches} companies={companies} onReload={loadAll} busy={busy} />}
                 {tab === "theme"    && <AppearanceTab themes={themes} onReload={loadAll} busy={busy} />}
-                {tab === "logs"      && <LogsTab      logs={logs} />}
+                {tab === "logs"      && <LogsTab      logs={logs} page={logsPage} totalPages={logsTotalPages} onPageChange={setLogsPage} />}
                 {tab === "licensing" && <LicensingTab />}
               </>
             )}

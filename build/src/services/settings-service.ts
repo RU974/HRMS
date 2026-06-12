@@ -1,21 +1,22 @@
 import { apiClient } from "@/services/api-client";
 
 export type PermissionItem = { id: string; key?: string; name?: string; action?: string; module?: string; display_name?: string };
-export type RoleItem = { id: string; name: string; description?: string | null; is_system?: boolean; permissions?: PermissionItem[] };
-export type PermissionGroup = { module: string; permissions: PermissionItem[] };
+export type RoleItem = { id: number; name: string; description?: string | null; is_system?: boolean; permissions?: PermissionItem[] };
+export type PermissionGroup = { module: string; permissions?: PermissionItem[] };
 export type UserItem = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role?: string | null;
-  role_ids?: string[];
-  roles?: { id: string; name: string }[];
-  rolesRelation?: { id: string; name: string }[];
-  roles_relation?: { id: string; name: string }[];
+  role_ids?: number[];
+  roles?: { id: number; name: string }[];
+  rolesRelation?: { id: number; name: string }[];
+  roles_relation?: { id: number; name: string }[];
   company_id?: string | null;
   branch_id?: string | null;
   company?: { id: string; name: string } | null;
   branch?: { id: string; name: string } | null;
+  is_active?: boolean;
 };
 export type CompanyItem = {
   id: string;
@@ -68,13 +69,13 @@ export type LogItem = {
 export const listRoles = () => apiClient<RoleItem[]>("/roles");
 export const listPermissions = () => apiClient<PermissionGroup[]>("/permissions");
 export const createRole = (payload: { name: string; description?: string; permission_ids: string[] }) => apiClient<RoleItem>("/roles", { method: "POST", body: JSON.stringify(payload) });
-export const updateRole = (id: string, payload: { name: string; description?: string; permission_ids: string[] }) => apiClient<RoleItem>(`/roles/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-export const deleteRole = (id: string) => apiClient<null>(`/roles/${id}`, { method: "DELETE" });
+export const updateRole = (id: number, payload: { name: string; description?: string; permission_ids: string[] }) => apiClient<RoleItem>(`/roles/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const deleteRole = (id: number) => apiClient<null>(`/roles/${id}`, { method: "DELETE" });
 
 export const listUsers = () => apiClient<UserItem[]>("/settings/users");
 export const createUser = (payload: Record<string, unknown>) => apiClient<UserItem>("/settings/users", { method: "POST", body: JSON.stringify(payload) });
-export const updateUser = (id: number, payload: Record<string, unknown>) => apiClient<UserItem>(`/settings/users/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-export const deleteUser = (id: number) => apiClient<null>(`/settings/users/${id}`, { method: "DELETE" });
+export const updateUser = (id: string, payload: Record<string, unknown>) => apiClient<UserItem>(`/settings/users/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const deleteUser = (id: string) => apiClient<null>(`/settings/users/${id}`, { method: "DELETE" });
 
 export const listCompanies = () => apiClient<CompanyItem[]>("/settings/companies");
 export const createCompany = (payload: Record<string, unknown>) => apiClient<CompanyItem>("/settings/companies", { method: "POST", body: JSON.stringify(payload) });
@@ -91,7 +92,7 @@ export const createTheme = (payload: Record<string, unknown>) => apiClient<Theme
 export const updateTheme = (id: number, payload: Record<string, unknown>) => apiClient<ThemeItem>(`/settings/themes/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 export const deleteTheme = (id: number) => apiClient<null>(`/settings/themes/${id}`, { method: "DELETE" });
 
-export const listLogs = () => apiClient<LogItem[]>("/settings/system-logs");
+export const listLogs = (page = 1) => apiClient<{ data: LogItem[]; current_page: number; last_page: number; total: number }>(`/settings/system-logs?page=${page}`);
 
 // ─── Licensing ───────────────────────────────────────────────────────────────
 export type LicenseEdition = "Starter" | "Professional" | "Enterprise";
