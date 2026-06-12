@@ -80,7 +80,7 @@ class UserManagementController extends Controller
             'company_id' => 'nullable|uuid|exists:companies,id',
             'branch_id'  => 'nullable|uuid|exists:branches,id',
             'role_ids'   => 'nullable|array',
-            'role_ids.*' => 'uuid|exists:roles,id',
+            'role_ids.*' => 'nullable|exists:roles,id',
         ]);
 
         $user = $this->service->update($user, $validated, $request->user());
