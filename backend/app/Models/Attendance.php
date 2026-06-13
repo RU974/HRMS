@@ -15,6 +15,8 @@ class Attendance extends Model
         'check_out',
         'date',
         'status',
+        'source',
+        'biometric_device_id',
         'notes',
         'correction_status',
         'correction_request_notes',

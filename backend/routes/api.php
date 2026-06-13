@@ -42,6 +42,7 @@ use App\Http\Controllers\Recruitment\CandidateController as RecruitmentCandidate
 use App\Http\Controllers\Recruitment\InterviewController as RecruitmentInterviewController;
 use App\Http\Controllers\Recruitment\JobOpeningController as RecruitmentJobOpeningController;
 use App\Http\Controllers\Recruitment\OnboardingController as RecruitmentOnboardingController;
+use App\Http\Controllers\BiometricDeviceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -171,6 +172,27 @@ $registerRoutes = function (): void {
         });
         Route::post('attendance/check-in', [AttendanceController::class, 'checkIn']);
         Route::post('attendance/check-out', [AttendanceController::class, 'checkOut']);
+
+        // Biometric device routes
+        Route::middleware('permission:biometric:view')->group(function () {
+        Route::get('biometric-devices', [BiometricDeviceController::class, 'index']);
+        Route::get('biometric-devices/sync-logs', [BiometricDeviceController::class, 'syncLogs']);
+        Route::get('biometric-devices/{id}', [BiometricDeviceController::class, 'show']);
+        });
+        Route::middleware('permission:biometric:create')->post('biometric-devices', [BiometricDeviceController::class, 'store']);
+        Route::middleware('permission:biometric:edit')->group(function () {
+        Route::put('biometric-devices/{id}', [BiometricDeviceController::class, 'update']);
+        Route::post('biometric-devices/{id}/test-connection', [BiometricDeviceController::class, 'testConnection']);
+        });
+        Route::middleware('permission:biometric:delete')->delete('biometric-devices/{id}', [BiometricDeviceController::class, 'destroy']);
+        Route::middleware('permission:biometric:sync')->post('biometric-devices/{id}/sync', [BiometricDeviceController::class, 'sync']);
+        Route::middleware('permission:biometric:manage_mapping')->group(function () {
+        Route::get('biometric-devices/{id}/mappings', [BiometricDeviceController::class, 'mappings']);
+        Route::get('biometric-devices/{id}/mappings/auto-match', [BiometricDeviceController::class, 'autoMatch']);
+        Route::post('biometric-devices/{id}/mappings/bulk-import', [BiometricDeviceController::class, 'bulkImportMappings']);
+        Route::post('biometric-devices/mappings', [BiometricDeviceController::class, 'saveMapping']);
+        Route::delete('biometric-devices/mappings/{id}', [BiometricDeviceController::class, 'deleteMapping']);
+        });
 
         // Employee document routes
         Route::group([], function () {
