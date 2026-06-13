@@ -19,6 +19,7 @@ import { EmployeeDocumentsPage } from "@/modules/employee-documents";
 import { DepartmentsPage } from "@/modules/departments";
 import { DesignationsPage } from "@/modules/designations";
 import { ShiftsPage } from "@/modules/shifts";
+import { DevicesListPage, SyncLogsPage, DeviceMappingPage } from "@/modules/biometric-devices";
 import { HolidaysPage } from "@/modules/holidays";
 import { PerformancePage } from "@/modules/performance";
 import { PerformanceReviewsPage } from "@/modules/performance/reviews-page";
@@ -61,6 +62,9 @@ export const appRouter = createBrowserRouter([
       { path: "employees/new",             element: withPermission(<EmployeeFormPage />,           ["employees:create"]) },
       { path: "employees/:id",             element: withPermission(<EmployeeDetailPage />,         ["employees:view", "employees:edit"]) },
       { path: "attendance",                element: withPermission(<AttendancePage />,             ["attendance:view", "attendance:manage_settings", "attendance:approve"]) },
+      { path: "attendance/biometric-devices",                element: withPermission(<DevicesListPage />,    ["biometric:view"]) },
+      { path: "attendance/biometric-devices/sync-logs",      element: withPermission(<SyncLogsPage />,       ["biometric:view"]) },
+      { path: "attendance/biometric-devices/:id/mapping",    element: withPermission(<DeviceMappingPage />,  ["biometric:manage_mapping"]) },
       { path: "payroll",                   element: withPermission(<PayrollPage />,                ["payroll:view", "payroll:manage_settings"]) },
       { path: "recruitment",               element: withPermission(<RecruitmentPage />,            ["recruitment:view"]) },
       { path: "recruitment/jobs",          element: withPermission(<JobsPage />,                  ["recruitment:view"]) },

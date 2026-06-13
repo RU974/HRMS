@@ -38,6 +38,7 @@ export interface AttendanceItem {
   status: "present" | "absent" | "leave" | "late";
   notes?: string | null;
   employee?: { id: number; name: string } | null;
+  source?: "biometric" | "manual" | "mobile" | "web";
 }
 
 export interface LeaveItem {

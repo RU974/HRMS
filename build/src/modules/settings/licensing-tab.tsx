@@ -223,23 +223,26 @@ const PLANS: Array<{
   period: string;
   tagline: string;
   limits: string;
+  trial: string;
   features: string[];
   highlighted?: boolean;
 }> = [
   {
     edition: "Starter",
-    price: "Free",
-    period: "",
+    price: "$3",
+    period: "/ user / month",
     tagline: "For small teams getting started",
     limits: "Up to 25 employees · 5 users",
+    trial: "14-day free trial",
     features: ["Employee records", "Basic attendance", "Leave management", "Email support"],
   },
   {
     edition: "Professional",
-    price: "$8",
+    price: "$15",
     period: "/ user / month",
     tagline: "For growing organizations",
     limits: "Up to 200 employees · 50 users",
+    trial: "14-day free trial",
     features: ["Everything in Starter", "Payroll processing", "Performance reviews", "Approvals & workflows", "Chat & announcements", "Priority support"],
     highlighted: true,
   },
@@ -249,6 +252,7 @@ const PLANS: Array<{
     period: "",
     tagline: "For large enterprises",
     limits: "Unlimited employees & users",
+    trial: "Custom onboarding",
     features: ["Everything in Professional", "Recruitment module", "Custom roles & permissions", "Multi-branch & company", "Audit logs", "Dedicated support", "SLA guarantee"],
   },
 ];
@@ -282,12 +286,18 @@ function PlanCard({ plan, current }: { plan: typeof PLANS[0]; current: boolean }
           </div>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-1.5">
           <div className="flex items-baseline gap-1">
             <span className="text-3xl font-black text-[var(--text)]">{plan.price}</span>
             {plan.period && <span className="text-xs text-[var(--muted)]">{plan.period}</span>}
           </div>
           <p className="mt-0.5 text-xs text-[var(--muted)]">{plan.limits}</p>
+        </div>
+
+        {/* Trial badge */}
+        <div className="mb-4 flex items-center gap-1.5">
+          <Clock className="h-3 w-3 text-blue-500" />
+          <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">{plan.trial}</span>
         </div>
 
         {current ? (
@@ -300,7 +310,7 @@ function PlanCard({ plan, current }: { plan: typeof PLANS[0]; current: boolean }
               ? "bg-[var(--primary)] text-white hover:opacity-90"
               : "border border-[var(--border)] text-[var(--text)] hover:bg-[var(--background)]"
           }`}>
-            {plan.edition === "Enterprise" ? "Contact Sales" : "Upgrade"}
+            {plan.edition === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
           </button>
         )}
       </div>
@@ -354,6 +364,7 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
         <div className="p-5 space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
             Enter the license key provided by Slingshottech. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
+            <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshotteck.com" className="underline">sales@slingshotteck.com</a></span>
           </div>
           <div className="space-y-1.5">
             <label className={labelCls}>License Key</label>
@@ -542,6 +553,7 @@ function NoLicensePlaceholder({ onActivate, onIssue }: { onActivate: () => void;
       <p className="mb-1 text-base font-bold text-[var(--text)]">No license configured</p>
       <p className="mb-6 max-w-sm text-sm text-[var(--muted)]">
         Activate an existing license key or issue a new license to unlock all HRMS features.
+        All plans include a <strong className="text-[var(--text)]">14-day free trial</strong>.
       </p>
       <div className="flex items-center gap-3">
         <button

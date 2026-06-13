@@ -12,3 +12,4 @@ export * from "./performance-service";
 export * from "./recruitment-service";
 export * from "./payroll-service";
 export * from "./hr-management-service";
+export * from "./biometric-device-service";

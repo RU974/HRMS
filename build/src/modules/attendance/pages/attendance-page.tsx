@@ -312,6 +312,7 @@ export function AttendancePage() {
                 <th className="p-3">Status</th>
                 <th className="p-3">Check In</th>
                 <th className="p-3">Check Out</th>
+                <th className="p-3">Source</th>
                 <th className="p-3">Notes</th>
                 {canManage && <th className="p-3 text-right">Actions</th>}
               </tr>
@@ -319,7 +320,7 @@ export function AttendancePage() {
             <tbody>
               {query.isLoading && [...Array(8)].map((_, i) => (
                 <tr key={i} className="border-b border-[var(--border)]/50">
-                  {[...Array(canManage ? 7 : 6)].map((__, j) => (
+                  {[...Array(canManage ? 8 : 7)].map((__, j) => (
                     <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>
                   ))}
                 </tr>
@@ -327,7 +328,7 @@ export function AttendancePage() {
 
               {!query.isLoading && records.length === 0 && (
                 <tr>
-                  <td colSpan={canManage ? 7 : 6} className="p-10 text-center text-sm text-[var(--muted)]">
+                  <td colSpan={canManage ? 8 : 7} className="p-10 text-center text-sm text-[var(--muted)]">
                     No attendance records found.
                   </td>
                 </tr>
@@ -342,6 +343,11 @@ export function AttendancePage() {
                   <td className="p-3"><StatusBadge status={item.status} /></td>
                   <td className="p-3">{item.check_in ? item.check_in.slice(11, 16) : "—"}</td>
                   <td className="p-3">{item.check_out ? item.check_out.slice(11, 16) : "—"}</td>
+                  <td className="p-3">
+                    <span className="rounded-full bg-[var(--border)]/40 px-2.5 py-0.5 text-xs font-medium capitalize text-[var(--muted)]">
+                      {item.source ?? "manual"}
+                    </span>
+                  </td>
                   <td className="p-3 max-w-xs truncate text-[var(--muted)]">{item.notes ?? "—"}</td>
                   {canManage && (
                     <td className="p-3">

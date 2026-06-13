@@ -20,6 +20,7 @@ import {
   UserCircle2,
   Clock3,
   ScrollText,
+  ScanFace,
 } from "lucide-react";
 import type { AuthUser } from "@/store/auth-store";
 import { hasAllPermissions, hasAnyPermission } from "@/utils/permissions";
@@ -90,6 +91,10 @@ export const sidebarSections: SidebarSectionConfig[] = [
         path: "/attendance",
         icon: Clock3,
         permissions: ["attendance.view", "attendance.edit", "attendance.manage_settings"],
+        children: [
+          { label: "Attendance Records", path: "/attendance",                              icon: Clock3,    permissions: ["attendance.view", "attendance.edit", "attendance.manage_settings"] },
+          { label: "Biometric Devices",  path: "/attendance/biometric-devices",            icon: ScanFace,  permissions: ["biometric.view"] },
+        ],
       },
       {
         label: "Leaves",
