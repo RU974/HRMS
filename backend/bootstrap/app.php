@@ -19,9 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
-            'audit.log' => \App\Http\Middleware\AuditLogMiddleware::class,
-            'permission' => \App\Http\Middleware\PermissionMiddleware::class,
+            'role'            => \App\Http\Middleware\RoleMiddleware::class,
+            'audit.log'       => \App\Http\Middleware\AuditLogMiddleware::class,
+            'permission'      => \App\Http\Middleware\PermissionMiddleware::class,
+            'license.feature' => \App\Http\Middleware\RequireLicenseFeature::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

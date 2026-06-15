@@ -117,12 +117,25 @@ $registerRoutes = function (): void {
                 Route::get('settings/system-logs', [SystemLogController::class, 'index']);
                 Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
             });
-            // Licensing — custom routes must come before apiResource so Laravel
-            // does not treat "usage", "all-usage", or "activate" as {license} UUID segments.
-            Route::get('settings/licenses/all-usage', [LicenseController::class, 'allCompanyUsage']);
-            Route::get('settings/licenses/usage', [LicenseController::class, 'usage']);
-            Route::post('settings/licenses/activate', [LicenseController::class, 'activate']);
-            Route::apiResource('settings/licenses', LicenseController::class);
+        });
+
+        // ── Licensing ────────────────────────────────────────────────────────────
+        // Intentionally outside the settings:manage_settings group so that any user
+        // who holds a licenses:* permission can reach these endpoints without also
+        // needing the broader settings:manage_settings permission.
+        // Fine-grained per-action checks (licenses:view / create / edit / delete /
+        // manage_settings) are enforced inside LicenseController itself.
+        // Custom routes MUST come before apiResource so Laravel does not mistake
+        // "usage", "all-usage", or "activate" for {license} UUID path segments.
+        Route::middleware('permission:licenses:view|licenses:create|licenses:edit|licenses:delete|licenses:manage_settings')->group(function () {
+            Route::get('settings/licenses/all-usage',          [LicenseController::class, 'allCompanyUsage']);
+            Route::get('settings/licenses/usage',              [LicenseController::class, 'usage']);
+            // Throttle activation to 10 attempts per minute to prevent brute-force
+            Route::post('settings/licenses/activate',          [LicenseController::class, 'activate'])->middleware('throttle:10,1');
+            // Custom actions BEFORE apiResource so Laravel does not treat them as {license} UUID segments
+            Route::post('settings/licenses/{id}/suspend',      [LicenseController::class, 'suspend']);
+            Route::post('settings/licenses/{id}/unsuspend',    [LicenseController::class, 'unsuspend']);
+            Route::apiResource('settings/licenses',            LicenseController::class);
         });
 
         Route::middleware('permission:approvals:view')->group(function () {
@@ -203,20 +216,20 @@ $registerRoutes = function (): void {
             Route::apiResource('employee-documents', EmployeeDocumentController::class);
         });
 
-        // Payroll routes
-        Route::group([], function () {
+        // Payroll routes — Professional+ feature
+        Route::middleware('license.feature:payroll')->group(function () {
             Route::get('payroll/employee/{employeeId}', [PayrollController::class, 'getByEmployee']);
             Route::get('payroll/summary/monthly', [PayrollController::class, 'getMonthlySummary']);
             Route::apiResource('payroll', PayrollController::class);
             Route::apiResource('payslips', PayslipController::class);
             Route::apiResource('bonuses', BonusController::class);
             Route::apiResource('deductions', DeductionController::class);
-        });
-        Route::middleware('permission:payroll:manage_settings')->group(function () {
-            Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
-            Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
-            Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
-            Route::apiResource('payroll-processings', PayrollProcessingController::class);
+            Route::middleware('permission:payroll:manage_settings')->group(function () {
+                Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
+                Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
+                Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
+                Route::apiResource('payroll-processings', PayrollProcessingController::class);
+            });
         });
 
         // Leave routes
@@ -252,32 +265,36 @@ $registerRoutes = function (): void {
                     ->only(['store', 'update', 'destroy']);
             });
 
-        // Recruitment routes
-        Route::middleware('permission:recruitment:view')->group(function () {
-            Route::get('recruitment/pipeline-summary', [RecruitmentCandidateController::class, 'pipelineSummary']);
-            Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->only(['index', 'show']);
-            Route::apiResource('candidates', RecruitmentCandidateController::class)->only(['index', 'show']);
-            Route::apiResource('interviews', RecruitmentInterviewController::class)->only(['index', 'show']);
-            Route::apiResource('onboarding', RecruitmentOnboardingController::class)->only(['index', 'show']);
+        // Recruitment routes — Enterprise feature
+        Route::middleware('license.feature:recruitment')->group(function () {
+            Route::middleware('permission:recruitment:view')->group(function () {
+                Route::get('recruitment/pipeline-summary', [RecruitmentCandidateController::class, 'pipelineSummary']);
+                Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->only(['index', 'show']);
+                Route::apiResource('candidates', RecruitmentCandidateController::class)->only(['index', 'show']);
+                Route::apiResource('interviews', RecruitmentInterviewController::class)->only(['index', 'show']);
+                Route::apiResource('onboarding', RecruitmentOnboardingController::class)->only(['index', 'show']);
+            });
+
+            Route::middleware('permission:recruitment:create|recruitment:edit|recruitment:delete')->group(function () {
+                Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->except(['index', 'show']);
+                Route::apiResource('candidates', RecruitmentCandidateController::class)->except(['index', 'show']);
+                Route::apiResource('interviews', RecruitmentInterviewController::class)->except(['index', 'show']);
+                Route::apiResource('onboarding', RecruitmentOnboardingController::class)->except(['index', 'show']);
+            });
         });
 
-        Route::middleware('permission:recruitment:create|recruitment:edit|recruitment:delete')->group(function () {
-            Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->except(['index', 'show']);
-            Route::apiResource('candidates', RecruitmentCandidateController::class)->except(['index', 'show']);
-            Route::apiResource('interviews', RecruitmentInterviewController::class)->except(['index', 'show']);
-            Route::apiResource('onboarding', RecruitmentOnboardingController::class)->except(['index', 'show']);
+        // Communication routes — Professional+ feature
+        Route::middleware('license.feature:communication')->group(function () {
+            Route::middleware('throttle:communication')->apiResource('announcements', AnnouncementController::class);
+            Route::middleware('throttle:communication')->apiResource('notifications', NotificationController::class);
+            Route::middleware('throttle:communication')->group(function () {
+                Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
+                Route::apiResource('chat-messages', ChatMessageController::class);
+            });
         });
 
-        // Communication routes
-        Route::middleware('throttle:communication')->apiResource('announcements', AnnouncementController::class);
-        Route::middleware('throttle:communication')->apiResource('notifications', NotificationController::class);
-        Route::middleware('throttle:communication')->group(function () {
-            Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
-            Route::apiResource('chat-messages', ChatMessageController::class);
-        });
-
-        // Performance routes
-        Route::middleware('permission:performance:view|performance:manage_settings')->group(function () {
+        // Performance routes — Professional+ feature
+        Route::middleware(['license.feature:performance', 'permission:performance:view|performance:manage_settings'])->group(function () {
             Route::apiResource('performance-reviews', PerformanceReviewController::class);
             Route::apiResource('performance-kpis', PerformanceKpiController::class);
             Route::apiResource('performance-goals', PerformanceGoalController::class);

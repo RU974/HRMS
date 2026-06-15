@@ -12,9 +12,6 @@ class LicenseService
 {
     // ─── List ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Return all licenses scoped to the given company (or all for Super Admin).
-     */
     public function list(?string $companyId): Collection
     {
         return License::query()
@@ -26,9 +23,6 @@ class LicenseService
 
     // ─── Create ───────────────────────────────────────────────────────────────
 
-    /**
-     * Issue a brand-new license, generating a unique key automatically.
-     */
     public function create(array $data, ?string $companyId): License
     {
         $license = new License();
@@ -36,8 +30,8 @@ class LicenseService
         $license->company_id    = $data['company_id'] ?? $companyId;
         $license->license_key   = License::generateKey();
         $license->issued_at     = now();
-        $license->issued_by     = $data['issued_by'] ?? 'Slingshottech';
-        $license->support_email = $data['support_email'] ?? 'support@slingshottech.com';
+        $license->issued_by     = $data['issued_by'] ?? config('licenses.issued_by');
+        $license->support_email = $data['support_email'] ?? config('licenses.support_email');
         $license->features      = $data['features'] ?? [];
         $license->metadata      = $data['metadata'] ?? [];
         $license->status        = 'trial';
@@ -50,15 +44,10 @@ class LicenseService
 
     // ─── Update ───────────────────────────────────────────────────────────────
 
-    /**
-     * Update an existing license.
-     * Re-evaluates status after changes to expires_at or activated_at.
-     */
     public function update(License $license, array $data): License
     {
         $license->fill($data);
 
-        // Recalculate status whenever expiry or activation timestamps change
         if (isset($data['expires_at']) || isset($data['activated_at'])) {
             $license->recalculateStatus();
         }
@@ -70,16 +59,14 @@ class LicenseService
 
     // ─── Activate ─────────────────────────────────────────────────────────────
 
-    /**
-     * Activate a license by its key.
-     * Looks up across all companies (a key is globally unique).
-     *
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
-     * @throws \RuntimeException
-     */
     public function activate(string $licenseKey): License
     {
         $license = License::where('license_key', strtoupper(trim($licenseKey)))->firstOrFail();
+
+        // Revoked licenses (is_active = false) can never be re-activated.
+        if (! $license->is_active) {
+            throw new \RuntimeException('This license has been revoked and cannot be activated. Please contact support.');
+        }
 
         if ($license->status === 'suspended') {
             throw new \RuntimeException('This license has been suspended. Please contact support.');
@@ -90,7 +77,6 @@ class LicenseService
         }
 
         if ($license->activated_at) {
-            // Already activated — just return it (idempotent)
             return $license->load('company');
         }
 
@@ -98,7 +84,6 @@ class LicenseService
         $license->status       = 'active';
         $license->is_active    = true;
 
-        // If no explicit expiry was set at issue time, grant 1 year from activation
         if (! $license->expires_at) {
             $license->expires_at = now()->addYear();
         }
@@ -110,11 +95,6 @@ class LicenseService
 
     // ─── Usage (single company) ───────────────────────────────────────────────
 
-    /**
-     * Return current seat usage alongside the active license for one company.
-     * Used by Company Admin and by the per-company drill-down.
-     * Response: { active_employees, active_users, license }
-     */
     public function usage(?string $companyId): array
     {
         $employeeQuery = Employee::query()->where('status', 'active');
@@ -128,7 +108,6 @@ class LicenseService
         $activeEmployees = $employeeQuery->count();
         $activeUsers     = $userQuery->count();
 
-        // Prefer the most recently activated license; fall back to newest overall
         $license = License::query()
             ->forCompany($companyId)
             ->active()
@@ -137,7 +116,6 @@ class LicenseService
             ->with('company:id,name')
             ->first();
 
-        // Auto-expire if the license has passed its expiry date
         if ($license && $license->expires_at?->isPast() && $license->status !== 'expired') {
             $license->status = 'expired';
             $license->save();
@@ -153,70 +131,70 @@ class LicenseService
     // ─── All-company usage (Super Admin only) ─────────────────────────────────
 
     /**
-     * Return a usage snapshot for every company in the system.
+     * Return a paginated usage snapshot for every company.
      *
-     * Each entry in the returned array:
-     *   company_id        — UUID of the company
-     *   company_name      — display name
-     *   total_employees   — active employee count
-     *   total_users       — total user count
-     *   license           — the company's active License model (or null)
+     * Summary counters are computed globally (all companies) via fast scalar
+     * DB aggregates so the KPI cards stay accurate across pages.
      *
-     * Also returns top-level summary counters:
-     *   summary.total_companies
-     *   summary.licensed          — companies with an active license
-     *   summary.trial             — companies on trial
-     *   summary.expiring_soon     — active licenses expiring within 30 days
-     *   summary.expired           — companies with an expired license
-     *   summary.no_license        — companies with no license at all
+     * Each company row includes:
+     *   company_id, company_name, total_employees, total_users,
+     *   license (current active), license_history (all other licenses)
      */
-    public function allCompanyUsage(): array
+    public function allCompanyUsage(int $page = 1, int $perPage = 25): array
     {
-        // Load all companies with pre-aggregated user counts in one query
-        $companies = Company::query()
-            ->where('is_active', true)
-            ->withCount('users')
-            ->orderBy('name')
-            ->get();
+        // ── Global summary (all companies, not just this page) ────────────────
+        $totalCompanies       = Company::where('is_active', true)->count();
+        $companiesWithLicense = License::where('is_active', true)->distinct()->count('company_id');
 
-        if ($companies->isEmpty()) {
+        $licensed     = License::where('is_active', true)->where('status', 'active')->distinct()->count('company_id');
+        $trial        = License::where('is_active', true)->where('status', 'trial')->distinct()->count('company_id');
+        $expired      = License::where('is_active', true)->where('status', 'expired')->distinct()->count('company_id');
+        $suspended    = License::where('is_active', true)->where('status', 'suspended')->distinct()->count('company_id');
+        $expiringSoon = License::where('is_active', true)
+            ->where('status', 'active')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '>', now())
+            ->where('expires_at', '<=', now()->addDays(30))
+            ->distinct()
+            ->count('company_id');
+
+        $summary = [
+            'total_companies' => $totalCompanies,
+            'licensed'        => $licensed,
+            'trial'           => $trial,
+            'expiring_soon'   => $expiringSoon,
+            'expired'         => $expired,
+            'suspended'       => $suspended,
+            'no_license'      => max(0, $totalCompanies - $companiesWithLicense),
+        ];
+
+        if ($totalCompanies === 0) {
             return [
-                'summary' => [
-                    'total_companies' => 0,
-                    'licensed'        => 0,
-                    'trial'           => 0,
-                    'expiring_soon'   => 0,
-                    'expired'         => 0,
-                    'no_license'      => 0,
-                ],
-                'companies' => [],
+                'summary'    => $summary,
+                'companies'  => [],
+                'pagination' => ['current_page' => 1, 'last_page' => 1, 'per_page' => $perPage, 'total' => 0],
             ];
         }
 
+        // ── Paginated company rows ────────────────────────────────────────────
+        $paginator = Company::query()
+            ->where('is_active', true)
+            ->withCount('users')
+            ->orderBy('name')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        $companies  = collect($paginator->items());
         $companyIds = $companies->pluck('id');
 
-        // Load the best active license per company in a single query,
-        // then key them by company_id for O(1) lookup.
-        // "Best" = most recently activated, then most recently created.
-        $licenses = License::query()
+        // All licenses for this page's companies (active + revoked) for history
+        $allLicenses = License::query()
             ->whereIn('company_id', $companyIds)
-            ->active()
             ->orderByDesc('activated_at')
             ->orderByDesc('created_at')
             ->get()
-            ->unique('company_id')   // keep only the first (best) per company
-            ->keyBy('company_id');
+            ->groupBy('company_id');
 
-        // Auto-expire any licenses whose expiry date has passed
-        foreach ($licenses as $license) {
-            if ($license->expires_at?->isPast() && $license->status !== 'expired') {
-                $license->status = 'expired';
-                $license->save();
-            }
-        }
-
-        // Count active employees per company in one query
-        // Employee → User (company_id), so we go through users table
+        // Active employee counts restricted to this page's companies only
         $employeeCounts = Employee::query()
             ->where('status', 'active')
             ->whereHas('user', fn ($q) => $q->whereIn('company_id', $companyIds))
@@ -225,64 +203,69 @@ class LicenseService
             ->groupBy('users.company_id')
             ->pluck('total', 'company_id');
 
-        // ── Build per-company rows ────────────────────────────────────────────
         $rows = [];
 
-        // Summary counters
-        $licensed      = 0;
-        $trial         = 0;
-        $expiringSoon  = 0;
-        $expired       = 0;
-        $noLicense     = 0;
-
         foreach ($companies as $company) {
-            /** @var \App\Models\License|null $license */
-            $license          = $licenses->get($company->id);
-            $activeEmployees  = (int) ($employeeCounts[$company->id] ?? 0);
-            $totalUsers       = $company->users_count;
+            /** @var \Illuminate\Support\Collection $companyLicenses */
+            $companyLicenses = $allLicenses->get($company->id, collect());
 
-            // Tally summary
-            if (! $license) {
-                $noLicense++;
-            } elseif ($license->status === 'expired') {
-                $expired++;
-            } elseif ($license->status === 'trial') {
-                $trial++;
-            } else {
-                // active
-                $licensed++;
-                if ($license->days_remaining !== null && $license->days_remaining <= 30) {
-                    $expiringSoon++;
-                }
+            // Current license = first record that is still active (not revoked)
+            $license = $companyLicenses->first(fn ($l) => $l->is_active);
+
+            // Auto-expire if past expiry date
+            if ($license && $license->expires_at?->isPast() && $license->status !== 'expired') {
+                $license->status = 'expired';
+                $license->save();
             }
 
+            // History = everything except the current license
+            $history = $companyLicenses
+                ->filter(fn ($l) => $l->id !== $license?->id)
+                ->values();
+
             $rows[] = [
-                'company_id'       => $company->id,
-                'company_name'     => $company->name,
-                'total_employees'  => $activeEmployees,
-                'total_users'      => $totalUsers,
-                'license'          => $license,
+                'company_id'      => $company->id,
+                'company_name'    => $company->name,
+                'total_employees' => (int) ($employeeCounts[$company->id] ?? 0),
+                'total_users'     => (int) $company->users_count,
+                'license'         => $license,
+                'license_history' => $history,
             ];
         }
 
         return [
-            'summary' => [
-                'total_companies' => $companies->count(),
-                'licensed'        => $licensed,
-                'trial'           => $trial,
-                'expiring_soon'   => $expiringSoon,
-                'expired'         => $expired,
-                'no_license'      => $noLicense,
+            'summary'    => $summary,
+            'companies'  => $rows,
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'per_page'     => $paginator->perPage(),
+                'total'        => $paginator->total(),
             ],
-            'companies' => $rows,
         ];
+    }
+
+    // ─── Suspend / Unsuspend ──────────────────────────────────────────────────
+
+    public function suspend(License $license): License
+    {
+        $license->status = 'suspended';
+        $license->save();
+        return $license->fresh(['company']);
+    }
+
+    public function unsuspend(License $license): License
+    {
+        $license->recalculateStatus();
+        $license->save();
+        return $license->fresh(['company']);
     }
 
     // ─── Delete ───────────────────────────────────────────────────────────────
 
     /**
-     * Soft-delete a license by marking it inactive rather than hard-deleting.
-     * This preserves the audit trail.
+     * Soft-delete a license by marking it inactive. The key remains in the
+     * audit trail but can never be re-activated (activate() checks is_active).
      */
     public function delete(License $license): void
     {

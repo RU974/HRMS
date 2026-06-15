@@ -1,25 +1,29 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldCheck, Key, Users, Building2, Zap, Check, Copy,
   AlertTriangle, Clock, Crown, Star, Rocket, ChevronDown,
   X, Edit2, Plus, CheckCircle2, XCircle, Calendar, RefreshCw,
-  TrendingUp,
+  TrendingUp, Ban, History, Trash2,
 } from "lucide-react";
 import {
   LicenseEdition,
   LicenseStatus,
   LicenseItem,
   LicenseUsage,
+  LicensePagination,
   CompanyItem,
   CompanyLicenseUsage,
   AllCompanyUsageResponse,
   activateLicense,
   createLicense,
+  deleteLicense,
   getAllCompanyUsage,
   getLicenseUsage,
   listLicenses,
   listCompanies,
+  suspendLicense,
+  unsuspendLicense,
   updateLicense,
 } from "@/services/settings-service";
 import { useAuthStore } from "@/store/auth-store";
@@ -57,12 +61,13 @@ function CopyButton({ value }: { value: string }) {
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: LicenseStatus }) {
-  const cfg = {
+  const cfgMap: Record<string, { icon: typeof CheckCircle2; cls: string; label: string }> = {
     active:    { icon: CheckCircle2,  cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400", label: "Active"    },
     trial:     { icon: Clock,         cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",             label: "Trial"     },
     expired:   { icon: XCircle,       cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",             label: "Expired"   },
     suspended: { icon: AlertTriangle, cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",         label: "Suspended" },
-  }[status];
+  };
+  const cfg = cfgMap[status] ?? { icon: AlertTriangle, cls: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400", label: status };
   const Icon = cfg.icon;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${cfg.cls}`}>
@@ -116,7 +121,7 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
   const empPct  = usagePct(usage.active_employees, license.max_employees);
   const userPct = usagePct(usage.active_users, license.max_users);
 
-  const daysColor = !license.days_remaining ? "#10b981"
+  const daysColor = license.days_remaining == null ? "#10b981"
     : license.days_remaining < 30  ? "#ef4444"
     : license.days_remaining < 90  ? "#f59e0b"
     : "#10b981";
@@ -158,7 +163,7 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
             </div>
           </div>
 
-          <div className={`rounded-2xl border ${cfg.border} bg-white/8 px-4 py-3 backdrop-blur-sm`}>
+          <div className={`rounded-2xl border ${cfg.border} bg-white/10 px-4 py-3 backdrop-blur-sm`}>
             <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">License Key</p>
             <div className="flex items-center gap-2">
               <code className="font-mono text-sm font-semibold tracking-wider text-white">
@@ -338,10 +343,150 @@ function PlanCard({ plan, current }: { plan: typeof PLANS[0]; current: boolean }
   );
 }
 
+// ─── Suspend / Unsuspend confirm modal ────────────────────────────────────────
+function SuspendModal({
+  open, onClose, onSuccess, license,
+}: {
+  open: boolean; onClose: () => void; onSuccess: () => void; license: LicenseItem;
+}) {
+  const isSuspended = license.status === "suspended";
+  const [errMsg, setErrMsg] = React.useState("");
+
+  const mutation = useMutation({
+    mutationFn: () => isSuspended ? unsuspendLicense(license.id) : suspendLicense(license.id),
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (e: Error) => setErrMsg(e.message || "Action failed. Please try again."),
+  });
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Ban className="h-4 w-4 text-amber-500" />
+            <h3 className="text-base font-semibold text-[var(--text)]">
+              {isSuspended ? "Unsuspend License" : "Suspend License"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-[var(--border)]/40">
+            <X className="h-4 w-4 text-[var(--muted)]" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className={`rounded-xl border px-4 py-3 text-sm ${isSuspended ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300" : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"}`}>
+            {isSuspended ? (
+              <>Unsuspending will restore this license to its previous status. The company will regain access to all licensed features.</>
+            ) : (
+              <>Suspending this license will immediately block the company from activating it. This can be reversed at any time.</>
+            )}
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 space-y-1">
+            <p className="text-xs font-semibold text-[var(--muted)]">License</p>
+            <code className="text-sm font-mono font-semibold text-[var(--text)]">{license.license_key}</code>
+            <p className="text-xs text-[var(--muted)]">{license.licensee_name} · {license.edition}</p>
+          </div>
+          {errMsg && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> {errMsg}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--background)]">
+              Cancel
+            </button>
+            <button
+              onClick={() => { setErrMsg(""); void mutation.mutate(); }}
+              disabled={mutation.isPending}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 ${isSuspended ? "bg-blue-600" : "bg-amber-500"}`}
+            >
+              {mutation.isPending
+                ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> Processing…</>
+                : isSuspended ? <><CheckCircle2 className="h-3.5 w-3.5" /> Unsuspend</> : <><Ban className="h-3.5 w-3.5" /> Suspend</>
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Revoke confirm modal ──────────────────────────────────────────────────────
+function RevokeModal({
+  open, onClose, onSuccess, license,
+}: {
+  open: boolean; onClose: () => void; onSuccess: () => void; license: LicenseItem;
+}) {
+  const [errMsg, setErrMsg] = React.useState("");
+
+  const mutation = useMutation({
+    mutationFn: () => deleteLicense(license.id),
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (e: Error) => setErrMsg(e.message || "Failed to revoke license. Please try again."),
+  });
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-rose-500" />
+            <h3 className="text-base font-semibold text-[var(--text)]">Revoke License</h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-[var(--border)]/40">
+            <X className="h-4 w-4 text-[var(--muted)]" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
+            This will permanently revoke the license. The license key will remain in the audit trail but can no longer be activated. This cannot be undone.
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 space-y-1">
+            <p className="text-xs font-semibold text-[var(--muted)]">License</p>
+            <code className="text-sm font-mono font-semibold text-[var(--text)]">{license.license_key}</code>
+            <p className="text-xs text-[var(--muted)]">{license.licensee_name} · {license.edition}</p>
+          </div>
+          {errMsg && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> {errMsg}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--background)]">
+              Cancel
+            </button>
+            <button
+              onClick={() => { setErrMsg(""); void mutation.mutate(); }}
+              disabled={mutation.isPending}
+              className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              {mutation.isPending
+                ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> Revoking…</>
+                : <><Trash2 className="h-3.5 w-3.5" /> Revoke</>
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Activate key modal ───────────────────────────────────────────────────────
 function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
   const [key, setKey]   = useState("");
   const [errMsg, setErrMsg] = useState("");
+
+  // Reset form state each time the modal is opened
+  React.useEffect(() => {
+    if (open) { setKey(""); setErrMsg(""); }
+  }, [open]);
 
   const mutation = useMutation({
     mutationFn: () => activateLicense(key.trim()),
@@ -371,7 +516,7 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
         </div>
         <div className="p-5 space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-            Enter the license key provided by Slingshottech. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
+            Enter the license key provided by Slingshotteck. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
             <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshotteck.com" className="underline">sales@slingshotteck.com</a></span>
           </div>
           <div className="space-y-1.5">
@@ -432,8 +577,8 @@ function IssueModal({
     max_employees:  String(license?.max_employees ?? 50),
     max_users:      String(license?.max_users     ?? 20),
     expires_at:     license?.expires_at?.slice(0, 10) ?? "",
-    issued_by:      license?.issued_by      ?? "Slingshottech",
-    support_email:  license?.support_email  ?? "support@slingshottech.com",
+    issued_by:      license?.issued_by      ?? "",
+    support_email:  license?.support_email  ?? "",
     features:       Array.isArray(license?.features)
       ? license.features.join(", ")
       : (license?.features as string | undefined) ?? "",
@@ -560,11 +705,11 @@ function IssueModal({
             </div>
             <div className="space-y-1.5">
               <label className={labelCls}>Max Employees</label>
-              <input className={inputCls} type="number" min="1" value={form.max_employees} onChange={set("max_employees")} />
+              <input className={inputCls} type="number" min="1" max="100000" value={form.max_employees} onChange={set("max_employees")} />
             </div>
             <div className="space-y-1.5">
               <label className={labelCls}>Max Users</label>
-              <input className={inputCls} type="number" min="1" value={form.max_users} onChange={set("max_users")} />
+              <input className={inputCls} type="number" min="1" max="10000" value={form.max_users} onChange={set("max_users")} />
             </div>
           </div>
 
@@ -632,7 +777,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 }
 
 // ─── No license placeholder ───────────────────────────────────────────────────
-function NoLicensePlaceholder({ onActivate, onIssue }: { onActivate: () => void; onIssue: () => void }) {
+function NoLicensePlaceholder({ onActivate, onIssue, isSuperAdmin = false }: { onActivate: () => void; onIssue: () => void; isSuperAdmin?: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[var(--border)] bg-[var(--background)] py-16 text-center">
       <div className="mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[var(--border)]/50">
@@ -650,12 +795,14 @@ function NoLicensePlaceholder({ onActivate, onIssue }: { onActivate: () => void;
         >
           <Key className="h-4 w-4" /> Activate Key
         </button>
-        <button
-          onClick={onIssue}
-          className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          <Plus className="h-4 w-4" /> Issue License
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={onIssue}
+            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" /> Issue License
+          </button>
+        )}
       </div>
     </div>
   );
@@ -688,12 +835,17 @@ function CompanyLicenseRow({
   row,
   onIssue,
   onEdit,
+  onSuspend,
+  onRevoke,
 }: {
   row: CompanyLicenseUsage;
-  onIssue: (companyId: string, companyName: string) => void;
-  onEdit:  (license: LicenseItem) => void;
+  onIssue:   (companyId: string, companyName: string) => void;
+  onEdit:    (license: LicenseItem) => void;
+  onSuspend: (license: LicenseItem) => void;
+  onRevoke:  (license: LicenseItem) => void;
 }) {
   const { license } = row;
+  const [showHistory, setShowHistory] = useState(false);
 
   const empPct  = license ? usagePct(row.total_employees, license.max_employees) : 0;
   const userPct = license ? usagePct(row.total_users,     license.max_users)     : 0;
@@ -702,93 +854,141 @@ function CompanyLicenseRow({
     pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
 
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[var(--primary)]/30 hover:shadow-sm">
-      {/* Left: company info + license detail */}
-      <div className="min-w-0 space-y-3">
-        {/* Company name + status */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10">
-            <Building2 className="h-3.5 w-3.5 text-[var(--primary)]" />
-          </div>
-          <span className="text-sm font-bold text-[var(--text)] truncate">{row.company_name}</span>
-          {license
-            ? <StatusBadge status={license.status} />
-            : <span className="inline-flex items-center gap-1 rounded-full bg-[var(--border)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)]">No License</span>
-          }
-          {license?.days_remaining != null && license.days_remaining <= 30 && license.status === "active" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-              <AlertTriangle className="h-2.5 w-2.5" /> {license.days_remaining}d left
-            </span>
-          )}
-        </div>
-
-        {/* License key + edition */}
-        {license && (
-          <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${(EDITION_CFG[license.edition] ?? EDITION_CFG.Starter).badge}`}>
-              {license.edition}
-            </span>
-            <code className="font-mono tracking-wider opacity-70">{license.license_key}</code>
-            {license.expires_at && (
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                Expires {fmtDate(license.expires_at)}
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[var(--primary)]/30 hover:shadow-sm space-y-3">
+      <div className="grid grid-cols-[1fr_auto] gap-4">
+        {/* Left: company info + license detail */}
+        <div className="min-w-0 space-y-3">
+          {/* Company name + status */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10">
+              <Building2 className="h-3.5 w-3.5 text-[var(--primary)]" />
+            </div>
+            <span className="text-sm font-bold text-[var(--text)] truncate">{row.company_name}</span>
+            {license
+              ? <StatusBadge status={license.status} />
+              : <span className="inline-flex items-center gap-1 rounded-full bg-[var(--border)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)]">No License</span>
+            }
+            {license?.days_remaining != null && license.days_remaining <= 30 && license.status === "active" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                <AlertTriangle className="h-2.5 w-2.5" /> {license.days_remaining}d left
               </span>
             )}
           </div>
-        )}
 
-        {/* Seat usage bars */}
-        {license && (
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Employees", used: row.total_employees, max: license.max_employees, pct: empPct },
-              { label: "Users",     used: row.total_users,     max: license.max_users,     pct: userPct },
-            ].map((s) => (
-              <div key={s.label}>
-                <div className="mb-1 flex items-center justify-between text-[10px]">
-                  <span className="font-semibold text-[var(--muted)]">{s.label}</span>
-                  <span className="text-[var(--muted)]">
-                    <strong className="text-[var(--text)]">{s.used}</strong>/{s.max} ({s.pct}%)
-                  </span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${barColor(s.pct)}`}
-                    style={{ width: `${s.pct}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+          {/* License key + edition */}
+          {license && (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${(EDITION_CFG[license.edition] ?? EDITION_CFG.Starter).badge}`}>
+                {license.edition}
+              </span>
+              <code className="font-mono tracking-wider opacity-70">{license.license_key}</code>
+              {license.expires_at && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  Expires {fmtDate(license.expires_at)}
+                </span>
+              )}
+            </div>
+          )}
 
-        {/* No license — seat counts only */}
-        {!license && (
-          <p className="text-xs text-[var(--muted)]">
-            {row.total_employees} active employee{row.total_employees !== 1 ? "s" : ""} · {row.total_users} user{row.total_users !== 1 ? "s" : ""} · No license assigned
-          </p>
-        )}
+          {/* Seat usage bars */}
+          {license && license.status !== "suspended" && (
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Employees", used: row.total_employees, max: license.max_employees, pct: empPct },
+                { label: "Users",     used: row.total_users,     max: license.max_users,     pct: userPct },
+              ].map((s) => (
+                <div key={s.label}>
+                  <div className="mb-1 flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-[var(--muted)]">{s.label}</span>
+                    <span className="text-[var(--muted)]">
+                      <strong className="text-[var(--text)]">{s.used}</strong>/{s.max} ({s.pct}%)
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${barColor(s.pct)}`}
+                      style={{ width: `${s.pct}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* No license — seat counts only */}
+          {!license && (
+            <p className="text-xs text-[var(--muted)]">
+              {row.total_employees} active employee{row.total_employees !== 1 ? "s" : ""} · {row.total_users} user{row.total_users !== 1 ? "s" : ""} · No license assigned
+            </p>
+          )}
+        </div>
+
+        {/* Right: action buttons */}
+        <div className="flex flex-col items-end justify-start gap-2 pt-0.5">
+          {license ? (
+            <>
+              <button
+                onClick={() => onEdit(license)}
+                className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
+              >
+                <Edit2 className="h-3 w-3" /> Edit
+              </button>
+              <button
+                onClick={() => onSuspend(license)}
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                  license.status === "suspended"
+                    ? "border-blue-300 text-blue-600 hover:border-blue-400 dark:border-blue-700 dark:text-blue-400"
+                    : "border-amber-300 text-amber-600 hover:border-amber-400 dark:border-amber-700 dark:text-amber-400"
+                }`}
+              >
+                <Ban className="h-3 w-3" />
+                {license.status === "suspended" ? "Unsuspend" : "Suspend"}
+              </button>
+              <button
+                onClick={() => onRevoke(license)}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-500 transition hover:border-rose-400 dark:border-rose-800 dark:text-rose-400"
+              >
+                <Trash2 className="h-3 w-3" /> Revoke
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onIssue(row.company_id, row.company_name)}
+              className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+            >
+              <Plus className="h-3 w-3" /> Issue
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Right: action buttons */}
-      <div className="flex flex-col items-end justify-center gap-2">
-        {license ? (
+      {/* License history */}
+      {row.license_history && row.license_history.length > 0 && (
+        <div className="border-t border-[var(--border)] pt-3">
           <button
-            onClick={() => onEdit(license)}
-            className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--muted)] transition hover:text-[var(--text)]"
           >
-            <Edit2 className="h-3 w-3" /> Edit
+            <History className="h-3 w-3" />
+            {row.license_history.length} previous license{row.license_history.length !== 1 ? "s" : ""}
+            <ChevronDown className={`h-3 w-3 transition-transform ${showHistory ? "rotate-180" : ""}`} />
           </button>
-        ) : (
-          <button
-            onClick={() => onIssue(row.company_id, row.company_name)}
-            className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
-          >
-            <Plus className="h-3 w-3" /> Issue
-          </button>
-        )}
-      </div>
+          {showHistory && (
+            <div className="mt-2 space-y-1.5">
+              {row.license_history.map((h) => (
+                <div key={h.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--muted)]">
+                  <StatusBadge status={h.status} />
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${(EDITION_CFG[h.edition] ?? EDITION_CFG.Starter).badge}`}>{h.edition}</span>
+                  <code className="font-mono opacity-60">{h.license_key}</code>
+                  {h.issued_at && <span>Issued {fmtDate(h.issued_at)}</span>}
+                  {h.expires_at && <span>· Expired {fmtDate(h.expires_at)}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -801,29 +1001,38 @@ function SuperAdminDashboard({
   onRefresh,
   onIssueFor,
   onEdit,
+  onSuspend,
+  onRevoke,
+  pagination,
+  onPageChange,
 }: {
-  data:       AllCompanyUsageResponse | undefined;
-  isLoading:  boolean;
-  error:      Error | null;
-  onRefresh:  () => void;
-  onIssueFor: (companyId: string, companyName: string) => void;
-  onEdit:     (license: LicenseItem) => void;
+  data:         AllCompanyUsageResponse | undefined;
+  isLoading:    boolean;
+  error:        Error | null;
+  onRefresh:    () => void;
+  onIssueFor:   (companyId: string, companyName: string) => void;
+  onEdit:       (license: LicenseItem) => void;
+  onSuspend:    (license: LicenseItem) => void;
+  onRevoke:     (license: LicenseItem) => void;
+  pagination?:  LicensePagination;
+  onPageChange: (page: number) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "active" | "trial" | "expiring" | "expired" | "none">("all");
+  const [filter, setFilter] = useState<"all" | "active" | "trial" | "expiring" | "expired" | "suspended" | "none">("all");
 
-  const summary  = data?.summary;
+  const summary   = data?.summary;
   const companies = data?.companies ?? [];
 
   // Filter + search
   const visible = companies.filter((row) => {
     const matchesSearch = row.company_name.toLowerCase().includes(search.toLowerCase());
     if (!matchesSearch) return false;
-    if (filter === "all")      return true;
-    if (filter === "none")     return !row.license;
-    if (filter === "active")   return row.license?.status === "active";
-    if (filter === "trial")    return row.license?.status === "trial";
-    if (filter === "expired")  return row.license?.status === "expired";
+    if (filter === "all")       return true;
+    if (filter === "none")      return !row.license;
+    if (filter === "active")    return row.license?.status === "active";
+    if (filter === "trial")     return row.license?.status === "trial";
+    if (filter === "expired")   return row.license?.status === "expired";
+    if (filter === "suspended") return row.license?.status === "suspended";
     if (filter === "expiring") {
       return (
         row.license?.status === "active" &&
@@ -875,13 +1084,14 @@ function SuperAdminDashboard({
 
       {/* ── Summary stat cards ── */}
       {!isLoading && summary && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <SummaryCard label="Companies"    value={summary.total_companies} color="bg-slate-500"   icon={Building2}     />
-          <SummaryCard label="Licensed"     value={summary.licensed}        color="bg-emerald-500" icon={CheckCircle2}  />
-          <SummaryCard label="Trial"        value={summary.trial}           color="bg-blue-500"    icon={Clock}         />
-          <SummaryCard label="Expiring"     value={summary.expiring_soon}   color="bg-amber-500"   icon={AlertTriangle} />
-          <SummaryCard label="Expired"      value={summary.expired}         color="bg-rose-500"    icon={XCircle}       />
-          <SummaryCard label="No License"   value={summary.no_license}      color="bg-zinc-400"    icon={TrendingUp}    />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <SummaryCard label="Companies"    value={summary.total_companies}     color="bg-slate-500"   icon={Building2}     />
+          <SummaryCard label="Licensed"     value={summary.licensed}            color="bg-emerald-500" icon={CheckCircle2}  />
+          <SummaryCard label="Trial"        value={summary.trial}               color="bg-blue-500"    icon={Clock}         />
+          <SummaryCard label="Expiring"     value={summary.expiring_soon}       color="bg-amber-500"   icon={AlertTriangle} />
+          <SummaryCard label="Expired"      value={summary.expired}             color="bg-rose-500"    icon={XCircle}       />
+          <SummaryCard label="Suspended"    value={summary.suspended ?? 0}      color="bg-orange-500"  icon={Ban}           />
+          <SummaryCard label="No License"   value={summary.no_license}          color="bg-zinc-400"    icon={TrendingUp}    />
         </div>
       )}
 
@@ -895,8 +1105,13 @@ function SuperAdminDashboard({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {search && pagination && pagination.last_page > 1 && (
+            <p className="mt-1 text-[10px] text-[var(--muted)]">
+              Searching within page {pagination.current_page} of {pagination.last_page}. Navigate pages to search all companies.
+            </p>
+          )}
         </div>
-        {(["all", "active", "trial", "expiring", "expired", "none"] as const).map((f) => (
+        {(["all", "active", "trial", "expiring", "expired", "suspended", "none"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -937,8 +1152,60 @@ function SuperAdminDashboard({
               row={row}
               onIssue={onIssueFor}
               onEdit={onEdit}
+              onSuspend={onSuspend}
+              onRevoke={onRevoke}
             />
           ))}
+        </div>
+      )}
+
+      {/* ── Pagination controls ── */}
+      {pagination && pagination.last_page > 1 && (
+        <div className="flex items-center justify-between border-t border-[var(--border)] pt-4">
+          <p className="text-xs text-[var(--muted)]">
+            Page <strong className="text-[var(--text)]">{pagination.current_page}</strong> of{" "}
+            <strong className="text-[var(--text)]">{pagination.last_page}</strong>
+            {" "}· {pagination.total} companies total
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onPageChange(pagination.current_page - 1)}
+              disabled={pagination.current_page <= 1 || isLoading}
+              className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--background)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            {Array.from({ length: Math.min(pagination.last_page, 5) }, (_, i) => {
+              const p = pagination.last_page <= 5
+                ? i + 1
+                : pagination.current_page <= 3
+                  ? i + 1
+                  : pagination.current_page >= pagination.last_page - 2
+                    ? pagination.last_page - 4 + i
+                    : pagination.current_page - 2 + i;
+              return (
+                <button
+                  key={p}
+                  onClick={() => onPageChange(p)}
+                  disabled={isLoading}
+                  className={`h-7 w-7 rounded-lg text-xs font-semibold transition ${
+                    p === pagination.current_page
+                      ? "bg-[var(--primary)] text-white"
+                      : "border border-[var(--border)] text-[var(--muted)] hover:bg-[var(--background)] hover:text-[var(--text)]"
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => onPageChange(pagination.current_page + 1)}
+              disabled={pagination.current_page >= pagination.last_page || isLoading}
+              className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--background)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -954,16 +1221,24 @@ export function LicensingTab() {
   const [activateOpen, setActivateOpen] = useState(false);
   const [issueOpen, setIssueOpen]       = useState(false);
   const [editOpen, setEditOpen]         = useState(false);
+  const [suspendOpen, setSuspendOpen]   = useState(false);
+  const [revokeOpen, setRevokeOpen]     = useState(false);
   const [showPlans, setShowPlans]       = useState(false);
 
   // Pre-filled company when SA clicks "Issue" from a specific company row
   const [prefillCompanyId,   setPrefillCompanyId]   = useState<string>("");
   const [prefillCompanyName, setPrefillCompanyName] = useState<string>("");
 
+  // License targeted by suspend / unsuspend / revoke actions
+  const [actionLicense, setActionLicense] = useState<LicenseItem | undefined>(undefined);
+
+  // Page state for the SA company list (server-side pagination)
+  const [saPage, setSaPage] = useState(1);
+
   // ── Super Admin: all-company usage ──────────────────────────────────────────
   const allUsageQuery = useQuery({
-    queryKey: ["settings", "licenses-all-usage"],
-    queryFn:  getAllCompanyUsage,
+    queryKey: ["settings", "licenses-all-usage", saPage],
+    queryFn:  () => getAllCompanyUsage(saPage),
     enabled:  isSuperAdmin,
     retry: 1,
   });
@@ -987,6 +1262,7 @@ export function LicensingTab() {
   const [editingLicense, setEditingLicense] = useState<LicenseItem | undefined>(undefined);
 
   function invalidate() {
+    setSaPage(1); // reset to first page after any mutation
     void qc.invalidateQueries({ queryKey: ["settings", "licenses-all-usage"] });
     void qc.invalidateQueries({ queryKey: ["settings", "license-usage"] });
     void qc.invalidateQueries({ queryKey: ["settings", "licenses"] });
@@ -1003,6 +1279,18 @@ export function LicensingTab() {
   function handleEdit(license: LicenseItem) {
     setEditingLicense(license);
     setEditOpen(true);
+  }
+
+  // Open Suspend/Unsuspend modal (SA only)
+  function handleSuspend(license: LicenseItem) {
+    setActionLicense(license);
+    setSuspendOpen(true);
+  }
+
+  // Open Revoke modal — SA always; CA only for their own license
+  function handleRevoke(license: LicenseItem) {
+    setActionLicense(license);
+    setRevokeOpen(true);
   }
 
   // Company Admin paths
@@ -1043,6 +1331,28 @@ export function LicensingTab() {
           isSuperAdmin={true}
         />
 
+        {/* Suspend / Unsuspend confirm modal */}
+        {actionLicense && (
+          <SuspendModal
+            key={`suspend-${actionLicense.id}`}
+            open={suspendOpen}
+            onClose={() => { setSuspendOpen(false); setActionLicense(undefined); }}
+            onSuccess={invalidate}
+            license={actionLicense}
+          />
+        )}
+
+        {/* Revoke confirm modal */}
+        {actionLicense && (
+          <RevokeModal
+            key={`revoke-${actionLicense.id}`}
+            open={revokeOpen}
+            onClose={() => { setRevokeOpen(false); setActionLicense(undefined); }}
+            onSuccess={invalidate}
+            license={actionLicense}
+          />
+        )}
+
         <SuperAdminDashboard
           data={allUsageQuery.data}
           isLoading={allUsageQuery.isLoading}
@@ -1050,6 +1360,10 @@ export function LicensingTab() {
           onRefresh={invalidate}
           onIssueFor={handleIssueFor}
           onEdit={handleEdit}
+          onSuspend={handleSuspend}
+          onRevoke={handleRevoke}
+          pagination={allUsageQuery.data?.pagination}
+          onPageChange={setSaPage}
         />
 
         {/* Issue new license button — floating in action bar */}
@@ -1089,7 +1403,7 @@ export function LicensingTab() {
     );
   }
 
-  // ── Company Admin view (unchanged) ──────────────────────────────────────────
+  // ── Company Admin view ──────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <ActivateModal
@@ -1097,21 +1411,6 @@ export function LicensingTab() {
         onClose={() => setActivateOpen(false)}
         onSuccess={invalidate}
       />
-      <IssueModal
-        open={issueOpen}
-        onClose={() => setIssueOpen(false)}
-        onSuccess={invalidate}
-        isSuperAdmin={false}
-      />
-      {license && (
-        <IssueModal
-          open={editOpen}
-          onClose={() => setEditOpen(false)}
-          onSuccess={invalidate}
-          license={license}
-          isSuperAdmin={false}
-        />
-      )}
 
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1132,12 +1431,6 @@ export function LicensingTab() {
             className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--background)]"
           >
             <Key className="h-4 w-4" /> Activate Key
-          </button>
-          <button
-            onClick={() => setIssueOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" /> Issue License
           </button>
         </div>
       </div>
@@ -1170,7 +1463,8 @@ export function LicensingTab() {
       {!isLoading && !license && (
         <NoLicensePlaceholder
           onActivate={() => setActivateOpen(true)}
-          onIssue={() => setIssueOpen(true)}
+          onIssue={() => {}}
+          isSuperAdmin={false}
         />
       )}
 
@@ -1182,17 +1476,9 @@ export function LicensingTab() {
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Details card */}
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-[var(--primary)]" />
-                  <p className="text-sm font-bold text-[var(--text)]">License Details</p>
-                </div>
-                <button
-                  onClick={() => setEditOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] transition hover:text-[var(--primary)]"
-                >
-                  <Edit2 className="h-3 w-3" /> Edit
-                </button>
+              <div className="mb-4 flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-[var(--primary)]" />
+                <p className="text-sm font-bold text-[var(--text)]">License Details</p>
               </div>
               <DetailRow
                 label="Edition"
@@ -1323,8 +1609,8 @@ export function LicensingTab() {
             </div>
             <p className="mt-4 text-center text-xs text-[var(--muted)]">
               Need a custom plan? Contact{" "}
-              <a href="mailto:sales@slingshottech.com" className="text-[var(--primary)] hover:underline">
-                sales@slingshottech.com
+              <a href="mailto:sales@slingshotteck.com" className="text-[var(--primary)] hover:underline">
+                sales@slingshotteck.com
               </a>
             </p>
           </div>

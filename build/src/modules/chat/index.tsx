@@ -31,6 +31,7 @@ export function ChatPage() {
   const currentUserId = currentUser?.id ?? 0;
 
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [draft, setDraft]   = useState("");
   const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [editText, setEditText]     = useState("");
@@ -68,7 +69,9 @@ export function ChatPage() {
     if (!a.last) return 1;
     if (!b.last) return -1;
     return new Date(b.last.created_at).getTime() - new Date(a.last.created_at).getTime();
-  });
+  }).filter(({ user }) =>
+    user.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Thread for selected user
   const thread = selectedUserId
@@ -134,8 +137,30 @@ export function ChatPage() {
 
         {/* ── Conversation sidebar ── */}
         <div className="flex w-64 shrink-0 flex-col border-r border-[var(--border)]">
-          <div className="border-b border-[var(--border)] px-4 py-3">
+          <div className="border-b border-[var(--border)] px-4 py-3 space-y-2">
             <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Conversations</p>
+            <div className="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search people…"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--text)]"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -154,7 +179,9 @@ export function ChatPage() {
             )}
 
             {conversations.length === 0 && !usersQuery.isLoading && (
-              <p className="p-4 text-center text-xs text-[var(--muted)]">No colleagues found.</p>
+              <p className="p-4 text-center text-xs text-[var(--muted)]">
+                {searchQuery ? `No results for "${searchQuery}"` : "No colleagues found."}
+              </p>
             )}
 
             {conversations.map(({ user, last, unread }) => (

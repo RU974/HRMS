@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\License;
+use App\Models\User;
 use App\Services\LicenseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,14 +38,17 @@ class LicenseController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->authorizePermission($request, 'licenses:create');
+        // Issuing a license is a Super Admin-only action.
+        // Company Admins manage their own license via activate(); they must not
+        // be able to create licenses for arbitrary companies.
+        $this->authorizeRoles($request, [User::ROLE_SUPER_ADMIN]);
 
         $validated = $request->validate([
             'licensee_name'  => ['required', 'string', 'max:255'],
             'licensee_email' => ['required', 'email', 'max:255'],
             'edition'        => ['required', 'in:Starter,Professional,Enterprise'],
-            'max_employees'  => ['nullable', 'integer', 'min:1'],
-            'max_users'      => ['nullable', 'integer', 'min:1'],
+            'max_employees'  => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_users'      => ['nullable', 'integer', 'min:1', 'max:10000'],
             'expires_at'     => ['nullable', 'date', 'after:today'],
             'issued_by'      => ['nullable', 'string', 'max:255'],
             'support_email'  => ['nullable', 'email', 'max:255'],
@@ -73,8 +77,8 @@ class LicenseController extends Controller
             'licensee_name'  => ['sometimes', 'required', 'string', 'max:255'],
             'licensee_email' => ['sometimes', 'required', 'email', 'max:255'],
             'edition'        => ['sometimes', 'required', 'in:Starter,Professional,Enterprise'],
-            'max_employees'  => ['nullable', 'integer', 'min:1'],
-            'max_users'      => ['nullable', 'integer', 'min:1'],
+            'max_employees'  => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_users'      => ['nullable', 'integer', 'min:1', 'max:10000'],
             'expires_at'     => ['nullable', 'date'],
             'activated_at'   => ['nullable', 'date'],
             'status'         => ['nullable', 'in:trial,active,expired,suspended'],
@@ -101,6 +105,28 @@ class LicenseController extends Controller
         $this->service->delete($license);
 
         return $this->ok(message: 'License deactivated successfully.');
+    }
+
+    // ─── POST /settings/licenses/{id}/suspend ────────────────────────────────
+
+    public function suspend(Request $request, string $id): JsonResponse
+    {
+        $this->authorizePermission($request, 'licenses:edit');
+
+        $license = License::findOrFail($id);
+
+        return $this->ok($this->service->suspend($license), 'License suspended.');
+    }
+
+    // ─── POST /settings/licenses/{id}/unsuspend ──────────────────────────────
+
+    public function unsuspend(Request $request, string $id): JsonResponse
+    {
+        $this->authorizePermission($request, 'licenses:edit');
+
+        $license = License::findOrFail($id);
+
+        return $this->ok($this->service->unsuspend($license), 'License unsuspended.');
     }
 
     // ─── GET /settings/licenses/usage ────────────────────────────────────────
@@ -143,7 +169,10 @@ class LicenseController extends Controller
             ], 403);
         }
 
-        return $this->ok($this->service->allCompanyUsage());
+        $page    = max(1, (int) $request->input('page', 1));
+        $perPage = min(100, max(5, (int) $request->input('per_page', 25)));
+
+        return $this->ok($this->service->allCompanyUsage($page, $perPage));
     }
 
     // ─── POST /settings/licenses/activate ────────────────────────────────────

@@ -158,6 +158,8 @@ export type CompanyLicenseUsage = {
   total_users:     number;
   /** The company's active license, or null if none has been issued yet. */
   license:         LicenseItem | null;
+  /** All previous / revoked licenses for this company, newest first. */
+  license_history?: LicenseItem[];
 };
 
 /**
@@ -173,19 +175,37 @@ export type CompanyLicenseSummary = {
   expiring_soon:   number;
   /** Companies with status = expired */
   expired:         number;
+  /** Companies with status = suspended */
+  suspended:       number;
   /** Companies that have no license record at all */
   no_license:      number;
 };
 
+export type LicensePagination = {
+  current_page: number;
+  last_page:    number;
+  per_page:     number;
+  total:        number;
+};
+
 export type AllCompanyUsageResponse = {
-  summary:   CompanyLicenseSummary;
-  companies: CompanyLicenseUsage[];
+  summary:    CompanyLicenseSummary;
+  companies:  CompanyLicenseUsage[];
+  pagination: LicensePagination;
 };
 
 /**
  * Fetch the full company usage snapshot.
  * Only callable by Super Admin — backend returns 403 for all other roles.
  */
-export function getAllCompanyUsage() {
-  return apiClient<AllCompanyUsageResponse>("/settings/licenses/all-usage");
+export function getAllCompanyUsage(page = 1, perPage = 25) {
+  return apiClient<AllCompanyUsageResponse>(
+    `/settings/licenses/all-usage?page=${page}&per_page=${perPage}`
+  );
+}
+export function suspendLicense(id: string) {
+  return apiClient<LicenseItem>(`/settings/licenses/${id}/suspend`, { method: "POST" });
+}
+export function unsuspendLicense(id: string) {
+  return apiClient<LicenseItem>(`/settings/licenses/${id}/unsuspend`, { method: "POST" });
 }

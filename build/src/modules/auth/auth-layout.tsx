@@ -1,46 +1,109 @@
 import { Outlet } from "react-router-dom";
-import { CheckCircle2, LockKeyhole, Cpu } from "lucide-react";
+
+const features = [
+  "Employee lifecycle management",
+  "Automated payroll processing",
+  "Real-time attendance & biometrics",
+  "Role-based access control",
+];
 
 export function AuthLayout() {
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.15fr_0.95fr]">
-      <div className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.28),transparent_30%),linear-gradient(135deg,#081120_0%,#0b1b34_45%,#123a6f_100%)] p-10 text-white lg:block">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_20%,rgba(99,102,241,0.24),transparent_18%),radial-gradient(circle_at_20%_80%,rgba(34,211,238,0.16),transparent_20%)]" />
-        <div className="relative flex h-full flex-col justify-between">
-          <div className="max-w-xl">
-            <p className="mb-4 text-sm uppercase tracking-[0.3em] text-cyan-200/70">Professional. Secure. Future-ready.</p>
-            <h2 className="text-5xl font-black leading-tight tracking-tight">
-              A modern workspace built for the way your team works now.
+    <div className="grid min-h-screen lg:grid-cols-[1.15fr_0.85fr]">
+      {/* ── Left hero panel ── */}
+      <div className="relative hidden overflow-hidden lg:flex lg:flex-col lg:p-14">
+        {/* deep background stack */}
+        <div className="absolute inset-0 bg-[#07090f]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_0%_0%,rgba(14,116,144,0.30)_0%,transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_70%_at_100%_100%,rgba(79,70,229,0.32)_0%,transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_50%_50%,rgba(6,182,212,0.08)_0%,transparent_70%)]" />
+
+        {/* very subtle dot grid */}
+        <div
+          className="absolute inset-0 opacity-[0.028]"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.9) 1px, transparent 1px)",
+            backgroundSize: "28px 28px",
+          }}
+        />
+
+        {/* ambient glow orbs */}
+        <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-cyan-500/10 blur-[80px]" />
+        <div className="absolute bottom-0 right-0 h-[22rem] w-[22rem] rounded-full bg-indigo-600/12 blur-[90px]" />
+        <div className="absolute left-[40%] top-[35%] h-48 w-48 rounded-full bg-sky-400/6 blur-[60px]" />
+
+        {/* decorative arc rings */}
+        <div
+          className="absolute right-[-120px] top-1/2 h-[520px] w-[520px] -translate-y-1/2 rounded-full border border-white/[0.045]"
+          style={{ boxShadow: "inset 0 0 60px rgba(56,189,248,0.04)" }}
+        />
+        <div className="absolute right-[-60px] top-1/2 h-[340px] w-[340px] -translate-y-1/2 rounded-full border border-white/[0.03]" />
+
+        <div className="relative z-10 flex h-full flex-col justify-between">
+          {/* brand logo */}
+          <div>
+            <img
+              src="/slingshot-logo.png"
+              alt="Slingshot HRMS"
+              className="h-14 w-auto object-contain brightness-0 invert"
+            />
+          </div>
+
+          {/* hero copy — vertically centred */}
+          <div className="my-auto max-w-[500px] py-10">
+            <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+              Enterprise Workforce Platform
+            </span>
+
+            <h2 className="mt-4 text-[3.2rem] font-black leading-[1.07] tracking-[-0.02em] text-white">
+              HR management,{" "}
+              <span
+                className="bg-clip-text text-transparent"
+                style={{
+                  backgroundImage: "linear-gradient(135deg, #7dd3fc 0%, #a78bfa 55%, #67e8f9 100%)",
+                }}
+              >
+                redefined.
+              </span>
             </h2>
-            <p className="mt-6 max-w-lg text-base leading-7 text-slate-200/80">
-              Clean access, stronger security, and a polished experience that feels enterprise-grade from the first click.
+
+            <p className="mt-5 text-[15px] leading-[1.85] text-slate-400">
+              Streamline payroll, track attendance, manage your workforce, and drive productivity — all from one secure platform.
             </p>
+
+            {/* feature checklist */}
+            <div className="mt-9 grid grid-cols-2 gap-x-6 gap-y-4">
+              {features.map((f) => (
+                <div key={f} className="flex items-center gap-2.5">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-sky-500/25 to-indigo-500/25">
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                      <path
+                        d="M1 4L3.5 6.5L9 1"
+                        stroke="#7dd3fc"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <span className="text-[13px] text-slate-300/80">{f}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="grid max-w-xl grid-cols-2 gap-4">
-            <div className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
-              <LockKeyhole className="h-5 w-5 text-cyan-300" />
-              <p className="mt-3 text-sm font-semibold">Secure authentication</p>
-              <p className="mt-2 text-sm text-white/70">Designed for safe, reliable sign-in across your workforce.</p>
-            </div>
-            <div className="rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
-              <Cpu className="h-5 w-5 text-cyan-300" />
-              <p className="mt-3 text-sm font-semibold">Faster workflows</p>
-              <p className="mt-2 text-sm text-white/70">A focused entry point that gets users into the platform quickly.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 text-sm text-white/75">
-            <CheckCircle2 className="h-4.5 w-4.5 text-emerald-300" />
-            Trusted access layer for your HRMS environment
-          </div>
+          {/* bottom tagline */}
+          <p className="text-[12px] tracking-wide text-slate-600">
+            © {new Date().getFullYear()} Slingshotteck · All rights reserved
+          </p>
         </div>
       </div>
-      <div className="flex items-center justify-center p-6 sm:p-10">
+
+      {/* ── Right login panel ── */}
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6 py-10">
         <Outlet />
       </div>
     </div>
   );
 }
-
-

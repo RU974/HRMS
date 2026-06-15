@@ -74,8 +74,19 @@ class License extends Model
     // ─── Status helpers ───────────────────────────────────────────────────────
 
     /**
-     * Recalculate and persist the status based on dates.
-     * Called after activation and on any update that touches expires_at.
+     * Valid state-machine transitions:
+     *
+     *   trial ──(activate)──────────────────────► active
+     *   trial ──(N days, no activation)──────────► expired   [licenses:expire-trials command]
+     *   active ──(expires_at past)───────────────► expired   [usage() / allCompanyUsage() checks]
+     *   active ──(suspend)───────────────────────► suspended [LicenseService::suspend()]
+     *   suspended ──(unsuspend)──────────────────► active | expired  [recalculateStatus()]
+     *   any ──(revoke / DELETE)──────────────────► is_active = false  [permanent; cannot re-activate]
+     *
+     * is_active = false is a terminal state. activate() rejects these keys outright.
+     *
+     * Recalculate and set status based on current timestamps.
+     * Called after activation and on any update that touches expires_at or activated_at.
      */
     public function recalculateStatus(): void
     {

@@ -64,6 +64,35 @@ class EmployeeController extends Controller
     public function store(Request $request)
     {
         $this->authorizePermission($request, 'employees:create');
+
+        // ── License seat check ───────────────────────────────────────────────
+        // Only enforce limits for company-scoped users (Super Admin is exempt).
+        $companyId = $request->user()?->company_id;
+        if ($companyId) {
+            $license = \App\Models\License::query()
+                ->where('company_id', $companyId)
+                ->where('is_active', true)
+                ->whereIn('status', ['active', 'trial'])
+                ->orderByDesc('activated_at')
+                ->orderByDesc('created_at')
+                ->first();
+
+            if ($license && $license->max_employees > 0) {
+                $currentCount = \App\Models\Employee::query()
+                    ->where('status', 'active')
+                    ->whereHas('user', fn ($q) => $q->where('company_id', $companyId))
+                    ->count();
+
+                if ($currentCount >= $license->max_employees) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Employee seat limit reached. Your {$license->edition} license allows a maximum of {$license->max_employees} active employees. Please upgrade your license or deactivate an existing employee.",
+                    ], 422);
+                }
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         $validated = $request->validate([
             'user_id' => ['nullable', 'exists:users,id', Rule::unique('employees', 'user_id')],
             'name' => 'nullable|string|max:255',
