@@ -1,30 +1,39 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, ArrowRight, ShieldCheck, Loader2, Lock } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, ShieldCheck, Loader2, Lock, CheckCircle2, XCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { login } from "@/services/auth-service";
 import { useAuthStore } from "@/store/auth-store";
 
+type PopupState = { type: "success"; name: string } | { type: "error"; message: string } | null;
+
 export function LoginPage() {
   const setSession = useAuthStore((s) => s.setSession);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [popup, setPopup] = useState<PopupState>(null);
+
+  useEffect(() => {
+    if (popup?.type === "success") {
+      const t = setTimeout(() => { window.location.href = "/dashboard"; }, 1800);
+      return () => clearTimeout(t);
+    }
+  }, [popup]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
+    setPopup(null);
     setLoading(true);
 
     try {
       const session = await login(email, password);
       setSession(session.token, session.user);
-      window.location.href = "/dashboard";
+      setPopup({ type: "success", name: session.user?.name ?? "there" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to sign in");
+      setPopup({ type: "error", message: err instanceof Error ? err.message : "Unable to sign in" });
     } finally {
       setLoading(false);
     }
@@ -32,6 +41,79 @@ export function LoginPage() {
 
   return (
     <div className="w-full max-w-[400px]">
+      {/* ── toast (slides in from right) ── */}
+      <style>{`
+        @keyframes toast-in  { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes progress-fill { from { width: 0% } to { width: 100% } }
+        .toast-enter { animation: toast-in 0.35s cubic-bezier(0.22,1,0.36,1) forwards; }
+      `}</style>
+
+      {popup && (
+        <div
+          className="toast-enter fixed top-6 right-6 z-50 w-[320px] overflow-hidden rounded-2xl border bg-[var(--card)] shadow-2xl"
+          style={{
+            borderColor: popup.type === "success" ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)",
+            boxShadow: popup.type === "success"
+              ? "0 8px 32px rgba(34,197,94,0.15), 0 2px 8px rgba(0,0,0,0.12)"
+              : "0 8px 32px rgba(239,68,68,0.15), 0 2px 8px rgba(0,0,0,0.12)",
+          }}
+        >
+          {/* left accent bar */}
+          <div
+            className="absolute inset-y-0 left-0 w-[4px]"
+            style={{
+              backgroundImage: popup.type === "success"
+                ? "linear-gradient(180deg,#4ade80,#22c55e)"
+                : "linear-gradient(180deg,#f87171,#ef4444)",
+            }}
+          />
+
+          <div className="flex items-start gap-3 px-5 py-4 pl-6">
+            {/* icon */}
+            <div
+              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+              style={{
+                background: popup.type === "success" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+              }}
+            >
+              {popup.type === "success"
+                ? <CheckCircle2 className="h-5 w-5 text-emerald-500" strokeWidth={2} />
+                : <XCircle className="h-5 w-5 text-red-500" strokeWidth={2} />}
+            </div>
+
+            {/* text */}
+            <div className="flex-1 min-w-0">
+              <p className="text-[13.5px] font-bold text-[var(--text)]">
+                {popup.type === "success" ? "Login Successful!" : "Login Failed"}
+              </p>
+              <p className="mt-0.5 text-[12.5px] leading-snug text-[var(--muted)]">
+                {popup.type === "success"
+                  ? <>Welcome back, <span className="font-semibold text-[var(--text)]">{popup.name}</span>. Redirecting…</>
+                  : popup.message}
+              </p>
+              {/* progress bar (success only) */}
+              {popup.type === "success" && (
+                <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-emerald-500/15">
+                  <div
+                    className="h-full rounded-full bg-emerald-500"
+                    style={{ animation: "progress-fill 1.8s linear forwards" }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* close */}
+            <button
+              onClick={() => setPopup(null)}
+              className="ml-1 mt-0.5 shrink-0 rounded-md p-1 text-[var(--muted)] transition-colors hover:bg-[var(--border)] hover:text-[var(--text)]"
+              aria-label="Close"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── card ── */}
       <div
         className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--card)]"
@@ -120,16 +202,6 @@ export function LoginPage() {
                 </button>
               </div>
             </div>
-
-            {/* error banner */}
-            {error && (
-              <div className="flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/8 px-3.5 py-2.5 text-[13px] text-red-600 dark:text-red-400">
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500/15">
-                  <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                </span>
-                {error}
-              </div>
-            )}
 
             {/* CTA */}
             <Button
