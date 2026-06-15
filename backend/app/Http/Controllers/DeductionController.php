@@ -58,7 +58,7 @@ class DeductionController extends Controller
             'payroll_id' => 'nullable|exists:payrolls,id',
             'title' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0',
-            'type' => 'required|in:tax,loan,penalty,other',
+            'type' => 'required|in:tax,loan,penalty,provident_fund,pension,esi,professional_tax,other',
             'effective_date' => 'required|date',
             'notes' => 'nullable|string|max:1000',
         ]);
@@ -85,7 +85,7 @@ class DeductionController extends Controller
             'payroll_id' => 'nullable|exists:payrolls,id',
             'title' => 'sometimes|string|max:255',
             'amount' => 'sometimes|numeric|min:0',
-            'type' => 'sometimes|in:tax,loan,penalty,other',
+            'type' => 'sometimes|in:tax,loan,penalty,provident_fund,pension,esi,professional_tax,other',
             'effective_date' => 'sometimes|date',
             'notes' => 'nullable|string|max:1000',
         ]);

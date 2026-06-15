@@ -17,6 +17,7 @@ class Attendance extends Model
         'status',
         'source',
         'biometric_device_id',
+        'work_from_home',
         'notes',
         'correction_status',
         'correction_request_notes',
@@ -29,6 +30,7 @@ class Attendance extends Model
         'check_in' => 'datetime',
         'check_out' => 'datetime',
         'date' => 'date',
+        'work_from_home' => 'boolean',
         'correction_requested_at' => 'datetime',
         'correction_reviewed_at' => 'datetime',
     ];

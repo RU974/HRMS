@@ -9,7 +9,7 @@ import {
   Users, Clock, CalendarX, Wallet, TrendingUp,
   UserPlus, ClipboardList, CalendarDays, CheckSquare,
   DollarSign, Briefcase, Target, BarChart3, ArrowRight,
-  AlertCircle,
+  AlertCircle, TrendingDown, Activity, Award,
 } from "lucide-react";
 
 // ─── Currency ────────────────────────────────────────────────────────────────
@@ -153,6 +153,137 @@ function LeaveDonut({ items }: { items: Array<{ label: string; value: number }> 
   useEffect(() => () => { if (inst.current) inst.current.destroy(); }, []);
   if (!items.length) return <div className="flex h-48 items-center justify-center text-sm text-[var(--muted)]">No leave data yet.</div>;
   return <div className="h-52"><canvas ref={ref} /></div>;
+}
+
+// ─── Generic trend line chart ────────────────────────────────────────────────
+function TrendLineChart({ points, label, color = "#10b981", prefix = "" }: {
+  points: Array<{ label: string; value: number }>;
+  label: string;
+  color?: string;
+  prefix?: string;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const inst = useRef<any>(null);
+
+  useChartJs(() => {
+    if (!ref.current || !points.length) return;
+    if (inst.current) inst.current.destroy();
+    inst.current = new window.Chart(ref.current, {
+      type: "line",
+      data: {
+        labels: points.map(p => p.label),
+        datasets: [{
+          label,
+          data: points.map(p => p.value),
+          borderColor: color,
+          backgroundColor: color + "18",
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: "#fff",
+          pointBorderColor: color,
+          pointBorderWidth: 2,
+          tension: 0.4,
+          fill: true,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            mode: "index", intersect: false,
+            backgroundColor: "#1e293b", titleColor: "#f8fafc", bodyColor: "#94a3b8",
+            padding: 10, cornerRadius: 8,
+            callbacks: { label: (ctx: any) => ` ${prefix}${Number(ctx.parsed.y).toLocaleString()}` },
+          },
+        },
+        scales: {
+          y: { beginAtZero: false, ticks: { font: { size: 11 }, color: "#6b7280" }, grid: { color: "rgba(0,0,0,0.05)" } },
+          x: { ticks: { font: { size: 11 }, color: "#6b7280" }, grid: { display: false } },
+        },
+      },
+    });
+  }, [points]);
+
+  useEffect(() => () => { if (inst.current) inst.current.destroy(); }, []);
+  if (!points.length) return <div className="flex h-40 items-center justify-center text-sm text-[var(--muted)]">No data yet.</div>;
+  return <div className="h-40"><canvas ref={ref} /></div>;
+}
+
+// ─── Performance summary widget ───────────────────────────────────────────────
+function PerformanceSummaryWidget({ data }: { data: import("@/services/dashboard-service").PerformanceSummary | null }) {
+  if (!data) return (
+    <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">No performance data.</div>
+  );
+
+  const stats = [
+    { label: "Avg Goal Progress", value: `${data.avg_goal_progress}%`, icon: <Activity className="h-4 w-4" />, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "KPI Achievement",   value: `${data.kpi_achievement_rate}%`, icon: <Award className="h-4 w-4" />, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "Open Goals",        value: String(data.open_goals),          icon: <Target className="h-4 w-4" />, color: "text-amber-600",  bg: "bg-amber-50" },
+    { label: "Completed Goals",   value: String(data.completed_goals),     icon: <CheckSquare className="h-4 w-4" />, color: "text-violet-600", bg: "bg-violet-50" },
+    { label: "Open Appraisals",   value: String(data.open_appraisals),     icon: <ClipboardList className="h-4 w-4" />, color: "text-rose-600", bg: "bg-rose-50" },
+  ];
+
+  return (
+    <div className="space-y-2">
+      {stats.map(s => (
+        <div key={s.label} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+          <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${s.bg}`}>
+            <span className={s.color}>{s.icon}</span>
+          </div>
+          <span className="flex-1 text-sm text-[var(--muted)]">{s.label}</span>
+          <span className="text-sm font-bold text-[var(--text)]">{s.value}</span>
+        </div>
+      ))}
+      <Link to="/performance" className="flex items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-2 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--background)]">
+        View Performance <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+// ─── Attrition risk widget ────────────────────────────────────────────────────
+function AttritionRiskWidget({ employees }: { employees: import("@/services/dashboard-service").AttritionRiskEmployee[] }) {
+  if (!employees.length) return (
+    <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+      <div className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100">
+        <CheckSquare className="h-5 w-5 text-emerald-600" />
+      </div>
+      <p className="text-sm font-semibold text-[var(--text)]">No risk flags</p>
+      <p className="text-xs text-[var(--muted)]">All employees within normal absence range</p>
+    </div>
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-[var(--border)] text-left">
+            <th className="p-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Employee</th>
+            <th className="p-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Dept</th>
+            <th className="p-2.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Absence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {employees.map(emp => {
+            const riskColor = emp.absence_rate >= 50 ? "bg-rose-100 text-rose-700" : emp.absence_rate >= 35 ? "bg-amber-100 text-amber-700" : "bg-orange-100 text-orange-700";
+            return (
+              <tr key={emp.id} className="border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--background)]">
+                <td className="p-2.5 font-medium text-[var(--text)]">{emp.name}</td>
+                <td className="p-2.5 text-[var(--muted)]">{emp.department}</td>
+                <td className="p-2.5 text-right">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${riskColor}`}>
+                    <TrendingDown className="h-3 w-3" />{emp.absence_rate}%
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-2 text-[10px] text-[var(--muted)]">Employees with ≥20% absence rate in the last 30 days</p>
+    </div>
+  );
 }
 
 // ─── Pending approvals ────────────────────────────────────────────────────────
@@ -374,6 +505,52 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
         </ChartCard>
         <ChartCard title="Leave Status" subtitle="Breakdown by type and status">
           <LeaveDonut items={insights?.leave_breakdown ?? []} />
+        </ChartCard>
+      </section>
+
+      {/* ── Trend charts row ── */}
+      <section className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="Monthly Payroll" subtitle="Net payroll disbursed — last 6 months">
+          <TrendLineChart
+            points={insights?.monthly_payroll_trend ?? []}
+            label="Payroll"
+            color="#10b981"
+            prefix=""
+          />
+        </ChartCard>
+        <ChartCard title="Headcount Growth" subtitle="Active employees at month-end — last 6 months">
+          <TrendLineChart
+            points={insights?.headcount_trend ?? []}
+            label="Employees"
+            color="#6366f1"
+          />
+        </ChartCard>
+      </section>
+
+      {/* ── Intelligence row ── */}
+      <section className="grid gap-4 xl:grid-cols-2">
+        <ChartCard
+          title="Performance Overview"
+          subtitle="Goals, KPIs, and appraisals at a glance"
+          action={
+            <Link to="/performance" className="flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:underline">
+              Open <ArrowRight className="h-3 w-3" />
+            </Link>
+          }
+        >
+          <PerformanceSummaryWidget data={insights?.performance_summary ?? null} />
+        </ChartCard>
+
+        <ChartCard
+          title="Attrition Risk"
+          subtitle="Employees with high absence rate (last 30 days)"
+          action={
+            <Link to="/attendance" className="flex items-center gap-1 text-xs font-medium text-[var(--primary)] hover:underline">
+              Attendance <ArrowRight className="h-3 w-3" />
+            </Link>
+          }
+        >
+          <AttritionRiskWidget employees={insights?.attrition_risk ?? []} />
         </ChartCard>
       </section>
 

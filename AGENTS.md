@@ -5,27 +5,12 @@ Repository guidance for coding agents working in the HRMS repository.
 **Metadata**
 
 - **Owner:** Engineering Team
-- **Contact:** backend-maintainers@your-company.example (update as appropriate)
 - **Root:** repository root (use relative paths such as `backend/` and `build/`)
-- **Last-updated:** 2026-06-06
+- **Last-updated:** 2026-06-16
 
 ## Purpose
 
 This document defines repository-specific conventions, priorities, verification steps, and contribution guidelines for working on the HRMS project. It is written for automated agents and human contributors who need clear, actionable rules when editing the codebase.
-
-## Table of Contents
-
-- Purpose
-- Project summary
-- Priority & scope
-- Repository layout
-- Conventions & rules
-- Frontend (build)
-- Backend (backend)
-- Access control
-- Contribution & PR checklist
-- Verification commands
-- Changelog
 
 ## Project summary
 
@@ -171,20 +156,9 @@ php artisan migrate:status
 php artisan test
 ```
 
-## Changelog
-
-- 2026-06-06: Expanded `AGENTS.md` with relative paths, contribution guidelines, metadata, and verification commands.
-
 ## Non-goals
 
 - No broad refactors without approval.
 - No silent API contract changes without coordinating frontend and backend updates.
 - Do not edit generated dependencies or node_modules/vendor directories.
-
----
-
-If you want, I can also:
-
-- Add a `CONTRIBUTING.md` file that mirrors the PR checklist.
-- Wire a CODEOWNERS file to enforce reviewers on backend/frontend directories.
 

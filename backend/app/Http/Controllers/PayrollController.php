@@ -303,6 +303,80 @@ class PayrollController extends Controller
     }
 
     // ──────────────────────────────────────────────────────────────
+    //  POST /api/payroll/{id}/approve      (payroll:manage_settings)
+    //  Advances status: draft → reviewed → approved
+    // ──────────────────────────────────────────────────────────────
+    public function approvePayroll(Request $request, int $id)
+    {
+        $this->authorizePermission($request, 'payroll:manage_settings');
+
+        $payroll = Payroll::with('employee')->findOrFail($id);
+        $this->assertPayrollInCompany($request, $payroll);
+
+        $transitions = [
+            Payroll::STATUS_DRAFT     => Payroll::STATUS_REVIEWED,
+            Payroll::STATUS_REVIEWED  => Payroll::STATUS_APPROVED,
+            Payroll::STATUS_PENDING   => Payroll::STATUS_REVIEWED,
+        ];
+
+        $next = $transitions[$payroll->status] ?? null;
+        if (!$next) {
+            return $this->fail("Cannot advance payroll from '{$payroll->status}' status.", 422);
+        }
+
+        $payroll->transitionTo($next);
+
+        return $this->ok($payroll->fresh('employee'), "Payroll moved to '{$next}'.");
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  GET /api/payroll/bank-export?month=6&year=2025  (payroll:manage_settings)
+    //  Returns CSV-formatted bank transfer data for approved/paid payrolls
+    // ──────────────────────────────────────────────────────────────
+    public function bankExport(Request $request)
+    {
+        $this->authorizePermission($request, 'payroll:manage_settings');
+
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year'  => 'required|integer|min:2000',
+        ]);
+
+        $month = (int) $request->query('month');
+        $year  = (int) $request->query('year');
+
+        $query = Payroll::with(['employee'])
+            ->where('month', $month)
+            ->where('year', $year)
+            ->whereIn('status', [Payroll::STATUS_APPROVED, Payroll::STATUS_PAID]);
+
+        $this->scopeToCompany($request, $query);
+
+        $records = $query->get();
+
+        $rows   = ["Employee Name,Employee ID,Bank Account,Net Salary,Payment Date,Status"];
+        foreach ($records as $p) {
+            $name    = $p->employee?->name ?? "Employee #{$p->employee_id}";
+            $account = $p->employee?->bank_account ?? '';
+            $rows[]  = implode(',', [
+                '"' . str_replace('"', '""', $name) . '"',
+                $p->employee_id,
+                '"' . $account . '"',
+                number_format((float) $p->net_salary, 2, '.', ''),
+                $p->payment_date ?? '',
+                $p->status,
+            ]);
+        }
+
+        $csv = implode("\n", $rows);
+
+        return response($csv, 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => "attachment; filename=\"payroll-{$year}-{$month}.csv\"",
+        ]);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     //  POST /api/payroll/{id}/mark-paid    (payroll:manage_settings)
     // ──────────────────────────────────────────────────────────────
     public function markAsPaid(Request $request, int $id)

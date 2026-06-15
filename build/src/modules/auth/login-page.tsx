@@ -129,14 +129,9 @@ export function LoginPage() {
         <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 rounded-full bg-sky-400/[0.07] blur-2xl" />
 
         <div className="px-8 pt-8 pb-7">
-          {/* ── logo + brand ── */}
+          {/* ── brand ── */}
           <div className="mb-7 flex flex-col items-center text-center">
-            <img
-              src="/slingshot-logo.png"
-              alt="Slingshot HRMS"
-              className="h-16 w-auto object-contain"
-            />
-            <div className="mt-5 space-y-0.5">
+            <div className="space-y-0.5">
               <h1 className="text-[22px] font-extrabold tracking-tight text-[var(--text)]">Welcome back</h1>
               <p className="text-sm text-[var(--muted)]">Sign in to your workspace</p>
             </div>
@@ -253,7 +248,7 @@ export function LoginPage() {
 
       {/* below-card footnote */}
       <p className="mt-5 text-center text-[11.5px] text-[var(--muted)]/50">
-        © {new Date().getFullYear()} Slingshotteck · All rights reserved
+        © {new Date().getFullYear()} HRMS · All rights reserved
       </p>
     </div>
   );

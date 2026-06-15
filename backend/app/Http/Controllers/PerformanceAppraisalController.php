@@ -29,6 +29,10 @@ class PerformanceAppraisalController extends Controller
             });
         }
 
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', (int) $request->query('employee_id'));
+        }
+
         return $this->ok($query->latest()->get());
     }
 

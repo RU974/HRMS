@@ -6,8 +6,10 @@ use App\Events\LeaveRequested;
 use App\Events\LeaveStatusChanged;
 use App\Models\Employee;
 use App\Models\Leave;
+use App\Models\LeaveType;
 use App\Models\User;
 use App\Services\LeavePolicyService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -27,6 +29,12 @@ class LeaveController extends Controller
             }
             if ($request->filled('status')) {
                 $query->where('status', $request->status);
+            }
+            if ($request->filled('from_date')) {
+                $query->where('to_date', '>=', $request->from_date);
+            }
+            if ($request->filled('to_date')) {
+                $query->where('from_date', '<=', $request->to_date);
             }
         } else {
             // Regular employees: scope to own records only
@@ -53,10 +61,12 @@ class LeaveController extends Controller
     {
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,id',
-            'type' => 'required|string|max:100',
-            'from_date' => 'required|date',
-            'to_date' => 'required|date|after_or_equal:from_date',
-            'status' => 'nullable|in:pending,approved,rejected,cancelled',
+            'type'        => 'required|string|max:100',
+            'from_date'   => 'required|date',
+            'to_date'     => 'required|date|after_or_equal:from_date',
+            'half_day'    => 'nullable|boolean',
+            'reason'      => 'nullable|string|max:1000',
+            'status'      => 'nullable|in:pending,approved,rejected,cancelled',
         ]);
 
         $this->authorizeCreate($request, (int) $validated['employee_id']);
@@ -117,10 +127,12 @@ class LeaveController extends Controller
         $originalToDate = $leave->to_date;
 
         $validated = $request->validate([
-            'type' => 'sometimes|string|max:100',
+            'type'      => 'sometimes|string|max:100',
             'from_date' => 'sometimes|date',
-            'to_date' => 'sometimes|date',
-            'status' => 'sometimes|in:pending,approved,rejected,cancelled',
+            'to_date'   => 'sometimes|date',
+            'half_day'  => 'sometimes|boolean',
+            'reason'    => 'nullable|string|max:1000',
+            'status'    => 'sometimes|in:pending,approved,rejected,cancelled',
         ]);
 
         if (isset($validated['from_date']) && isset($validated['to_date']) && strtotime($validated['to_date']) < strtotime($validated['from_date'])) {
@@ -196,6 +208,94 @@ class LeaveController extends Controller
         });
 
         return $this->ok(null, 'Leave request deleted successfully');
+    }
+
+    public function teamCalendar(Request $request)
+    {
+        $this->authorizePermission($request, 'leaves:approve');
+        $validated = $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year'  => 'required|integer|min:2000',
+        ]);
+
+        $firstDay = Carbon::create((int) $validated['year'], (int) $validated['month'], 1)->startOfMonth();
+        $lastDay  = $firstDay->copy()->endOfMonth();
+
+        $query = Leave::with('employee:id,name,department_id')
+            ->whereIn('status', ['approved', 'pending'])
+            ->where('from_date', '<=', $lastDay->toDateString())
+            ->where('to_date', '>=', $firstDay->toDateString());
+
+        $this->scopeToCompany($request, $query);
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
+
+        return $this->ok($query->get());
+    }
+
+    public function balanceSummary(Request $request)
+    {
+        $employeeId = (int) $request->input('employee_id');
+        if (!$employeeId) {
+            $self = Employee::where('user_id', $request->user()?->id)->first();
+            if (!$self) return $this->ok([]);
+            $employeeId = $self->id;
+        } else {
+            $this->assertEmployeeInCompany($request, $employeeId);
+        }
+
+        $employee     = Employee::findOrFail($employeeId);
+        $leaveTypes   = LeaveType::where('is_active', true)->orderBy('name')->get();
+        $policyService = new LeavePolicyService();
+        $today        = Carbon::today();
+
+        $balances = $leaveTypes->map(function (LeaveType $type) use ($employee, $policyService, $today) {
+            $balance = $policyService->buildBalanceSummary($employee, $type, $today);
+            return [
+                'leave_type'          => ['id' => $type->id, 'name' => $type->name, 'is_paid' => $type->is_paid, 'encashable' => $type->encashable],
+                'accrued_days'        => $balance->accrued_days,
+                'used_days'           => $balance->used_days,
+                'pending_days'        => $balance->pending_days,
+                'carried_forward_days'=> $balance->carried_forward_days,
+                'remaining_days'      => $balance->remaining_days,
+            ];
+        });
+
+        return $this->ok($balances);
+    }
+
+    public function encashment(Request $request)
+    {
+        $employeeId = (int) $request->input('employee_id');
+        if (!$employeeId) {
+            $self = Employee::where('user_id', $request->user()?->id)->first();
+            if (!$self) return $this->ok(['items' => [], 'total_encashment' => 0]);
+            $employeeId = $self->id;
+        } else {
+            $this->assertEmployeeInCompany($request, $employeeId);
+        }
+
+        $employee      = Employee::findOrFail($employeeId);
+        $leaveTypes    = LeaveType::where('is_active', true)->where('encashable', true)->orderBy('name')->get();
+        $policyService = new LeavePolicyService();
+        $today         = Carbon::today();
+        $dailyRate     = $employee->basic_salary ? round((float) $employee->basic_salary / 26, 2) : 0;
+
+        $items = $leaveTypes->map(function (LeaveType $type) use ($employee, $policyService, $today, $dailyRate) {
+            $balance = $policyService->buildBalanceSummary($employee, $type, $today);
+            return [
+                'leave_type'        => $type->name,
+                'remaining_days'    => $balance->remaining_days,
+                'daily_rate'        => $dailyRate,
+                'encashment_amount' => round($balance->remaining_days * $dailyRate, 2),
+            ];
+        });
+
+        return $this->ok([
+            'employee'         => ['id' => $employee->id, 'name' => $employee->name],
+            'daily_rate'       => $dailyRate,
+            'items'            => $items,
+            'total_encashment' => $items->sum('encashment_amount'),
+        ]);
     }
 
     private function authorizeRead(Request $request, Leave $leave): void

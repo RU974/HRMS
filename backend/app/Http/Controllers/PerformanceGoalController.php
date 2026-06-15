@@ -33,6 +33,10 @@ class PerformanceGoalController extends Controller
             $query->where('status', (string) $request->query('status'));
         }
 
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', (int) $request->query('employee_id'));
+        }
+
         return $this->ok($query->latest()->get());
     }
 

@@ -439,6 +439,89 @@ class EmployeeController extends Controller
         }
     }
 
+    public function import(Request $request)
+    {
+        $this->authorizePermission($request, 'employees:create');
+
+        $request->validate(['file' => 'required|file|mimes:csv,txt|max:2048']);
+
+        $file    = $request->file('file');
+        $handle  = fopen($file->getRealPath(), 'r');
+        $headers = fgetcsv($handle); // skip header row
+
+        if (!$headers) {
+            return $this->fail('CSV file is empty or has no header row.');
+        }
+
+        $companyId    = $request->user()?->company_id;
+        $imported     = 0;
+        $skipped      = 0;
+        $errors       = [];
+        $defaultDeptId = \App\Models\Department::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->value('id');
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $data = array_combine(array_map('strtolower', array_map('trim', $headers)), array_map('trim', $row));
+
+            $email = $data['email'] ?? null;
+            if (!$email || !\Illuminate\Support\Facades\Validator::make(['email' => $email], ['email' => 'email'])->passes()) {
+                $skipped++;
+                $errors[] = "Row skipped — invalid or missing email: " . ($email ?? '(empty)');
+                continue;
+            }
+
+            if (Employee::where('email', $email)->exists()) {
+                $skipped++;
+                $errors[] = "Row skipped — email already exists: {$email}";
+                continue;
+            }
+
+            $deptName = $data['department'] ?? null;
+            $deptId   = $defaultDeptId;
+            if ($deptName) {
+                $dept = \App\Models\Department::query()
+                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+                    ->where('name', 'like', $deptName)
+                    ->value('id');
+                if ($dept) $deptId = $dept;
+            }
+
+            if (!$deptId) {
+                $skipped++;
+                $errors[] = "Row skipped — no department found for: {$email}";
+                continue;
+            }
+
+            $name = $data['name'] ?? (trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? '')) ?: null);
+
+            Employee::create([
+                'name'            => $name ?? $email,
+                'first_name'      => $data['first_name'] ?? null,
+                'last_name'       => $data['last_name'] ?? null,
+                'email'           => $email,
+                'phone'           => $data['phone'] ?? null,
+                'department_id'   => $deptId,
+                'designation'     => $data['designation'] ?? null,
+                'joining_date'    => !empty($data['joining_date']) ? $data['joining_date'] : null,
+                'employment_type' => $data['employment_type'] ?? 'full_time',
+                'basic_salary'    => is_numeric($data['basic_salary'] ?? null) ? $data['basic_salary'] : 0,
+                'status'          => 'active',
+                'salary'          => is_numeric($data['basic_salary'] ?? null) ? $data['basic_salary'] : 0,
+            ]);
+
+            $imported++;
+        }
+
+        fclose($handle);
+
+        return $this->ok([
+            'imported' => $imported,
+            'skipped'  => $skipped,
+            'errors'   => $errors,
+        ], "{$imported} employee(s) imported successfully.");
+    }
+
     private function assignRoleToUser(User $user, ?string $roleName): void
     {
         $resolvedRoleName = $roleName ?: User::ROLE_EMPLOYEE;

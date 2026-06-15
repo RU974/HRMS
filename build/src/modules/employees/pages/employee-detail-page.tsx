@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -54,15 +54,467 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
   );
 }
 
-type Tab = "overview" | "attendance" | "leaves" | "documents";
+// ── Types ────────────────────────────────────────────────────────────────────
+type Tab = "overview" | "attendance" | "leaves" | "documents" | "salary" | "performance" | "org" | "history";
 
 const tabs: { key: Tab; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "attendance", label: "Attendance" },
-  { key: "leaves", label: "Leaves" },
-  { key: "documents", label: "Documents" },
+  { key: "overview",     label: "Overview" },
+  { key: "attendance",   label: "Attendance" },
+  { key: "leaves",       label: "Leaves" },
+  { key: "documents",    label: "Documents" },
+  { key: "salary",       label: "Salary" },
+  { key: "performance",  label: "Performance" },
+  { key: "org",          label: "Org / Team" },
+  { key: "history",      label: "History" },
 ];
 
+interface Payslip {
+  id: number; slip_number: string; status: string; issue_date: string; file_url?: string | null;
+  payroll?: { month: number; year: number; net_salary: number | string; base_salary?: number | string | null; bonus?: number | string | null; deductions?: number | string | null; tax?: number | string | null } | null;
+}
+interface Appraisal { id: number; cycle: string; overall_score: number; strengths?: string | null; improvements?: string | null; created_at: string }
+interface Review    { id: number; period: string; rating: number; summary?: string | null; created_at: string }
+interface Goal      { id: number; title: string; status: string; progress: number; due_date?: string | null }
+interface Kpi       { id: number; name: string; target_value: number | string; current_value: number | string; unit: string }
+interface DirectReport { id: number; name: string; designation?: string | null; status: string; department?: { name: string } | null }
+interface Promotion { id: number; type: string; from_designation?: string | null; to_designation?: string | null; from_department?: string | null; to_department?: string | null; from_salary?: number | string | null; to_salary?: number | string | null; effective_date: string; notes?: string | null }
+interface EmergencyContact { name: string; relationship: string; phone: string; email?: string }
+
+const PROMOTION_TYPES = ["promotion", "transfer", "demotion", "grade_change"] as const;
+
+// ── Salary tab ───────────────────────────────────────────────────────────────
+function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["payslips", "employee", employeeId],
+    queryFn: () => apiClient<{ data: Payslip[] }>(`/payslips?employee_id=${employeeId}`),
+  });
+  const payslips = (data as { data?: Payslip[] } | undefined)?.data ?? [];
+  const base   = Number(employee.basic_salary ?? 0);
+  const allow  = Number(employee.allowances ?? 0);
+  const gross  = base + allow;
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <h3 className="mb-4 text-base font-semibold">Compensation Breakdown</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Basic Salary",  value: base.toLocaleString() },
+            { label: "Allowances",    value: allow.toLocaleString() },
+            { label: "Gross Salary",  value: gross.toLocaleString() },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">{s.label}</p>
+              <p className="mt-1 text-2xl font-bold text-[var(--text)]">{s.value}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="mb-4 text-base font-semibold">Payslip History</h3>
+        {isLoading && <p className="text-sm text-[var(--muted)]">Loading payslips…</p>}
+        {!isLoading && payslips.length === 0 && <p className="py-4 text-center text-sm text-[var(--muted)]">No payslips issued yet.</p>}
+        {payslips.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+                  <th className="p-3">Slip #</th>
+                  <th className="p-3">Period</th>
+                  <th className="p-3">Net Salary</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Issue Date</th>
+                  <th className="p-3">File</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payslips.map(p => (
+                  <tr key={p.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
+                    <td className="p-3 font-mono text-xs">{p.slip_number}</td>
+                    <td className="p-3">{p.payroll ? `${p.payroll.year}-${String(p.payroll.month).padStart(2, "0")}` : "—"}</td>
+                    <td className="p-3 font-semibold">{p.payroll ? Number(p.payroll.net_salary).toLocaleString() : "—"}</td>
+                    <td className="p-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${p.status === "issued" ? "bg-emerald-50 text-emerald-700" : p.status === "cancelled" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{p.status}</span>
+                    </td>
+                    <td className="p-3 text-[var(--muted)]">{p.issue_date}</td>
+                    <td className="p-3">
+                      {p.file_url
+                        ? <a href={p.file_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--primary)] hover:underline">Download</a>
+                        : <span className="text-xs text-[var(--muted)]">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Performance tab ──────────────────────────────────────────────────────────
+function PerformanceTab({ employeeId }: { employeeId: number }) {
+  const appraisalsQ = useQuery({ queryKey: ["perf-appraisals", employeeId], queryFn: () => apiClient<Appraisal[]>(`/performance-appraisals?employee_id=${employeeId}`) });
+  const reviewsQ    = useQuery({ queryKey: ["perf-reviews",    employeeId], queryFn: () => apiClient<Review[]>(`/performance-reviews?employee_id=${employeeId}`) });
+  const goalsQ      = useQuery({ queryKey: ["perf-goals",      employeeId], queryFn: () => apiClient<Goal[]>(`/performance-goals?employee_id=${employeeId}`) });
+  const kpisQ       = useQuery({ queryKey: ["perf-kpis",       employeeId], queryFn: () => apiClient<Kpi[]>(`/performance-kpis?employee_id=${employeeId}`) });
+
+  const appraisals = (appraisalsQ.data as Appraisal[] | undefined) ?? [];
+  const reviews    = (reviewsQ.data as Review[]    | undefined) ?? [];
+  const goals      = (goalsQ.data  as Goal[]      | undefined) ?? [];
+  const kpis       = (kpisQ.data   as Kpi[]       | undefined) ?? [];
+
+  const statusColor = (s: string) => s === "completed" ? "bg-emerald-50 text-emerald-700" : s === "in_progress" ? "bg-blue-50 text-blue-700" : s === "on_hold" ? "bg-amber-50 text-amber-700" : "bg-slate-50 text-slate-600";
+
+  return (
+    <div className="space-y-5">
+      {/* Appraisals */}
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Appraisals</h3>
+          <Link to="/performance" className="text-xs text-[var(--primary)] hover:underline">Manage →</Link>
+        </div>
+        {appraisalsQ.isLoading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+        {!appraisalsQ.isLoading && appraisals.length === 0 && <p className="py-3 text-center text-sm text-[var(--muted)]">No appraisals recorded.</p>}
+        {appraisals.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]"><th className="p-3">Cycle</th><th className="p-3">Score</th><th className="p-3">Strengths</th><th className="p-3">Date</th></tr></thead>
+              <tbody>
+                {appraisals.map(a => (
+                  <tr key={a.id} className="border-b border-[var(--border)]/50">
+                    <td className="p-3 font-medium">{a.cycle}</td>
+                    <td className="p-3"><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700">{a.overall_score}/5</span></td>
+                    <td className="p-3 max-w-xs truncate text-[var(--muted)]">{a.strengths ?? "—"}</td>
+                    <td className="p-3 text-[var(--muted)]">{a.created_at?.slice(0, 10)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Reviews */}
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Reviews</h3>
+        </div>
+        {reviewsQ.isLoading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+        {!reviewsQ.isLoading && reviews.length === 0 && <p className="py-3 text-center text-sm text-[var(--muted)]">No reviews recorded.</p>}
+        {reviews.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]"><th className="p-3">Period</th><th className="p-3">Rating</th><th className="p-3">Summary</th><th className="p-3">Date</th></tr></thead>
+              <tbody>
+                {reviews.map(r => (
+                  <tr key={r.id} className="border-b border-[var(--border)]/50">
+                    <td className="p-3 font-medium">{r.period}</td>
+                    <td className="p-3"><span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{r.rating}/5</span></td>
+                    <td className="p-3 max-w-xs truncate text-[var(--muted)]">{r.summary ?? "—"}</td>
+                    <td className="p-3 text-[var(--muted)]">{r.created_at?.slice(0, 10)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Goals */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-3 text-base font-semibold">Goals</h3>
+          {goalsQ.isLoading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+          {!goalsQ.isLoading && goals.length === 0 && <p className="py-3 text-center text-sm text-[var(--muted)]">No goals set.</p>}
+          <div className="space-y-2">
+            {goals.map(g => (
+              <div key={g.id} className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-[var(--text)]">{g.title}</p>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor(g.status)}`}>{g.status.replace("_", " ")}</span>
+                </div>
+                {g.due_date && <p className="mt-1 text-xs text-[var(--muted)]">Due {g.due_date}</p>}
+                <div className="mt-2">
+                  <div className="flex items-center justify-between text-xs text-[var(--muted)]"><span>Progress</span><span>{g.progress}%</span></div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+                    <div className={`h-full rounded-full ${g.progress >= 100 ? "bg-emerald-500" : "bg-[var(--primary)]"}`} style={{ width: `${Math.min(g.progress, 100)}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* KPIs */}
+        <Card>
+          <h3 className="mb-3 text-base font-semibold">KPIs</h3>
+          {kpisQ.isLoading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+          {!kpisQ.isLoading && kpis.length === 0 && <p className="py-3 text-center text-sm text-[var(--muted)]">No KPIs set.</p>}
+          <div className="space-y-2">
+            {kpis.map(k => {
+              const pct = Number(k.target_value) > 0 ? Math.min(Math.round((Number(k.current_value) / Number(k.target_value)) * 100), 100) : 0;
+              return (
+                <div key={k.id} className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-[var(--text)]">{k.name}</p>
+                    <span className="text-xs text-[var(--muted)]">{Number(k.current_value).toLocaleString()} / {Number(k.target_value).toLocaleString()} {k.unit}</span>
+                  </div>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-xs text-[var(--muted)]"><span>&nbsp;</span><span>{pct}%</span></div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+                      <div className={`h-full rounded-full ${pct >= 100 ? "bg-emerald-500" : pct >= 60 ? "bg-[var(--primary)]" : "bg-amber-500"}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ── Org / Team tab ──────────────────────────────────────────────────────────
+function OrgTab({ employee, employeeId }: { employee: Employee; employeeId: number }) {
+  const directReportsQ = useQuery({
+    queryKey: ["direct-reports", employeeId],
+    queryFn: () => apiClient<{ data: DirectReport[] }>(`/employees?manager_id=${employeeId}&per_page=50`),
+  });
+  const directReports = (directReportsQ.data as { data?: DirectReport[] } | undefined)?.data ?? [];
+
+  return (
+    <div className="space-y-5">
+      {/* Manager chain */}
+      <Card>
+        <h3 className="mb-4 text-base font-semibold">Reporting Line</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {employee.manager ? (
+            <>
+              <Link to={`/employees/${employee.manager.id}`} className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm font-medium text-[var(--primary)] hover:bg-[var(--border)]/30">
+                {employee.manager.name}
+              </Link>
+              <span className="text-[var(--muted)]">→</span>
+            </>
+          ) : null}
+          <div className="rounded-xl border-2 border-[var(--primary)] bg-[var(--primary)]/5 px-3 py-2 text-sm font-semibold text-[var(--primary)]">
+            {employee.name} <span className="font-normal text-[var(--muted)]">(current)</span>
+          </div>
+          {directReports.length > 0 && (
+            <>
+              <span className="text-[var(--muted)]">→</span>
+              <span className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--muted)]">{directReports.length} direct report{directReports.length !== 1 ? "s" : ""}</span>
+            </>
+          )}
+        </div>
+        {!employee.manager && <p className="mt-2 text-xs text-[var(--muted)]">No manager assigned — this employee is at the top of the hierarchy.</p>}
+      </Card>
+
+      {/* Direct reports */}
+      <Card>
+        <h3 className="mb-4 text-base font-semibold">Direct Reports</h3>
+        {directReportsQ.isLoading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+        {!directReportsQ.isLoading && directReports.length === 0 && (
+          <p className="py-4 text-center text-sm text-[var(--muted)]">No direct reports.</p>
+        )}
+        {directReports.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {directReports.map(dr => (
+              <Link key={dr.id} to={`/employees/${dr.id}`}
+                className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/10 text-xs font-bold text-[var(--primary)]">
+                  {dr.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-[var(--text)]">{dr.name}</p>
+                  <p className="text-xs text-[var(--muted)]">{dr.designation ?? dr.department?.name ?? "—"}</p>
+                </div>
+                <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${dr.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{dr.status}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── History (Emergency + Promotions) tab ──────────────────────────────────────
+function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; employeeId: number; canManage: boolean }) {
+  const queryClient = useQueryClient();
+
+  // Emergency contacts
+  const contacts: EmergencyContact[] = (employee as Employee & { emergency_contacts?: EmergencyContact[] }).emergency_contacts ?? [];
+  const [contactModal, setContactModal] = useState(false);
+  const [contactForm, setContactForm] = useState<EmergencyContact>({ name: "", relationship: "", phone: "", email: "" });
+  const [contactSaving, setContactSaving] = useState(false);
+
+  async function saveContacts(updated: EmergencyContact[]) {
+    setContactSaving(true);
+    const fd = new FormData();
+    fd.append("emergency_contacts", JSON.stringify(updated));
+    fd.append("_method", "PUT");
+    await apiClient(`/employees/${employeeId}`, { method: "POST", body: fd });
+    await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
+    setContactSaving(false);
+  }
+
+  async function addContact(e: FormEvent) {
+    e.preventDefault();
+    await saveContacts([...contacts, contactForm]);
+    setContactModal(false);
+    setContactForm({ name: "", relationship: "", phone: "", email: "" });
+  }
+
+  async function removeContact(idx: number) {
+    if (!window.confirm("Remove this emergency contact?")) return;
+    await saveContacts(contacts.filter((_, i) => i !== idx));
+  }
+
+  // Promotions / transfer history
+  const promotionsQ = useQuery({
+    queryKey: ["promotions", employeeId],
+    queryFn: () => apiClient<Promotion[]>(`/employees/${employeeId}/promotions`),
+  });
+  const promotions = (promotionsQ.data as Promotion[] | undefined) ?? [];
+
+  const [promoModal, setPromoModal] = useState(false);
+  const [promoForm, setPromoForm] = useState({ type: "promotion", from_designation: "", to_designation: "", from_department: "", to_department: "", from_salary: "", to_salary: "", effective_date: "", notes: "" });
+
+  const promoMutation = useMutation({
+    mutationFn: (data: typeof promoForm) => apiClient(`/employees/${employeeId}/promotions`, { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); setPromoModal(false); },
+  });
+
+  const promoDeleteMutation = useMutation({
+    mutationFn: (id: number) => apiClient(`/employees/${employeeId}/promotions/${id}`, { method: "DELETE" }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); },
+  });
+
+  const typeLabel: Record<string, string> = { promotion: "Promotion", transfer: "Transfer", demotion: "Demotion", grade_change: "Grade Change" };
+  const typeColor: Record<string, string> = { promotion: "bg-emerald-50 text-emerald-700", transfer: "bg-blue-50 text-blue-700", demotion: "bg-rose-50 text-rose-700", grade_change: "bg-violet-50 text-violet-700" };
+
+  return (
+    <div className="space-y-5">
+      {/* Emergency Contacts */}
+      <Card>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Emergency Contacts</h3>
+          {canManage && <Button onClick={() => setContactModal(true)}>+ Add Contact</Button>}
+        </div>
+
+        {contacts.length === 0 && <p className="py-4 text-center text-sm text-[var(--muted)]">No emergency contacts on file.</p>}
+        <div className="space-y-2">
+          {contacts.map((c, idx) => (
+            <div key={idx} className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-50 text-xs font-bold text-rose-600">
+                {c.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-[var(--text)]">{c.name}</p>
+                <p className="text-xs text-[var(--muted)] capitalize">{c.relationship} · {c.phone}</p>
+                {c.email && <p className="text-xs text-[var(--muted)]">{c.email}</p>}
+              </div>
+              {canManage && (
+                <Button variant="outline" onClick={() => void removeContact(idx)} disabled={contactSaving} className="shrink-0 text-xs">Remove</Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Promotion / Transfer History */}
+      <Card>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-base font-semibold">Promotion & Transfer History</h3>
+          {canManage && <Button onClick={() => setPromoModal(true)}>+ Add Record</Button>}
+        </div>
+
+        {promotionsQ.isLoading && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+        {!promotionsQ.isLoading && promotions.length === 0 && <p className="py-4 text-center text-sm text-[var(--muted)]">No history recorded.</p>}
+
+        {promotions.length > 0 && (
+          <div className="relative space-y-0 pl-5">
+            {promotions.map((p, idx) => (
+              <div key={p.id} className={`relative pb-6 ${idx < promotions.length - 1 ? "border-l-2 border-[var(--border)]" : ""}`}>
+                <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 border-[var(--primary)] bg-[var(--card)]" />
+                <div className="ml-5 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeColor[p.type] ?? "bg-slate-50 text-slate-600"}`}>{typeLabel[p.type] ?? p.type}</span>
+                      <p className="mt-1.5 text-xs text-[var(--muted)]">Effective {p.effective_date}</p>
+                    </div>
+                    {canManage && (
+                      <Button variant="outline" onClick={() => void promoDeleteMutation.mutate(p.id)} disabled={promoDeleteMutation.isPending} className="shrink-0 text-xs">Remove</Button>
+                    )}
+                  </div>
+                  <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                    {(p.from_designation || p.to_designation) && <p className="text-[var(--muted)]">Designation: <span className="font-medium text-[var(--text)]">{p.from_designation ?? "—"} → {p.to_designation ?? "—"}</span></p>}
+                    {(p.from_department || p.to_department) && <p className="text-[var(--muted)]">Department: <span className="font-medium text-[var(--text)]">{p.from_department ?? "—"} → {p.to_department ?? "—"}</span></p>}
+                    {(p.from_salary != null || p.to_salary != null) && <p className="text-[var(--muted)]">Salary: <span className="font-medium text-[var(--text)]">{p.from_salary ? Number(p.from_salary).toLocaleString() : "—"} → {p.to_salary ? Number(p.to_salary).toLocaleString() : "—"}</span></p>}
+                  </div>
+                  {p.notes && <p className="mt-2 text-xs text-[var(--muted)]">{p.notes}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Add Contact Modal */}
+      {contactModal && (
+        <Modal title="Add Emergency Contact" onClose={() => setContactModal(false)}>
+          <form className="space-y-4" onSubmit={(e) => void addContact(e)}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Name"><FormInput required value={contactForm.name} onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))} /></FormField>
+              <FormField label="Relationship"><FormInput required value={contactForm.relationship} onChange={e => setContactForm(p => ({ ...p, relationship: e.target.value }))} placeholder="Spouse, Parent, Sibling…" /></FormField>
+              <FormField label="Phone"><FormInput required value={contactForm.phone} onChange={e => setContactForm(p => ({ ...p, phone: e.target.value }))} /></FormField>
+              <FormField label="Email (optional)"><FormInput type="email" value={contactForm.email ?? ""} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} /></FormField>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setContactModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={contactSaving}>{contactSaving ? "Saving…" : "Add Contact"}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Add Promotion Modal */}
+      {promoModal && (
+        <Modal title="Add Promotion / Transfer Record" onClose={() => setPromoModal(false)}>
+          <form className="space-y-4" onSubmit={e => { e.preventDefault(); promoMutation.mutate(promoForm); }}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Type">
+                <select className={inputClass} value={promoForm.type} onChange={e => setPromoForm(p => ({ ...p, type: e.target.value }))}>
+                  {PROMOTION_TYPES.map(t => <option key={t} value={t}>{typeLabel[t]}</option>)}
+                </select>
+              </FormField>
+              <FormField label="Effective Date"><FormInput required type="date" value={promoForm.effective_date} onChange={e => setPromoForm(p => ({ ...p, effective_date: e.target.value }))} /></FormField>
+              <FormField label="From Designation"><FormInput value={promoForm.from_designation} onChange={e => setPromoForm(p => ({ ...p, from_designation: e.target.value }))} /></FormField>
+              <FormField label="To Designation"><FormInput value={promoForm.to_designation} onChange={e => setPromoForm(p => ({ ...p, to_designation: e.target.value }))} /></FormField>
+              <FormField label="From Department"><FormInput value={promoForm.from_department} onChange={e => setPromoForm(p => ({ ...p, from_department: e.target.value }))} /></FormField>
+              <FormField label="To Department"><FormInput value={promoForm.to_department} onChange={e => setPromoForm(p => ({ ...p, to_department: e.target.value }))} /></FormField>
+              <FormField label="From Salary"><FormInput type="number" min="0" value={promoForm.from_salary} onChange={e => setPromoForm(p => ({ ...p, from_salary: e.target.value }))} /></FormField>
+              <FormField label="To Salary"><FormInput type="number" min="0" value={promoForm.to_salary} onChange={e => setPromoForm(p => ({ ...p, to_salary: e.target.value }))} /></FormField>
+            </div>
+            <FormField label="Notes">
+              <textarea className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={promoForm.notes} onChange={e => setPromoForm(p => ({ ...p, notes: e.target.value }))} />
+            </FormField>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPromoModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={promoMutation.isPending}>{promoMutation.isPending ? "Saving…" : "Add Record"}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
 export function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const employeeId = Number(id);
@@ -83,9 +535,9 @@ export function EmployeeDetailPage() {
     enabled: !isNaN(employeeId),
   });
 
-  const depsQuery = useQuery({ queryKey: ["departments"], queryFn: listDepartments });
-  const desigQuery = useQuery({ queryKey: ["designations"], queryFn: listDesignations });
-  const shiftsQuery = useQuery({ queryKey: ["shifts"], queryFn: listShifts });
+  const depsQuery    = useQuery({ queryKey: ["departments"],    queryFn: listDepartments });
+  const desigQuery   = useQuery({ queryKey: ["designations"],   queryFn: listDesignations });
+  const shiftsQuery  = useQuery({ queryKey: ["shifts"],         queryFn: listShifts });
   const managersQuery = useQuery({ queryKey: ["employees-list"], queryFn: () => getEmployees() });
 
   const attendanceQuery = useQuery({
@@ -107,22 +559,10 @@ export function EmployeeDetailPage() {
   });
 
   const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    phone: "",
-    cnic: "",
-    date_of_birth: "",
-    gender: "",
-    address: "",
-    department_id: "",
-    designation_id: "",
-    joining_date: "",
-    employment_type: "",
-    shift_id: "",
-    manager_id: "",
-    basic_salary: "",
-    allowances: "",
-    status: "",
+    first_name: "", last_name: "", phone: "", cnic: "", date_of_birth: "",
+    gender: "", address: "", department_id: "", designation_id: "",
+    joining_date: "", employment_type: "", shift_id: "", manager_id: "",
+    basic_salary: "", allowances: "", status: "",
   });
 
   function openEdit() {
@@ -203,22 +643,19 @@ export function EmployeeDetailPage() {
   }
 
   const initials = (employee.name ?? "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-  const attendanceList = (attendanceQuery.data as { data?: typeof attendanceQuery.data extends Promise<infer T> ? T : unknown[] } | undefined)?.data as Array<{ id: number; date: string; check_in?: string | null; check_out?: string | null; status: string }> | undefined ?? [];
-  const presentCount = attendanceList.filter((a) => a.status === "present").length;
-  const lateCount = attendanceList.filter((a) => a.status === "late").length;
-  const absentCount = attendanceList.filter((a) => a.status === "absent").length;
-  const leaveCount = (leavesQuery.data as { data?: Array<unknown> } | undefined)?.data?.length ?? 0;
+  type AttRaw = { id: number; date: string; check_in?: string | null; check_out?: string | null; status: string };
+  const attendanceList = (attendanceQuery.data as { data?: AttRaw[] } | undefined)?.data ?? [];
+  const presentCount   = attendanceList.filter((a) => a.status === "present").length;
+  const lateCount      = attendanceList.filter((a) => a.status === "late").length;
+  const absentCount    = attendanceList.filter((a) => a.status === "absent").length;
+  const leaveCount     = (leavesQuery.data as { data?: unknown[] } | undefined)?.data?.length ?? 0;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={() => navigate("/employees")} className="text-xs">
-          ← Employees
-        </Button>
+        <Button variant="outline" onClick={() => navigate("/employees")} className="text-xs">← Employees</Button>
         <PageHeader title={employee.name} subtitle={`${employee.designation ?? "Employee"} ${employee.department?.name ? `· ${employee.department.name}` : ""}`} />
-        {canManage && (
-          <Button onClick={openEdit} className="ml-auto">Edit Employee</Button>
-        )}
+        {canManage && <Button onClick={openEdit} className="ml-auto">Edit Employee</Button>}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -226,9 +663,7 @@ export function EmployeeDetailPage() {
           {employee.profile_image ? (
             <img src={employee.profile_image} alt={employee.name} className="h-24 w-24 rounded-full object-cover ring-4 ring-[var(--border)]" />
           ) : (
-            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--primary)]/10 text-2xl font-bold text-[var(--primary)] ring-4 ring-[var(--border)]">
-              {initials}
-            </div>
+            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--primary)]/10 text-2xl font-bold text-[var(--primary)] ring-4 ring-[var(--border)]">{initials}</div>
           )}
           <div>
             <p className="text-lg font-bold">{employee.name}</p>
@@ -236,35 +671,32 @@ export function EmployeeDetailPage() {
             {employee.employee_number && <p className="mt-1 text-xs text-[var(--muted)]">#{employee.employee_number}</p>}
           </div>
           <StatusBadge status={employee.status} />
-          {employee.joining_date && (
-            <p className="text-xs text-[var(--muted)]">Joined {employee.joining_date}</p>
-          )}
+          {employee.joining_date && <p className="text-xs text-[var(--muted)]">Joined {employee.joining_date}</p>}
         </Card>
 
         <Card className="lg:col-span-2">
           <div className="grid grid-cols-2 gap-x-8 sm:grid-cols-3">
-            <InfoRow label="Department" value={employee.department?.name} />
-            <InfoRow label="Designation" value={employee.designation} />
+            <InfoRow label="Department"      value={employee.department?.name} />
+            <InfoRow label="Designation"     value={employee.designation} />
             <InfoRow label="Employment type" value={employee.employment_type?.replace("_", " ")} />
-            <InfoRow label="Phone" value={employee.phone} />
-            <InfoRow label="CNIC" value={employee.cnic} />
-            <InfoRow label="Gender" value={employee.gender} />
-            <InfoRow label="Date of birth" value={employee.date_of_birth} />
-            <InfoRow label="Shift" value={employee.shift?.name} />
-            <InfoRow label="Manager" value={employee.manager?.name} />
-            <InfoRow label="Basic salary" value={employee.basic_salary ? `${Number(employee.basic_salary).toLocaleString()}` : undefined} />
-            <InfoRow label="Allowances" value={employee.allowances ? `${Number(employee.allowances).toLocaleString()}` : undefined} />
-            <InfoRow label="Address" value={employee.address} />
+            <InfoRow label="Phone"           value={employee.phone} />
+            <InfoRow label="CNIC"            value={employee.cnic} />
+            <InfoRow label="Gender"          value={employee.gender} />
+            <InfoRow label="Date of birth"   value={employee.date_of_birth} />
+            <InfoRow label="Shift"           value={employee.shift?.name} />
+            <InfoRow label="Manager"         value={employee.manager?.name} />
+            <InfoRow label="Basic salary"    value={employee.basic_salary ? Number(employee.basic_salary).toLocaleString() : undefined} />
+            <InfoRow label="Allowances"      value={employee.allowances ? Number(employee.allowances).toLocaleString() : undefined} />
+            <InfoRow label="Address"         value={employee.address} />
           </div>
         </Card>
       </div>
 
-      <div className="flex gap-2 border-b border-[var(--border)]">
+      {/* Tab bar */}
+      <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)]">
         {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`shrink-0 px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
               tab === t.key
                 ? "border-[var(--primary)] text-[var(--primary)]"
                 : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"
@@ -275,27 +707,25 @@ export function EmployeeDetailPage() {
         ))}
       </div>
 
+      {/* Tab content */}
       {tab === "overview" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Days present" value={presentCount} sub="From attendance records" />
-          <StatCard label="Days late" value={lateCount} sub="Late arrivals recorded" />
-          <StatCard label="Days absent" value={absentCount} sub="From attendance records" />
-          <StatCard label="Leave requests" value={leaveCount} sub="Total requests submitted" />
+          <StatCard label="Days present"    value={presentCount}  sub="From attendance records" />
+          <StatCard label="Days late"       value={lateCount}     sub="Late arrivals recorded" />
+          <StatCard label="Days absent"     value={absentCount}   sub="From attendance records" />
+          <StatCard label="Leave requests"  value={leaveCount}    sub="Total requests submitted" />
         </div>
       )}
 
       {tab === "attendance" && (
         <Card>
           <h3 className="mb-4 text-base font-semibold">Attendance Records</h3>
-          {attendanceQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading attendance...</p>}
+          {attendanceQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading attendance…</p>}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Check In</th>
-                  <th className="p-3">Check Out</th>
+                  <th className="p-3">Date</th><th className="p-3">Status</th><th className="p-3">Check In</th><th className="p-3">Check Out</th>
                 </tr>
               </thead>
               <tbody>
@@ -306,12 +736,7 @@ export function EmployeeDetailPage() {
                   <tr key={a.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
                     <td className="p-3">{a.date}</td>
                     <td className="p-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
-                        a.status === "present" ? "bg-emerald-50 text-emerald-700" :
-                        a.status === "late" ? "bg-amber-50 text-amber-700" :
-                        a.status === "absent" ? "bg-red-50 text-red-700" :
-                        "bg-blue-50 text-blue-700"
-                      }`}>{a.status}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${a.status === "present" ? "bg-emerald-50 text-emerald-700" : a.status === "late" ? "bg-amber-50 text-amber-700" : a.status === "absent" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>{a.status}</span>
                     </td>
                     <td className="p-3">{a.check_in ? a.check_in.slice(11, 16) : "—"}</td>
                     <td className="p-3">{a.check_out ? a.check_out.slice(11, 16) : "—"}</td>
@@ -326,36 +751,28 @@ export function EmployeeDetailPage() {
       {tab === "leaves" && (
         <Card>
           <h3 className="mb-4 text-base font-semibold">Leave Requests</h3>
-          {leavesQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading leaves...</p>}
+          {leavesQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading leaves…</p>}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="p-3">Type</th>
-                  <th className="p-3">From</th>
-                  <th className="p-3">To</th>
-                  <th className="p-3">Status</th>
+                  <th className="p-3">Type</th><th className="p-3">From</th><th className="p-3">To</th><th className="p-3">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {((leavesQuery.data as { data?: Array<{ id: number; type: string; from_date: string; to_date: string; status: string }> } | undefined)?.data ?? []).length === 0 && !leavesQuery.isLoading && (
-                  <tr><td colSpan={4} className="p-6 text-center text-sm text-[var(--muted)]">No leave requests found.</td></tr>
-                )}
                 {((leavesQuery.data as { data?: Array<{ id: number; type: string; from_date: string; to_date: string; status: string }> } | undefined)?.data ?? []).map((l) => (
                   <tr key={l.id} className="border-b border-[var(--border)]/50">
                     <td className="p-3 capitalize">{l.type}</td>
                     <td className="p-3">{l.from_date}</td>
                     <td className="p-3">{l.to_date}</td>
                     <td className="p-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
-                        l.status === "approved" ? "bg-emerald-50 text-emerald-700" :
-                        l.status === "pending" ? "bg-amber-50 text-amber-700" :
-                        l.status === "rejected" ? "bg-red-50 text-red-700" :
-                        "bg-gray-50 text-gray-700"
-                      }`}>{l.status}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${l.status === "approved" ? "bg-emerald-50 text-emerald-700" : l.status === "pending" ? "bg-amber-50 text-amber-700" : l.status === "rejected" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700"}`}>{l.status}</span>
                     </td>
                   </tr>
                 ))}
+                {((leavesQuery.data as { data?: unknown[] } | undefined)?.data ?? []).length === 0 && !leavesQuery.isLoading && (
+                  <tr><td colSpan={4} className="p-6 text-center text-sm text-[var(--muted)]">No leave requests found.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -365,11 +782,8 @@ export function EmployeeDetailPage() {
       {tab === "documents" && (
         <Card>
           <h3 className="mb-4 text-base font-semibold">Employee Documents</h3>
-          {docsQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading documents...</p>}
+          {docsQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading documents…</p>}
           <div className="grid gap-3 sm:grid-cols-2">
-            {((docsQuery.data ?? []) as Array<{ id: number; title: string; type?: string | null; visibility: string; expiry_date?: string | null }>).length === 0 && !docsQuery.isLoading && (
-              <p className="col-span-2 py-6 text-center text-sm text-[var(--muted)]">No documents uploaded.</p>
-            )}
             {((docsQuery.data ?? []) as Array<{ id: number; title: string; type?: string | null; visibility: string; expiry_date?: string | null }>).map((doc) => (
               <div key={doc.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-sm font-bold text-[var(--primary)]">
@@ -380,41 +794,36 @@ export function EmployeeDetailPage() {
                   <p className="text-xs text-[var(--muted)] capitalize">{doc.visibility?.replace("_", " ")}</p>
                   {doc.expiry_date && <p className="text-xs text-amber-600">Expires {doc.expiry_date}</p>}
                 </div>
-                <Link to={`/employee-documents`} className="ml-auto text-xs text-[var(--primary)] hover:underline shrink-0">View</Link>
+                <Link to="/employee-documents" className="ml-auto shrink-0 text-xs text-[var(--primary)] hover:underline">View</Link>
               </div>
             ))}
+            {((docsQuery.data ?? []) as unknown[]).length === 0 && !docsQuery.isLoading && (
+              <p className="col-span-2 py-6 text-center text-sm text-[var(--muted)]">No documents uploaded.</p>
+            )}
           </div>
         </Card>
       )}
 
+      {tab === "salary"      && <SalaryTab employee={employee} employeeId={employeeId} />}
+      {tab === "performance" && <PerformanceTab employeeId={employeeId} />}
+      {tab === "org"         && <OrgTab employee={employee} employeeId={employeeId} />}
+      {tab === "history"     && <HistoryTab employee={employee} employeeId={employeeId} canManage={canManage} />}
+
+      {/* Edit modal */}
       {editOpen && (
         <Modal title="Edit Employee" onClose={() => setEditOpen(false)}>
-          <form onSubmit={handleSave} className="max-h-[70vh] overflow-y-auto space-y-4 pr-1">
-            {saveError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{saveError}</p>}
+          <form onSubmit={(e) => void handleSave(e)} className="max-h-[70vh] overflow-y-auto space-y-4 pr-1">
+            {saveError   && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{saveError}</p>}
             {saveSuccess && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">Saved successfully!</p>}
-
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="First name">
-                <FormInput value={form.first_name} onChange={(e) => setForm((p) => ({ ...p, first_name: e.target.value }))} />
-              </FormField>
-              <FormField label="Last name">
-                <FormInput value={form.last_name} onChange={(e) => setForm((p) => ({ ...p, last_name: e.target.value }))} />
-              </FormField>
-              <FormField label="Phone">
-                <FormInput value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
-              </FormField>
-              <FormField label="CNIC">
-                <FormInput value={form.cnic} onChange={(e) => setForm((p) => ({ ...p, cnic: e.target.value }))} />
-              </FormField>
-              <FormField label="Date of birth">
-                <FormInput type="date" value={form.date_of_birth} onChange={(e) => setForm((p) => ({ ...p, date_of_birth: e.target.value }))} />
-              </FormField>
+              <FormField label="First name"><FormInput value={form.first_name} onChange={(e) => setForm((p) => ({ ...p, first_name: e.target.value }))} /></FormField>
+              <FormField label="Last name"><FormInput value={form.last_name} onChange={(e) => setForm((p) => ({ ...p, last_name: e.target.value }))} /></FormField>
+              <FormField label="Phone"><FormInput value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></FormField>
+              <FormField label="CNIC"><FormInput value={form.cnic} onChange={(e) => setForm((p) => ({ ...p, cnic: e.target.value }))} /></FormField>
+              <FormField label="Date of birth"><FormInput type="date" value={form.date_of_birth} onChange={(e) => setForm((p) => ({ ...p, date_of_birth: e.target.value }))} /></FormField>
               <FormField label="Gender">
                 <select className={inputClass} value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))}>
-                  <option value="">Select</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
+                  <option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
                 </select>
               </FormField>
               <FormField label="Department">
@@ -431,19 +840,12 @@ export function EmployeeDetailPage() {
               </FormField>
               <FormField label="Employment type">
                 <select className={inputClass} value={form.employment_type} onChange={(e) => setForm((p) => ({ ...p, employment_type: e.target.value }))}>
-                  <option value="">Select</option>
-                  <option value="full_time">Full time</option>
-                  <option value="part_time">Part time</option>
-                  <option value="contract">Contract</option>
-                  <option value="temporary">Temporary</option>
-                  <option value="intern">Intern</option>
+                  <option value="">Select</option><option value="full_time">Full time</option><option value="part_time">Part time</option><option value="contract">Contract</option><option value="temporary">Temporary</option><option value="intern">Intern</option>
                 </select>
               </FormField>
               <FormField label="Status">
                 <select className={inputClass} value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="on_leave">On leave</option>
+                  <option value="active">Active</option><option value="inactive">Inactive</option><option value="on_leave">On leave</option>
                 </select>
               </FormField>
               <FormField label="Shift">
@@ -458,35 +860,20 @@ export function EmployeeDetailPage() {
                   {(managersQuery.data?.data ?? []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </FormField>
-              <FormField label="Basic salary">
-                <FormInput type="number" step="0.01" value={form.basic_salary} onChange={(e) => setForm((p) => ({ ...p, basic_salary: e.target.value }))} />
-              </FormField>
-              <FormField label="Allowances">
-                <FormInput type="number" step="0.01" value={form.allowances} onChange={(e) => setForm((p) => ({ ...p, allowances: e.target.value }))} />
-              </FormField>
-              <FormField label="Joining date">
-                <FormInput type="date" value={form.joining_date} onChange={(e) => setForm((p) => ({ ...p, joining_date: e.target.value }))} />
-              </FormField>
+              <FormField label="Basic salary"><FormInput type="number" step="0.01" value={form.basic_salary} onChange={(e) => setForm((p) => ({ ...p, basic_salary: e.target.value }))} /></FormField>
+              <FormField label="Allowances"><FormInput type="number" step="0.01" value={form.allowances} onChange={(e) => setForm((p) => ({ ...p, allowances: e.target.value }))} /></FormField>
+              <FormField label="Joining date"><FormInput type="date" value={form.joining_date} onChange={(e) => setForm((p) => ({ ...p, joining_date: e.target.value }))} /></FormField>
             </div>
-
             <FormField label="Address">
-              <textarea
-                className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
-                value={form.address}
-                onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
-              />
+              <textarea className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
             </FormField>
-
             <FormField label="Profile photo">
               <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
               {previewUrl && <img src={previewUrl} alt="Preview" className="mt-2 h-16 w-16 rounded-full object-cover" />}
             </FormField>
-
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save changes"}
-              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>{updateMutation.isPending ? "Saving..." : "Save changes"}</Button>
             </div>
           </form>
         </Modal>

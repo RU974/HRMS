@@ -1,13 +1,103 @@
-import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useCallback, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/modals/modal";
 import { FormInput } from "@/components/forms/form-input";
 import { apiClient, API_BASE_URL } from "@/services/api-client";
 import { useAuthStore } from "@/store/auth-store";
 import type { Employee } from "@/services/employee-service";
+
+const CSV_TEMPLATE_HEADER = "name,email,phone,cnic,gender,date_of_birth,department,designation,joining_date,employment_type,basic_salary,allowances,address\n";
+const CSV_TEMPLATE_ROW    = "John Doe,john@example.com,03001234567,12345-6789012-3,male,1990-01-15,Engineering,Software Engineer,2024-01-01,full_time,80000,20000,123 Main St\n";
+
+interface ImportResult { imported: number; skipped: number; errors: string[] }
+
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const token = useAuthStore((s) => s.token);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function downloadTemplate() {
+    const blob = new Blob([CSV_TEMPLATE_HEADER + CSV_TEMPLATE_ROW], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "employees-import-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImport() {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_BASE_URL}/employees/import`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        body: fd,
+      });
+      const json = (await res.json()) as { success?: boolean; data?: ImportResult; message?: string };
+      if (!res.ok) throw new Error(json.message ?? "Import failed");
+      setResult(json.data ?? null);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal title="Import Employees from CSV" onClose={onClose}>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
+          <p className="text-sm font-medium">Step 1 — Download template</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">Download the CSV template and fill it with employee data. Required columns: name, email.</p>
+          <Button variant="outline" className="mt-3 text-xs" onClick={downloadTemplate}>Download Template CSV</Button>
+        </div>
+
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
+          <p className="text-sm font-medium">Step 2 — Upload filled CSV</p>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" className="mt-2 text-sm" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+          {file && <p className="mt-1 text-xs text-[var(--muted)]">{file.name} · {(file.size / 1024).toFixed(1)} KB</p>}
+        </div>
+
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+        {result && (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4 space-y-2">
+            <div className="flex gap-4 text-sm">
+              <span className="font-medium text-emerald-600">✓ {result.imported} imported</span>
+              {result.skipped > 0 && <span className="font-medium text-amber-600">⚠ {result.skipped} skipped</span>}
+            </div>
+            {result.errors.length > 0 && (
+              <ul className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                {result.errors.map((err, i) => <li key={i} className="text-xs text-red-600">• {err}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button onClick={() => void handleImport()} disabled={!file || loading}>
+            {loading ? "Importing…" : "Import"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 interface PaginatedResponse<T> {
   data: T[];
@@ -40,11 +130,13 @@ export function EmployeesPage() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
   const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
+  const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["employees", page, search],
@@ -119,9 +211,12 @@ export function EmployeesPage() {
               {exporting ? "Exporting..." : "Export CSV"}
             </Button>
             {canManage && (
-              <Link to="/employees/new">
-                <Button className="shrink-0">+ Add Employee</Button>
-              </Link>
+              <>
+                <Button variant="outline" onClick={() => setImportOpen(true)} className="shrink-0">Import CSV</Button>
+                <Link to="/employees/new">
+                  <Button className="shrink-0">+ Add Employee</Button>
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -263,6 +358,12 @@ export function EmployeesPage() {
           </div>
         )}
       </Card>
+      {importOpen && (
+        <ImportModal
+          onClose={() => setImportOpen(false)}
+          onDone={() => void queryClient.invalidateQueries({ queryKey: ["employees"] })}
+        />
+      )}
     </div>
   );
 }

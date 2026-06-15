@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { RoleKey } from "@/config/rbac";
 import { EmployeeDashboard } from "./employee-dashboard";
 import { ManagementDashboard } from "./management-dashboard";
+import { DepartmentManagerDashboard } from "./department-manager-dashboard";
 
 type DashboardComponent = ComponentType<{ roleName: string }>;
 
@@ -26,7 +27,7 @@ export const DASHBOARD_REGISTRY: Record<string, DashboardComponent> = {
   payroll_manager: ManagementDashboard,
   attendance_manager: ManagementDashboard,
   recruiter: ManagementDashboard,
-  department_manager: ManagementDashboard,
+  department_manager: DepartmentManagerDashboard,
   it_support: ManagementDashboard,
 };
 

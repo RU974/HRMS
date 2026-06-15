@@ -13,21 +13,30 @@ class Leave extends Model
         'type',
         'from_date',
         'to_date',
+        'half_day',
+        'reason',
         'status',
         'approval_step',
     ];
 
     protected $casts = [
+        'half_day'      => 'boolean',
         'approval_step' => 'integer',
     ];
+
+    protected $appends = ['requested_days'];
 
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
     }
 
-    public function getRequestedDaysAttribute(): int
+    public function getRequestedDaysAttribute(): float
     {
-        return Carbon::parse($this->from_date)->diffInDays(Carbon::parse($this->to_date)) + 1;
+        if ($this->half_day) {
+            return 0.5;
+        }
+
+        return (float) (Carbon::parse($this->from_date)->diffInDays(Carbon::parse($this->to_date)) + 1);
     }
 }

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(composer install)",
+      "Bash(composer dump-autoload)"
+    ]
+  }
+}

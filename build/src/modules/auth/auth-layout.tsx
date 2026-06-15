@@ -40,15 +40,6 @@ export function AuthLayout() {
         <div className="absolute right-[-60px] top-1/2 h-[340px] w-[340px] -translate-y-1/2 rounded-full border border-white/[0.03]" />
 
         <div className="relative z-10 flex h-full flex-col justify-between">
-          {/* brand logo */}
-          <div>
-            <img
-              src="/slingshot-logo.png"
-              alt="Slingshot HRMS"
-              className="h-14 w-auto object-contain brightness-0 invert"
-            />
-          </div>
-
           {/* hero copy — vertically centred */}
           <div className="my-auto max-w-[500px] py-10">
             <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300">
@@ -95,7 +86,7 @@ export function AuthLayout() {
 
           {/* bottom tagline */}
           <p className="text-[12px] tracking-wide text-slate-600">
-            © {new Date().getFullYear()} Slingshotteck · All rights reserved
+            © {new Date().getFullYear()} HRMS · All rights reserved
           </p>
         </div>
       </div>

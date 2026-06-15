@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveBalance;
+use App\Models\LeaveBlackout;
 use App\Models\LeaveType;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -233,13 +234,48 @@ class LeavePolicyService
             return;
         }
 
-        $requestedDays = $this->calculateRequestedDays($leave->from_date, $leave->to_date);
-        if ((int) $leaveType->min_request_days > 0 && $requestedDays < $leaveType->min_request_days) {
+        // Half-day validation
+        if ($leave->half_day && !$leaveType->allow_half_day) {
+            throw new RuntimeException(sprintf('Half-day leave is not allowed for %s.', $leaveType->name));
+        }
+
+        $requestedDays = $leave->half_day ? 0.5 : $this->calculateRequestedDays($leave->from_date, $leave->to_date);
+
+        if (!$leave->half_day && (int) $leaveType->min_request_days > 0 && $requestedDays < $leaveType->min_request_days) {
             throw new RuntimeException(sprintf('Leave requests for %s must be at least %d day(s).', $leaveType->name, $leaveType->min_request_days));
         }
 
-        if ((int) $leaveType->max_request_days > 0 && $requestedDays > $leaveType->max_request_days) {
+        if (!$leave->half_day && (int) $leaveType->max_request_days > 0 && $requestedDays > $leaveType->max_request_days) {
             throw new RuntimeException(sprintf('Leave requests for %s cannot exceed %d day(s).', $leaveType->name, $leaveType->max_request_days));
+        }
+
+        // Advance notice period enforcement
+        if ((int) $leaveType->notice_period_days > 0) {
+            $daysUntilStart = (int) Carbon::today()->diffInDays(Carbon::parse($leave->from_date), false);
+            if ($daysUntilStart < (int) $leaveType->notice_period_days) {
+                throw new RuntimeException(sprintf(
+                    'Leave requests for %s must be submitted at least %d day(s) in advance.',
+                    $leaveType->name,
+                    $leaveType->notice_period_days
+                ));
+            }
+        }
+
+        // Blackout date check
+        $blackout = LeaveBlackout::where(function ($q) use ($leaveType): void {
+            $q->whereNull('leave_type_id')->orWhere('leave_type_id', $leaveType->id);
+        })
+            ->where('start_date', '<=', $leave->to_date)
+            ->where('end_date', '>=', $leave->from_date)
+            ->first();
+
+        if ($blackout) {
+            throw new RuntimeException(sprintf(
+                'Leave dates overlap with a restricted period: %s (%s – %s).',
+                $blackout->name,
+                $blackout->start_date->toDateString(),
+                $blackout->end_date->toDateString()
+            ));
         }
 
         foreach ($this->segmentsForLeave($leave) as $segment) {

@@ -1,6 +1,7 @@
-import { apiClient } from "@/services/api-client";
+import { apiClient, API_BASE_URL } from "@/services/api-client";
+import { useAuthStore } from "@/store/auth-store";
 
-export type PayrollStatus = "pending" | "processed" | "paid" | "cancelled";
+export type PayrollStatus = "draft" | "reviewed" | "approved" | "pending" | "processed" | "paid" | "cancelled";
 
 export interface PayrollEmployee {
   id: number;
@@ -88,14 +89,66 @@ export interface Bonus {
   employee?: PayrollEmployee | null;
 }
 
+export type DeductionType = "tax" | "loan" | "penalty" | "provident_fund" | "pension" | "esi" | "professional_tax" | "other";
+
 export interface Deduction {
   id: number;
   employee_id: number;
   payroll_id?: number | null;
   title: string;
   amount: number | string;
-  type: "tax" | "loan" | "penalty" | "other";
+  type: DeductionType;
   effective_date: string;
+  notes?: string | null;
+  employee?: PayrollEmployee | null;
+}
+
+export interface TaxBracket {
+  id: number;
+  company_id?: number | null;
+  name: string;
+  min_income: number;
+  max_income?: number | null;
+  rate: number;
+  sort_order?: number;
+}
+
+export interface SalaryGrade {
+  id: number;
+  company_id?: number | null;
+  name: string;
+  min_salary: number;
+  max_salary: number;
+  basic_percent?: number;
+  hra_percent?: number;
+  transport_allowance?: number;
+  other_allowance?: number;
+  notes?: string | null;
+}
+
+export interface SalaryIncrement {
+  id: number;
+  employee_id: number;
+  effective_date: string;
+  old_salary: number;
+  new_salary: number;
+  increment_percent_computed?: number;
+  reason?: string | null;
+  notes?: string | null;
+  employee?: PayrollEmployee | null;
+}
+
+export interface LoanAdvance {
+  id: number;
+  employee_id: number;
+  company_id?: number | null;
+  title: string;
+  amount: number;
+  outstanding_balance: number;
+  emi_amount?: number | null;
+  start_date: string;
+  end_date?: string | null;
+  status: "active" | "completed" | "cancelled";
   notes?: string | null;
   employee?: PayrollEmployee | null;
 }
@@ -212,4 +265,75 @@ export function deletePayslip(id: number) {
 }
 export function createSalarySlipFromPayroll(payroll_id: number, issue_date: string) {
   return apiClient<Payslip>("/salary-slips/from-payroll", { method: "POST", body: JSON.stringify({ payroll_id, issue_date }) });
+}
+
+export function approvePayroll(id: number) {
+  return apiClient<PayrollRecord>(`/payroll/${id}/approve`, { method: "POST" });
+}
+
+export async function downloadBankExport(month: number, year: number): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const response = await fetch(`${API_BASE_URL}/payroll/bank-export?month=${month}&year=${year}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`Export failed (${response.status})`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payroll-${year}-${String(month).padStart(2, "0")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function listTaxBrackets() {
+  return apiClient<TaxBracket[]>("/tax-brackets");
+}
+export function createTaxBracket(payload: Omit<TaxBracket, "id" | "company_id">) {
+  return apiClient<TaxBracket>("/tax-brackets", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateTaxBracket(id: number, payload: Partial<Omit<TaxBracket, "id" | "company_id">>) {
+  return apiClient<TaxBracket>(`/tax-brackets/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteTaxBracket(id: number) {
+  return apiClient<null>(`/tax-brackets/${id}`, { method: "DELETE" });
+}
+
+export function listSalaryGrades() {
+  return apiClient<SalaryGrade[]>("/salary-grades");
+}
+export function createSalaryGrade(payload: Omit<SalaryGrade, "id" | "company_id">) {
+  return apiClient<SalaryGrade>("/salary-grades", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateSalaryGrade(id: number, payload: Partial<Omit<SalaryGrade, "id" | "company_id">>) {
+  return apiClient<SalaryGrade>(`/salary-grades/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteSalaryGrade(id: number) {
+  return apiClient<null>(`/salary-grades/${id}`, { method: "DELETE" });
+}
+
+export function listSalaryIncrements(filters: { employee_id?: number } = {}) {
+  return apiClient<PaginationMeta<SalaryIncrement>>(`/salary-increments${qs(filters)}`);
+}
+export function createSalaryIncrement(payload: Omit<SalaryIncrement, "id" | "employee" | "increment_percent_computed">) {
+  return apiClient<SalaryIncrement>("/salary-increments", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateSalaryIncrement(id: number, payload: Partial<Omit<SalaryIncrement, "id" | "employee" | "increment_percent_computed">>) {
+  return apiClient<SalaryIncrement>(`/salary-increments/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteSalaryIncrement(id: number) {
+  return apiClient<null>(`/salary-increments/${id}`, { method: "DELETE" });
+}
+
+export function listLoanAdvances(filters: { employee_id?: number; status?: string } = {}) {
+  return apiClient<PaginationMeta<LoanAdvance>>(`/loan-advances${qs(filters)}`);
+}
+export function createLoanAdvance(payload: Omit<LoanAdvance, "id" | "company_id" | "employee">) {
+  return apiClient<LoanAdvance>("/loan-advances", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateLoanAdvance(id: number, payload: Partial<Omit<LoanAdvance, "id" | "company_id" | "employee">>) {
+  return apiClient<LoanAdvance>(`/loan-advances/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteLoanAdvance(id: number) {
+  return apiClient<null>(`/loan-advances/${id}`, { method: "DELETE" });
 }

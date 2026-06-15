@@ -31,12 +31,33 @@ export interface DashboardEmployeeRow {
   joined_at: string | null;
 }
 
+export interface PerformanceSummary {
+  avg_goal_progress: number;
+  open_goals: number;
+  completed_goals: number;
+  kpi_achievement_rate: number;
+  open_appraisals: number;
+}
+
+export interface AttritionRiskEmployee {
+  id: number;
+  name: string;
+  department: string;
+  absent_days: number;
+  total_days: number;
+  absence_rate: number;
+}
+
 export interface DashboardInsights {
   as_of_date: string;
   attendance_trend: DashboardTrendPoint[];
   department_distribution: DashboardSlice[];
   leave_breakdown: DashboardSlice[];
   recent_employees: DashboardEmployeeRow[];
+  monthly_payroll_trend: DashboardSlice[];
+  headcount_trend: DashboardSlice[];
+  performance_summary: PerformanceSummary | null;
+  attrition_risk: AttritionRiskEmployee[];
 }
 
 export interface WorkspaceRole {

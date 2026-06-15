@@ -4,12 +4,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\EmployeePromotionController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DesignationController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\EmployeeDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\LeaveBlackoutController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\PayrollController;
@@ -43,6 +45,10 @@ use App\Http\Controllers\Recruitment\InterviewController as RecruitmentInterview
 use App\Http\Controllers\Recruitment\JobOpeningController as RecruitmentJobOpeningController;
 use App\Http\Controllers\Recruitment\OnboardingController as RecruitmentOnboardingController;
 use App\Http\Controllers\BiometricDeviceController;
+use App\Http\Controllers\TaxBracketController;
+use App\Http\Controllers\SalaryGradeController;
+use App\Http\Controllers\SalaryIncrementController;
+use App\Http\Controllers\LoanAdvanceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -156,8 +162,12 @@ $registerRoutes = function (): void {
             Route::get('employees/department/{departmentId}', [EmployeeController::class, 'getByDepartment']);
             Route::post('employees/bulk-action', [EmployeeController::class, 'bulkAction']);
             Route::get('employees/export/csv', [EmployeeController::class, 'export']);
+            Route::post('employees/import', [EmployeeController::class, 'import']);
             Route::post('employees/{id}/set-password', [EmployeeController::class, 'setUserPassword']);
             Route::apiResource('employees', EmployeeController::class);
+            Route::get('employees/{employeeId}/promotions', [EmployeePromotionController::class, 'index']);
+            Route::post('employees/{employeeId}/promotions', [EmployeePromotionController::class, 'store']);
+            Route::delete('employees/{employeeId}/promotions/{id}', [EmployeePromotionController::class, 'destroy']);
         });
 
         // Department routes
@@ -176,6 +186,7 @@ $registerRoutes = function (): void {
             Route::get('attendance/employee/{employeeId}', [AttendanceController::class, 'getByEmployee']);
             Route::get('attendance/monthly-stats/{employeeId}/{month}/{year}', [AttendanceController::class, 'getMonthlyStats']);
             Route::get('attendance/company-monthly-summary', [AttendanceController::class, 'companyMonthlySummary']);
+            Route::get('attendance/team-daily', [AttendanceController::class, 'teamDailyView']);
             Route::get('attendance/corrections', [AttendanceController::class, 'listCorrections']);
             Route::post('attendance/{attendance}/request-correction', [AttendanceController::class, 'requestCorrection']);
             Route::post('attendance/{attendance}/review-correction', [AttendanceController::class, 'reviewCorrection']);
@@ -227,8 +238,14 @@ $registerRoutes = function (): void {
             Route::middleware('permission:payroll:manage_settings')->group(function () {
                 Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
                 Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
+                Route::post('payroll/{id}/approve', [PayrollController::class, 'approvePayroll']);
+                Route::get('payroll/bank-export', [PayrollController::class, 'bankExport']);
                 Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
                 Route::apiResource('payroll-processings', PayrollProcessingController::class);
+                Route::apiResource('tax-brackets', TaxBracketController::class)->only(['index', 'store', 'update', 'destroy']);
+                Route::apiResource('salary-grades', SalaryGradeController::class)->only(['index', 'store', 'update', 'destroy']);
+                Route::apiResource('salary-increments', SalaryIncrementController::class)->only(['index', 'store', 'update', 'destroy']);
+                Route::apiResource('loan-advances', LoanAdvanceController::class)->only(['index', 'store', 'update', 'destroy']);
             });
         });
 
@@ -242,6 +259,9 @@ $registerRoutes = function (): void {
         // are rejected at the route level before reaching any controller logic.
         Route::middleware('permission:leaves:create|leaves:view|leaves:approve|leaves:manage_settings')
             ->group(function () {
+                Route::get('leaves/team-calendar',   [LeaveController::class, 'teamCalendar']);
+                Route::get('leaves/balance-summary', [LeaveController::class, 'balanceSummary']);
+                Route::get('leaves/encashment',      [LeaveController::class, 'encashment']);
                 Route::apiResource('leaves', LeaveController::class);
             });
 
@@ -263,6 +283,8 @@ $registerRoutes = function (): void {
             ->group(function () {
                 Route::apiResource('leave-types', LeaveTypeController::class)
                     ->only(['store', 'update', 'destroy']);
+                Route::apiResource('leave-blackouts', LeaveBlackoutController::class)
+                    ->only(['index', 'store', 'destroy']);
             });
 
         // Recruitment routes — Enterprise feature

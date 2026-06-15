@@ -11,6 +11,9 @@ use App\Models\Leave;
 use App\Models\LeaveType;
 use App\Models\NotificationItem;
 use App\Models\Payroll;
+use App\Models\PerformanceAppraisal;
+use App\Models\PerformanceGoal;
+use App\Models\PerformanceKpi;
 use App\Models\Payslip;
 use App\Models\User;
 use App\Services\LeavePolicyService;
@@ -353,12 +356,21 @@ class DashboardController extends Controller
             ])
             ->values();
 
+        $monthlyPayrollTrend = $this->getMonthlyPayrollTrend($companyId, $request);
+        $headcountTrend      = $this->getHeadcountTrend($companyId, $request);
+        $performanceSummary  = $this->getPerformanceSummary($companyId);
+        $attritionRisk       = $this->getAttritionRisk($companyId);
+
         return $this->ok([
             'as_of_date' => $today->toDateString(),
             'attendance_trend' => $attendanceTrend,
             'department_distribution' => $departmentDistribution,
             'leave_breakdown' => $leaveBreakdown,
             'recent_employees' => $recentEmployees,
+            'monthly_payroll_trend' => $monthlyPayrollTrend,
+            'headcount_trend' => $headcountTrend,
+            'performance_summary' => $performanceSummary,
+            'attrition_risk' => $attritionRisk,
         ]);
     }
 
@@ -417,6 +429,116 @@ class DashboardController extends Controller
             })
             ->values()
             ->all();
+    }
+
+    private function getMonthlyPayrollTrend(?int $companyId, Request $request): array
+    {
+        $today = Carbon::today();
+
+        return collect(range(5, 0))->map(function (int $offset) use ($today, $companyId, $request): array {
+            $date  = $today->copy()->subMonths($offset);
+            $month = $date->month;
+            $year  = $date->year;
+
+            $query = Payroll::query()
+                ->when($companyId, fn ($q) => $q->whereHas('employee.user', fn ($uq) => $uq->where('company_id', $companyId)))
+                ->whereMonth('payment_date', $month)
+                ->whereYear('payment_date', $year);
+
+            $this->applyManagedEmployeeScope($request, $query, 'employee');
+
+            return [
+                'label' => $date->format('M y'),
+                'value' => round((float) $query->sum('net_salary'), 0),
+            ];
+        })->values()->all();
+    }
+
+    private function getHeadcountTrend(?int $companyId, Request $request): array
+    {
+        $today = Carbon::today();
+
+        return collect(range(5, 0))->map(function (int $offset) use ($today, $companyId, $request): array {
+            $endOfMonth = $today->copy()->subMonths($offset)->endOfMonth();
+
+            $query = Employee::query()
+                ->where('status', 'active')
+                ->where('created_at', '<=', $endOfMonth)
+                ->when($companyId, fn ($q) => $q->whereHas('user', fn ($uq) => $uq->where('company_id', $companyId)));
+
+            $this->applyManagedEmployeeScope($request, $query);
+
+            return [
+                'label' => $endOfMonth->format('M y'),
+                'value' => $query->count(),
+            ];
+        })->values()->all();
+    }
+
+    private function getPerformanceSummary(?int $companyId): array
+    {
+        $companyScope = function ($query) use ($companyId): void {
+            if ($companyId) {
+                $query->whereHas('employee.user', fn ($q) => $q->where('company_id', $companyId));
+            }
+        };
+
+        $goalBase        = PerformanceGoal::query()->tap($companyScope);
+        $avgProgress     = round((float) (clone $goalBase)->avg('progress') ?? 0);
+        $openGoals       = (clone $goalBase)->whereNotIn('status', ['completed'])->count();
+        $completedGoals  = (clone $goalBase)->where('status', 'completed')->count();
+
+        $kpiBase            = PerformanceKpi::query()->tap($companyScope);
+        $totalKpis          = (clone $kpiBase)->count();
+        $achievedKpis       = (clone $kpiBase)->whereRaw('current_value >= target_value')->count();
+        $kpiAchievementRate = $totalKpis > 0 ? round(($achievedKpis / $totalKpis) * 100) : 0;
+
+        $openAppraisals = PerformanceAppraisal::query()->tap($companyScope)->count();
+
+        return [
+            'avg_goal_progress'   => $avgProgress,
+            'open_goals'          => $openGoals,
+            'completed_goals'     => $completedGoals,
+            'kpi_achievement_rate' => $kpiAchievementRate,
+            'open_appraisals'     => $openAppraisals,
+        ];
+    }
+
+    private function getAttritionRisk(?int $companyId): array
+    {
+        $cutoff = Carbon::today()->subDays(30)->toDateString();
+
+        $rows = DB::table('employees as e')
+            ->join('users as u', 'u.id', '=', 'e.user_id')
+            ->leftJoin('departments as d', 'd.id', '=', 'e.department_id')
+            ->leftJoin('attendances as a', function ($join) use ($cutoff): void {
+                $join->on('a.employee_id', '=', 'e.id')
+                    ->where('a.date', '>=', $cutoff);
+            })
+            ->where('e.status', 'active')
+            ->when($companyId, fn ($q) => $q->where('u.company_id', $companyId))
+            ->groupBy('e.id', 'e.name', 'd.name')
+            ->select([
+                'e.id',
+                'e.name',
+                DB::raw("COALESCE(d.name, 'Unassigned') as department"),
+                DB::raw('COUNT(a.id) as total_days'),
+                DB::raw("SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) as absent_days"),
+            ])
+            ->havingRaw('COUNT(a.id) >= 5')
+            ->havingRaw("SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) * 100 / COUNT(a.id) >= 20")
+            ->orderByRaw("SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) * 100 / COUNT(a.id) DESC")
+            ->limit(5)
+            ->get();
+
+        return $rows->map(fn ($row) => [
+            'id'           => $row->id,
+            'name'         => $row->name,
+            'department'   => $row->department,
+            'absent_days'  => (int) $row->absent_days,
+            'total_days'   => (int) $row->total_days,
+            'absence_rate' => $row->total_days > 0 ? round(((int) $row->absent_days / (int) $row->total_days) * 100) : 0,
+        ])->values()->all();
     }
 
     private function announcementVisibleToUser(Announcement $announcement, User $user): bool

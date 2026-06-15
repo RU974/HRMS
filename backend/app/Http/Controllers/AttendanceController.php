@@ -62,12 +62,13 @@ class AttendanceController extends Controller
     {
         $this->authorizePermission($request, 'attendance:manage_settings');
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'date' => 'required|date',
-            'check_in' => 'nullable|date_format:H:i',
-            'check_out' => 'nullable|date_format:H:i',
-            'status' => 'nullable|in:present,absent,leave,late',
-            'notes' => 'nullable|string',
+            'employee_id'    => 'required|exists:employees,id',
+            'date'           => 'required|date',
+            'check_in'       => 'nullable|date_format:H:i',
+            'check_out'      => 'nullable|date_format:H:i',
+            'status'         => 'nullable|in:present,absent,leave,late',
+            'work_from_home' => 'nullable|boolean',
+            'notes'          => 'nullable|string',
         ]);
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
@@ -108,11 +109,12 @@ class AttendanceController extends Controller
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
         $validated = $request->validate([
-            'date' => 'sometimes|date',
-            'check_in' => 'nullable|date_format:H:i',
-            'check_out' => 'nullable|date_format:H:i',
-            'status' => 'sometimes|in:present,absent,leave,late',
-            'notes' => 'nullable|string',
+            'date'           => 'sometimes|date',
+            'check_in'       => 'nullable|date_format:H:i',
+            'check_out'      => 'nullable|date_format:H:i',
+            'status'         => 'sometimes|in:present,absent,leave,late',
+            'work_from_home' => 'nullable|boolean',
+            'notes'          => 'nullable|string',
         ]);
 
         $date = Carbon::parse($validated['date'] ?? $attendance->date)->toDateString();
@@ -337,6 +339,59 @@ class AttendanceController extends Controller
             'leave' => (int) $rows->where('status', 'leave')->sum('count'),
             'late' => (int) $rows->where('status', 'late')->sum('count'),
         ]);
+    }
+
+    public function teamDailyView(Request $request)
+    {
+        $this->authorizePermission($request, 'attendance:approve');
+        ['date' => $date] = $request->validate(['date' => 'required|date']);
+
+        $user = $request->user();
+        $companyId = $user?->company_id;
+        $date = Carbon::parse($date)->toDateString();
+
+        $employeeQuery = Employee::with(['department'])
+            ->where('status', 'active');
+
+        if ($companyId) {
+            $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+        }
+
+        // Department managers: scope to their own department
+        if (!$user?->can('attendance:manage_settings') && $user?->can('attendance:approve')) {
+            $mgr = Employee::where('user_id', $user->id)->first();
+            if ($mgr?->department_id) {
+                $employeeQuery->where('department_id', $mgr->department_id);
+            }
+        }
+
+        $employees = $employeeQuery->orderBy('name')->get();
+        $ids = $employees->pluck('id');
+
+        $attendances = Attendance::whereDate('date', $date)
+            ->whereIn('employee_id', $ids)
+            ->get()->keyBy('employee_id');
+
+        $month = Carbon::parse($date)->month;
+        $year  = Carbon::parse($date)->year;
+        $monthlyAbsences = Attendance::whereMonth('date', $month)
+            ->whereYear('date', $year)
+            ->whereIn('employee_id', $ids)
+            ->where('status', 'absent')
+            ->selectRaw('employee_id, COUNT(*) as count')
+            ->groupBy('employee_id')
+            ->pluck('count', 'employee_id');
+
+        $result = $employees->map(fn ($emp) => [
+            'employee_id'      => $emp->id,
+            'name'             => $emp->name,
+            'department'       => $emp->department?->name,
+            'designation'      => $emp->designation,
+            'attendance'       => $attendances->get($emp->id),
+            'monthly_absences' => (int) ($monthlyAbsences->get($emp->id) ?? 0),
+        ]);
+
+        return $this->ok($result);
     }
 
     public function getPolicy(Request $request)

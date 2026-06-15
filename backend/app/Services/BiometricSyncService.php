@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Services\AttendanceCalculator;
+use App\Models\AttendancePolicy;
 use App\Models\BiometricDevice;
 use App\Models\BiometricSyncLog;
+use App\Models\Employee;
 use App\Models\EmployeeDeviceMapping;
 use Carbon\Carbon;
 
@@ -212,8 +215,17 @@ class BiometricSyncService
         } else {
             if (!$attendance->check_in) {
                 $attendance->check_in = $timestamp;
+
+                // Derive late/present status from shift + policy
+                $policy = AttendancePolicy::query()->first();
+                $shift  = Employee::find($employeeId)?->shift;
+                $attendance->status = (new AttendanceCalculator())->deriveStatusFromCheckIn(
+                    $policy,
+                    $shift,
+                    $timestamp->toDateTimeString(),
+                    'present'
+                );
             }
-            $attendance->check_out = $timestamp;
         }
 
         if (!$attendance->status) {

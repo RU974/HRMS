@@ -21,6 +21,7 @@ class Employee extends Model
         'date_of_birth',
         'gender',
         'address',
+        'emergency_contacts',
         'employee_number',
         'joining_date',
         'employment_type',
@@ -34,6 +35,10 @@ class Employee extends Model
         'designation',
         'salary',
         'status',
+    ];
+
+    protected $casts = [
+        'emergency_contacts' => 'array',
     ];
 
     public function department(): BelongsTo
@@ -69,5 +74,10 @@ class Employee extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(EmployeeDocument::class);
+    }
+
+    public function promotions(): HasMany
+    {
+        return $this->hasMany(EmployeePromotion::class);
     }
 }
