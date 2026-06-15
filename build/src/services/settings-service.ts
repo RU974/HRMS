@@ -144,3 +144,48 @@ export function deleteLicense(id: string) {
 export function activateLicense(key: string) {
   return apiClient<LicenseItem>("/settings/licenses/activate", { method: "POST", body: JSON.stringify({ license_key: key }) });
 }
+
+// ─── Super Admin: per-company license overview ────────────────────────────────
+
+/**
+ * One row in the Super Admin company overview table.
+ * Matches the shape returned by LicenseService::allCompanyUsage().
+ */
+export type CompanyLicenseUsage = {
+  company_id:      string;
+  company_name:    string;
+  total_employees: number;
+  total_users:     number;
+  /** The company's active license, or null if none has been issued yet. */
+  license:         LicenseItem | null;
+};
+
+/**
+ * Top-level summary counters returned alongside the per-company rows.
+ */
+export type CompanyLicenseSummary = {
+  total_companies: number;
+  /** Companies with status = active */
+  licensed:        number;
+  /** Companies with status = trial */
+  trial:           number;
+  /** Active licenses expiring within 30 days */
+  expiring_soon:   number;
+  /** Companies with status = expired */
+  expired:         number;
+  /** Companies that have no license record at all */
+  no_license:      number;
+};
+
+export type AllCompanyUsageResponse = {
+  summary:   CompanyLicenseSummary;
+  companies: CompanyLicenseUsage[];
+};
+
+/**
+ * Fetch the full company usage snapshot.
+ * Only callable by Super Admin — backend returns 403 for all other roles.
+ */
+export function getAllCompanyUsage() {
+  return apiClient<AllCompanyUsageResponse>("/settings/licenses/all-usage");
+}

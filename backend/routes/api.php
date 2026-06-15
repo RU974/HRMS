@@ -117,7 +117,9 @@ $registerRoutes = function (): void {
                 Route::get('settings/system-logs', [SystemLogController::class, 'index']);
                 Route::get('settings/system-logs/{id}', [SystemLogController::class, 'show']);
             });
-            // Licensing
+            // Licensing — custom routes must come before apiResource so Laravel
+            // does not treat "usage", "all-usage", or "activate" as {license} UUID segments.
+            Route::get('settings/licenses/all-usage', [LicenseController::class, 'allCompanyUsage']);
             Route::get('settings/licenses/usage', [LicenseController::class, 'usage']);
             Route::post('settings/licenses/activate', [LicenseController::class, 'activate']);
             Route::apiResource('settings/licenses', LicenseController::class);

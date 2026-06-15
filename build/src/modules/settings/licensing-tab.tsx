@@ -4,18 +4,26 @@ import {
   ShieldCheck, Key, Users, Building2, Zap, Check, Copy,
   AlertTriangle, Clock, Crown, Star, Rocket, ChevronDown,
   X, Edit2, Plus, CheckCircle2, XCircle, Calendar, RefreshCw,
+  TrendingUp,
 } from "lucide-react";
 import {
   LicenseEdition,
   LicenseStatus,
   LicenseItem,
   LicenseUsage,
+  CompanyItem,
+  CompanyLicenseUsage,
+  AllCompanyUsageResponse,
   activateLicense,
   createLicense,
+  getAllCompanyUsage,
   getLicenseUsage,
   listLicenses,
+  listCompanies,
   updateLicense,
 } from "@/services/settings-service";
+import { useAuthStore } from "@/store/auth-store";
+import { isSuperAdminRole } from "@/config/rbac";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const inputCls = "w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/10 placeholder:text-[var(--muted)]";
@@ -403,14 +411,24 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
 
 // ─── Issue / Edit modal ───────────────────────────────────────────────────────
 function IssueModal({
-  open, onClose, onSuccess, license,
+  open, onClose, onSuccess, license, isSuperAdmin = false,
+  prefillCompanyId = "", prefillCompanyName = "",
 }: {
-  open: boolean; onClose: () => void; onSuccess: () => void; license?: LicenseItem;
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  license?: LicenseItem;
+  isSuperAdmin?: boolean;
+  prefillCompanyId?: string;
+  prefillCompanyName?: string;
 }) {
+  // NOTE: This component is mounted with a `key` prop at the call site so that
+  // React remounts it fresh whenever the target license or prefill company changes.
+  // That means useState here always runs with the correct initial values.
   const [form, setForm] = useState({
-    licensee_name:  license?.licensee_name  ?? "",
+    licensee_name:  license?.licensee_name  ?? prefillCompanyName,
     licensee_email: license?.licensee_email ?? "",
-    edition:        license?.edition        ?? "Professional" as LicenseEdition,
+    edition:        (license?.edition ?? "Professional") as LicenseEdition,
     max_employees:  String(license?.max_employees ?? 50),
     max_users:      String(license?.max_users     ?? 20),
     expires_at:     license?.expires_at?.slice(0, 10) ?? "",
@@ -419,22 +437,41 @@ function IssueModal({
     features:       Array.isArray(license?.features)
       ? license.features.join(", ")
       : (license?.features as string | undefined) ?? "",
+    // Prefer license's own company when editing, otherwise use prefill from row
+    company_id: license?.company?.id ?? prefillCompanyId,
   });
   const [errMsg, setErrMsg] = useState("");
 
+  // Fetch the company list only when the modal is open and the caller is Super Admin
+  // and we are issuing a new license (not editing an existing one).
+  const companiesQuery = useQuery({
+    queryKey: ["settings", "companies"],
+    queryFn:  listCompanies,
+    enabled:  open && isSuperAdmin && !license,
+    staleTime: 60_000,
+  });
+
+  const companies: CompanyItem[] = companiesQuery.data ?? [];
+
   const mutation = useMutation({
     mutationFn: () => {
-      const payload = {
+      const payload: Record<string, unknown> = {
         licensee_name:  form.licensee_name,
         licensee_email: form.licensee_email,
         edition:        form.edition,
         max_employees:  Number(form.max_employees),
         max_users:      Number(form.max_users),
         expires_at:     form.expires_at || null,
-        issued_by:      form.issued_by || null,
+        issued_by:      form.issued_by  || null,
         support_email:  form.support_email || null,
         features:       form.features.split(",").map((f) => f.trim()).filter(Boolean),
       };
+
+      // Only attach company_id when issuing a new license as Super Admin
+      if (!license && isSuperAdmin && form.company_id) {
+        payload.company_id = form.company_id;
+      }
+
       return license
         ? updateLicense(license.id, payload)
         : createLicense(payload);
@@ -452,6 +489,10 @@ function IssueModal({
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((p) => ({ ...p, [k]: e.target.value }));
 
+  // Super Admin must pick a company before issuing
+  const missingCompany = isSuperAdmin && !license && !form.company_id;
+  const canSubmit = !!form.licensee_name && !!form.licensee_email && !missingCompany && !mutation.isPending;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -463,6 +504,39 @@ function IssueModal({
           </button>
         </div>
         <div className="p-5 space-y-4">
+
+          {/* ── Company picker — Super Admin only, new licenses only ── */}
+          {isSuperAdmin && !license && (
+            <div className="space-y-1.5">
+              <label className={labelCls}>
+                Company <span className="text-rose-500">*</span>
+              </label>
+              {companiesQuery.isLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--muted)]">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--muted)] border-t-transparent" />
+                  Loading companies…
+                </div>
+              ) : (
+                <select
+                  className={inputCls}
+                  value={form.company_id}
+                  onChange={set("company_id")}
+                >
+                  <option value="">— Select a company —</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {missingCompany && (
+                <p className="text-[11px] text-rose-500">Please select a company before issuing a license.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Licensee name + email ── */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Licensee Name</label>
@@ -473,6 +547,8 @@ function IssueModal({
               <input className={inputCls} type="email" placeholder="billing@acme.com" value={form.licensee_email} onChange={set("licensee_email")} />
             </div>
           </div>
+
+          {/* ── Edition + seat limits ── */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Edition</label>
@@ -491,6 +567,8 @@ function IssueModal({
               <input className={inputCls} type="number" min="1" value={form.max_users} onChange={set("max_users")} />
             </div>
           </div>
+
+          {/* ── Expiry + issued by ── */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Expires</label>
@@ -501,24 +579,34 @@ function IssueModal({
               <input className={inputCls} value={form.issued_by} onChange={set("issued_by")} />
             </div>
           </div>
+
+          {/* ── Support email ── */}
           <div className="space-y-1.5">
             <label className={labelCls}>Support Email</label>
             <input className={inputCls} type="email" value={form.support_email} onChange={set("support_email")} />
           </div>
+
+          {/* ── Features ── */}
           <div className="space-y-1.5">
             <label className={labelCls}>Features (comma-separated)</label>
             <textarea className={inputCls} rows={2} placeholder="payroll, attendance, leaves, performance" value={form.features} onChange={set("features")} />
           </div>
+
+          {/* ── Error ── */}
           {errMsg && (
             <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
               <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> {errMsg}
             </div>
           )}
+
+          {/* ── Actions ── */}
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--background)]">Cancel</button>
+            <button onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--background)]">
+              Cancel
+            </button>
             <button
               onClick={() => void mutation.mutate()}
-              disabled={!form.licensee_name || !form.licensee_email || mutation.isPending}
+              disabled={!canSubmit}
               className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               {mutation.isPending
@@ -573,37 +661,354 @@ function NoLicensePlaceholder({ onActivate, onIssue }: { onActivate: () => void;
   );
 }
 
+// ─── Super Admin — summary stat card ─────────────────────────────────────────
+function SummaryCard({
+  label, value, color, icon: Icon,
+}: {
+  label: string;
+  value: number;
+  color: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+      <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${color}`}>
+        <Icon className="h-4 w-4 text-white" />
+      </div>
+      <div>
+        <p className="text-xl font-black text-[var(--text)]">{value}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--muted)]">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Super Admin — company row in the overview table ─────────────────────────
+function CompanyLicenseRow({
+  row,
+  onIssue,
+  onEdit,
+}: {
+  row: CompanyLicenseUsage;
+  onIssue: (companyId: string, companyName: string) => void;
+  onEdit:  (license: LicenseItem) => void;
+}) {
+  const { license } = row;
+
+  const empPct  = license ? usagePct(row.total_employees, license.max_employees) : 0;
+  const userPct = license ? usagePct(row.total_users,     license.max_users)     : 0;
+
+  const barColor = (pct: number) =>
+    pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[var(--primary)]/30 hover:shadow-sm">
+      {/* Left: company info + license detail */}
+      <div className="min-w-0 space-y-3">
+        {/* Company name + status */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10">
+            <Building2 className="h-3.5 w-3.5 text-[var(--primary)]" />
+          </div>
+          <span className="text-sm font-bold text-[var(--text)] truncate">{row.company_name}</span>
+          {license
+            ? <StatusBadge status={license.status} />
+            : <span className="inline-flex items-center gap-1 rounded-full bg-[var(--border)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)]">No License</span>
+          }
+          {license?.days_remaining != null && license.days_remaining <= 30 && license.status === "active" && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              <AlertTriangle className="h-2.5 w-2.5" /> {license.days_remaining}d left
+            </span>
+          )}
+        </div>
+
+        {/* License key + edition */}
+        {license && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${(EDITION_CFG[license.edition] ?? EDITION_CFG.Starter).badge}`}>
+              {license.edition}
+            </span>
+            <code className="font-mono tracking-wider opacity-70">{license.license_key}</code>
+            {license.expires_at && (
+              <span className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                Expires {fmtDate(license.expires_at)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Seat usage bars */}
+        {license && (
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "Employees", used: row.total_employees, max: license.max_employees, pct: empPct },
+              { label: "Users",     used: row.total_users,     max: license.max_users,     pct: userPct },
+            ].map((s) => (
+              <div key={s.label}>
+                <div className="mb-1 flex items-center justify-between text-[10px]">
+                  <span className="font-semibold text-[var(--muted)]">{s.label}</span>
+                  <span className="text-[var(--muted)]">
+                    <strong className="text-[var(--text)]">{s.used}</strong>/{s.max} ({s.pct}%)
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${barColor(s.pct)}`}
+                    style={{ width: `${s.pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* No license — seat counts only */}
+        {!license && (
+          <p className="text-xs text-[var(--muted)]">
+            {row.total_employees} active employee{row.total_employees !== 1 ? "s" : ""} · {row.total_users} user{row.total_users !== 1 ? "s" : ""} · No license assigned
+          </p>
+        )}
+      </div>
+
+      {/* Right: action buttons */}
+      <div className="flex flex-col items-end justify-center gap-2">
+        {license ? (
+          <button
+            onClick={() => onEdit(license)}
+            className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
+          >
+            <Edit2 className="h-3 w-3" /> Edit
+          </button>
+        ) : (
+          <button
+            onClick={() => onIssue(row.company_id, row.company_name)}
+            className="flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+          >
+            <Plus className="h-3 w-3" /> Issue
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Super Admin — full company overview dashboard ────────────────────────────
+function SuperAdminDashboard({
+  data,
+  isLoading,
+  error,
+  onRefresh,
+  onIssueFor,
+  onEdit,
+}: {
+  data:       AllCompanyUsageResponse | undefined;
+  isLoading:  boolean;
+  error:      Error | null;
+  onRefresh:  () => void;
+  onIssueFor: (companyId: string, companyName: string) => void;
+  onEdit:     (license: LicenseItem) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "active" | "trial" | "expiring" | "expired" | "none">("all");
+
+  const summary  = data?.summary;
+  const companies = data?.companies ?? [];
+
+  // Filter + search
+  const visible = companies.filter((row) => {
+    const matchesSearch = row.company_name.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (filter === "all")      return true;
+    if (filter === "none")     return !row.license;
+    if (filter === "active")   return row.license?.status === "active";
+    if (filter === "trial")    return row.license?.status === "trial";
+    if (filter === "expired")  return row.license?.status === "expired";
+    if (filter === "expiring") {
+      return (
+        row.license?.status === "active" &&
+        row.license.days_remaining != null &&
+        row.license.days_remaining <= 30
+      );
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-5">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold text-[var(--text)]">Company License Overview</h2>
+          <p className="text-xs text-[var(--muted)]">
+            Track licenses issued across all companies. Issue, edit, or renew from here.
+          </p>
+        </div>
+        <button
+          onClick={onRefresh}
+          title="Refresh"
+          className="flex items-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--muted)] transition hover:bg-[var(--background)] hover:text-[var(--text)]"
+        >
+          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {/* ── Error ── */}
+      {error && !isLoading && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Could not load company data</p>
+            <p className="text-xs mt-0.5 opacity-80">{error.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Summary stat cards skeleton ── */}
+      {isLoading && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-16 animate-pulse rounded-2xl bg-[var(--border)]/40" />
+          ))}
+        </div>
+      )}
+
+      {/* ── Summary stat cards ── */}
+      {!isLoading && summary && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <SummaryCard label="Companies"    value={summary.total_companies} color="bg-slate-500"   icon={Building2}     />
+          <SummaryCard label="Licensed"     value={summary.licensed}        color="bg-emerald-500" icon={CheckCircle2}  />
+          <SummaryCard label="Trial"        value={summary.trial}           color="bg-blue-500"    icon={Clock}         />
+          <SummaryCard label="Expiring"     value={summary.expiring_soon}   color="bg-amber-500"   icon={AlertTriangle} />
+          <SummaryCard label="Expired"      value={summary.expired}         color="bg-rose-500"    icon={XCircle}       />
+          <SummaryCard label="No License"   value={summary.no_license}      color="bg-zinc-400"    icon={TrendingUp}    />
+        </div>
+      )}
+
+      {/* ── Search + filter bar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[180px]">
+          <ShieldCheck className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
+          <input
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2 pl-8 pr-3 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/10 placeholder:text-[var(--muted)]"
+            placeholder="Search companies…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {(["all", "active", "trial", "expiring", "expired", "none"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`rounded-xl border px-3 py-2 text-xs font-semibold capitalize transition ${
+              filter === f
+                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--primary)]/30 hover:text-[var(--text)]"
+            }`}
+          >
+            {f === "none" ? "No License" : f === "expiring" ? "Expiring Soon" : f.charAt(0).toUpperCase() + f.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Company rows skeleton ── */}
+      {isLoading && (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-28 animate-pulse rounded-2xl bg-[var(--border)]/40" />
+          ))}
+        </div>
+      )}
+
+      {/* ── Company rows ── */}
+      {!isLoading && visible.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--border)] py-12 text-center">
+          <Building2 className="mb-3 h-8 w-8 text-[var(--muted)]" />
+          <p className="text-sm font-semibold text-[var(--text)]">No companies match</p>
+          <p className="text-xs text-[var(--muted)]">Try a different search or filter.</p>
+        </div>
+      )}
+
+      {!isLoading && visible.length > 0 && (
+        <div className="space-y-3">
+          {visible.map((row) => (
+            <CompanyLicenseRow
+              key={row.company_id}
+              row={row}
+              onIssue={onIssueFor}
+              onEdit={onEdit}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main tab ─────────────────────────────────────────────────────────────────
 export function LicensingTab() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const isSuperAdmin = isSuperAdminRole(user);
+
   const [activateOpen, setActivateOpen] = useState(false);
   const [issueOpen, setIssueOpen]       = useState(false);
   const [editOpen, setEditOpen]         = useState(false);
   const [showPlans, setShowPlans]       = useState(false);
 
-  // Real API calls — replaces MOCK_LICENSE / MOCK_USAGE
+  // Pre-filled company when SA clicks "Issue" from a specific company row
+  const [prefillCompanyId,   setPrefillCompanyId]   = useState<string>("");
+  const [prefillCompanyName, setPrefillCompanyName] = useState<string>("");
+
+  // ── Super Admin: all-company usage ──────────────────────────────────────────
+  const allUsageQuery = useQuery({
+    queryKey: ["settings", "licenses-all-usage"],
+    queryFn:  getAllCompanyUsage,
+    enabled:  isSuperAdmin,
+    retry: 1,
+  });
+
+  // ── Company Admin: single-company usage ─────────────────────────────────────
   const usageQuery = useQuery({
     queryKey: ["settings", "license-usage"],
-    queryFn: getLicenseUsage,
+    queryFn:  getLicenseUsage,
+    enabled:  !isSuperAdmin,
     retry: 1,
   });
 
   const licensesQuery = useQuery({
     queryKey: ["settings", "licenses"],
-    queryFn: listLicenses,
+    queryFn:  listLicenses,
+    enabled:  !isSuperAdmin,
     retry: 1,
   });
 
+  // License being edited (used by both SA and Company Admin edit flow)
+  const [editingLicense, setEditingLicense] = useState<LicenseItem | undefined>(undefined);
+
   function invalidate() {
+    void qc.invalidateQueries({ queryKey: ["settings", "licenses-all-usage"] });
     void qc.invalidateQueries({ queryKey: ["settings", "license-usage"] });
     void qc.invalidateQueries({ queryKey: ["settings", "licenses"] });
   }
 
-  const isLoading = usageQuery.isLoading || licensesQuery.isLoading;
-  const error = usageQuery.error || licensesQuery.error;
+  // Open Issue modal pre-filled for a specific company (SA company-row button)
+  function handleIssueFor(companyId: string, companyName: string) {
+    setPrefillCompanyId(companyId);
+    setPrefillCompanyName(companyName);
+    setIssueOpen(true);
+  }
 
-  // Prefer the license from the usage endpoint (includes live usage counts),
-  // fall back to the first item in the licenses list.
+  // Open Edit modal for a specific license (SA company-row edit button)
+  function handleEdit(license: LicenseItem) {
+    setEditingLicense(license);
+    setEditOpen(true);
+  }
+
+  // Company Admin paths
+  const isLoading = usageQuery.isLoading || licensesQuery.isLoading;
+  const error     = usageQuery.error     || licensesQuery.error;
+
   const license: LicenseItem | null =
     usageQuery.data?.license ?? licensesQuery.data?.[0] ?? null;
 
@@ -613,6 +1018,78 @@ export function LicensingTab() {
     license,
   };
 
+  // ── Super Admin view ────────────────────────────────────────────────────────
+  if (isSuperAdmin) {
+    return (
+      <div className="space-y-6">
+        {/* Issue modal — may be pre-filled with a company from the row */}
+        <IssueModal
+          key={`issue-${prefillCompanyId}`}
+          open={issueOpen}
+          onClose={() => { setIssueOpen(false); setPrefillCompanyId(""); setPrefillCompanyName(""); }}
+          onSuccess={invalidate}
+          isSuperAdmin={true}
+          prefillCompanyId={prefillCompanyId}
+          prefillCompanyName={prefillCompanyName}
+        />
+
+        {/* Edit modal — editing a specific company's license */}
+        <IssueModal
+          key={`edit-${editingLicense?.id ?? "none"}`}
+          open={editOpen}
+          onClose={() => { setEditOpen(false); setEditingLicense(undefined); }}
+          onSuccess={invalidate}
+          license={editingLicense}
+          isSuperAdmin={true}
+        />
+
+        <SuperAdminDashboard
+          data={allUsageQuery.data}
+          isLoading={allUsageQuery.isLoading}
+          error={allUsageQuery.error as Error | null}
+          onRefresh={invalidate}
+          onIssueFor={handleIssueFor}
+          onEdit={handleEdit}
+        />
+
+        {/* Issue new license button — floating in action bar */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => { setPrefillCompanyId(""); setPrefillCompanyName(""); setIssueOpen(true); }}
+            className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" /> Issue New License
+          </button>
+        </div>
+
+        {/* Edition plans — useful for SA to compare plans when advising clients */}
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+          <button
+            onClick={() => setShowPlans((v) => !v)}
+            className="flex w-full items-center justify-between px-5 py-4 text-left transition hover:bg-[var(--background)] rounded-2xl"
+          >
+            <div className="flex items-center gap-2">
+              <Rocket className="h-4 w-4 text-[var(--primary)]" />
+              <p className="text-sm font-bold text-[var(--text)]">Edition Plans & Pricing</p>
+              <span className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-[10px] font-bold text-[var(--primary)]">Compare</span>
+            </div>
+            <ChevronDown className={`h-4 w-4 text-[var(--muted)] transition-transform ${showPlans ? "rotate-180" : ""}`} />
+          </button>
+          {showPlans && (
+            <div className="border-t border-[var(--border)] p-5">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {PLANS.map((p) => (
+                  <PlanCard key={p.edition} plan={p} current={false} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Company Admin view (unchanged) ──────────────────────────────────────────
   return (
     <div className="space-y-6">
       <ActivateModal
@@ -624,6 +1101,7 @@ export function LicensingTab() {
         open={issueOpen}
         onClose={() => setIssueOpen(false)}
         onSuccess={invalidate}
+        isSuperAdmin={false}
       />
       {license && (
         <IssueModal
@@ -631,6 +1109,7 @@ export function LicensingTab() {
           onClose={() => setEditOpen(false)}
           onSuccess={invalidate}
           license={license}
+          isSuperAdmin={false}
         />
       )}
 
