@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Approval;
+use App\Models\AuditLog;
 use App\Models\Workflow;
 use App\Services\ApprovalEngine;
 use App\Services\WorkflowEngine;
@@ -15,7 +16,7 @@ class ApprovalController extends Controller
         $this->authorizePermission($request, 'approvals:view');
 
         $query = Approval::query()
-            ->with(['workflow', 'currentStep'])
+            ->with(['workflow', 'currentStep.approvers'])
             ->latest();
 
         if ($companyId = $request->user()?->company_id) {
@@ -38,11 +39,19 @@ class ApprovalController extends Controller
         $this->authorizePermission($request, 'approvals:view');
 
         $approval = Approval::query()
-            ->with(['workflow', 'currentStep'])
+            ->with(['workflow', 'currentStep.approvers', 'requester:id,name,email'])
             ->when($request->user()?->company_id, function ($query, $companyId) {
                 $query->where('company_id', $companyId);
             })
             ->findOrFail($id);
+
+        $auditTrail = AuditLog::query()
+            ->where('approval_id', $approval->id)
+            ->with('user:id,name,email')
+            ->latest()
+            ->get();
+
+        $approval->setAttribute('audit_trail', $auditTrail);
 
         return $this->ok($approval);
     }
@@ -81,7 +90,7 @@ class ApprovalController extends Controller
         $this->authorizePermission($request, 'approvals:approve');
 
         $approval = Approval::query()
-            ->with(['workflow', 'currentStep'])
+            ->with(['workflow', 'currentStep.approvers'])
             ->when($request->user()?->company_id, function ($query, $companyId) {
                 $query->where('company_id', $companyId);
             })
@@ -90,6 +99,8 @@ class ApprovalController extends Controller
         if ($approval->status !== 'pending') {
             return $this->fail('Approval has already been completed.', 422);
         }
+
+        $this->ensureUserIsEligibleApprover($request, $approval);
 
         $validated = $request->validate([
             'notes' => 'nullable|string|max:1024',
@@ -109,7 +120,7 @@ class ApprovalController extends Controller
         $this->authorizePermission($request, 'approvals:approve');
 
         $approval = Approval::query()
-            ->with(['workflow', 'currentStep'])
+            ->with(['workflow', 'currentStep.approvers'])
             ->when($request->user()?->company_id, function ($query, $companyId) {
                 $query->where('company_id', $companyId);
             })
@@ -118,6 +129,8 @@ class ApprovalController extends Controller
         if ($approval->status !== 'pending') {
             return $this->fail('Approval has already been completed.', 422);
         }
+
+        $this->ensureUserIsEligibleApprover($request, $approval);
 
         $validated = $request->validate([
             'notes' => 'nullable|string|max:1024',
@@ -130,5 +143,28 @@ class ApprovalController extends Controller
         );
 
         return $this->ok($approval->load(['workflow', 'currentStep']), 'Approval rejected');
+    }
+
+    /**
+     * Beyond the blanket approvals:approve permission, confirm this user is actually one of
+     * the current step's resolved approvers (role/user/dynamic, including active delegates).
+     * Company Admin / Super Admin bypass via the Gate::before override already in place.
+     */
+    private function ensureUserIsEligibleApprover(Request $request, Approval $approval): void
+    {
+        $user = $request->user();
+        if ($user->hasAnyRole([\App\Models\User::ROLE_SUPER_ADMIN, \App\Models\User::ROLE_COMPANY_ADMIN])) {
+            return;
+        }
+
+        $step = $approval->currentStep;
+        if (!$step) {
+            return;
+        }
+
+        $eligible = $step->approverUserIds($approval->requested_by, $approval->company_id);
+        if ($eligible->isNotEmpty() && !$eligible->contains($user->id)) {
+            abort(403, 'You are not an approver for the current step of this request.');
+        }
     }
 }

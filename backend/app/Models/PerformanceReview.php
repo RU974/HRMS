@@ -10,6 +10,7 @@ class PerformanceReview extends Model
     protected $fillable = [
         'employee_id',
         'reviewer_id',
+        'template_id',
         'period',
         'rating',
         'summary',
@@ -27,5 +28,10 @@ class PerformanceReview extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewer_id');
+    }
+
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(PerformanceReviewTemplate::class, 'template_id');
     }
 }

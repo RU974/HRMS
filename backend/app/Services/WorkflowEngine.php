@@ -7,7 +7,6 @@ use App\Models\Workflow;
 use App\Models\Approval;
 use App\Models\ApprovalStep;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 
 class WorkflowEngine
 {
@@ -23,12 +22,14 @@ class WorkflowEngine
             'metadata' => $metadata,
         ]);
 
-        // set to first step
-        $first = $workflow->steps()->orderBy('step_order')->first();
+        // set to the first step whose conditions match the request metadata
+        $first = $this->firstMatchingStep($workflow, $metadata);
         if ($first) {
             $approval->current_step_id = $first->id;
-            $approval->save();
         }
+
+        $approval->due_at = $this->dueAtFor($workflow, $first);
+        $approval->save();
 
         // Dispatch approval created event
         Event::dispatch(new ApprovalCreated($approval));
@@ -41,9 +42,39 @@ class WorkflowEngine
         $current = $approval->currentStep;
         if (! $current) return null;
 
-        return ApprovalStep::where('workflow_id', $current->workflow_id)
+        $candidates = ApprovalStep::where('workflow_id', $current->workflow_id)
             ->where('step_order', '>', $current->step_order)
             ->orderBy('step_order')
-            ->first();
+            ->get();
+
+        $metadata = $approval->metadata ?? [];
+
+        foreach ($candidates as $candidate) {
+            if (ConditionEvaluator::matches($candidate->conditions, $metadata)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    public function dueAtFor(Workflow $workflow, ?ApprovalStep $step): ?\Illuminate\Support\Carbon
+    {
+        $hours = $step?->escalation_hours ?? $workflow->escalation_hours ?? config('approval.escalation_threshold_hours');
+
+        return $hours ? now()->addHours((int) $hours) : null;
+    }
+
+    private function firstMatchingStep(Workflow $workflow, array $metadata): ?ApprovalStep
+    {
+        $steps = $workflow->steps()->orderBy('step_order')->get();
+
+        foreach ($steps as $step) {
+            if (ConditionEvaluator::matches($step->conditions, $metadata)) {
+                return $step;
+            }
+        }
+
+        return null;
     }
 }

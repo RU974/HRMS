@@ -26,10 +26,12 @@ import { PerformanceReviewsPage } from "@/modules/performance/reviews-page";
 import { PerformanceKpisPage } from "@/modules/performance/kpis-page";
 import { PerformanceGoalsPage } from "@/modules/performance/goals-page";
 import { PerformanceAppraisalsPage } from "@/modules/performance/appraisals-page";
+import { PerformanceTemplatesPage } from "@/modules/performance/templates-page";
+import { PerformanceTrendPage } from "@/modules/performance/trend-page";
 import { AnnouncementsPage } from "@/modules/announcements";
 import { NotificationsPage } from "@/modules/notifications";
 import { ChatPage } from "@/modules/chat";
-import { ApprovalsPage, ApprovalDetailPage } from "@/modules/approvals";
+import { ApprovalsPage, ApprovalDetailPage, DelegationsPage } from "@/modules/approvals";
 import { WorkflowsPage } from "@/modules/workflows";
 import { ReportsPage } from "@/modules/reports";
 import { AttendanceReportsPage } from "@/modules/reports/attendance-reports-page";
@@ -73,6 +75,7 @@ export const appRouter = createBrowserRouter([
       { path: "recruitment/onboarding",    element: withPermission(<OnboardingPage />,            ["recruitment:view"]) },
       { path: "leaves",                    element: withPermission(<LeavesPage />,                ["leaves:view", "leaves:approve", "leaves:create"]) },
       { path: "approvals",                 element: withPermission(<ApprovalsPage />,             ["approvals:view", "approvals:manage_settings", "approvals:approve"]) },
+      { path: "approvals/delegations",     element: withPermission(<DelegationsPage />,           ["approvals:approve"]) },
       { path: "approvals/:id",             element: withPermission(<ApprovalDetailPage />,        ["approvals:view", "approvals:manage_settings", "approvals:approve"]) },
       { path: "workflows",                 element: withPermission(<WorkflowsPage />,             ["approvals:manage_settings"]) },
       { path: "employee-documents",        element: <EmployeeDocumentsPage /> },
@@ -85,6 +88,8 @@ export const appRouter = createBrowserRouter([
       { path: "performance/kpis",          element: withPermission(<PerformanceKpisPage />,       ["performance:view", "performance:manage_settings"]) },
       { path: "performance/goals",         element: withPermission(<PerformanceGoalsPage />,      ["performance:view", "performance:manage_settings"]) },
       { path: "performance/appraisals",    element: withPermission(<PerformanceAppraisalsPage />, ["performance:view", "performance:manage_settings"]) },
+      { path: "performance/templates",     element: withPermission(<PerformanceTemplatesPage />,  ["performance:view", "performance:manage_settings"]) },
+      { path: "performance/trend",         element: withPermission(<PerformanceTrendPage />,      ["performance:view", "performance:manage_settings"]) },
       { path: "announcements",             element: withPermission(<AnnouncementsPage />,         ["announcement:view", "announcement:edit"]) },
       { path: "notifications",             element: withPermission(<NotificationsPage />,         ["notification:view", "notification:edit"]) },
       { path: "chat",                      element: <ChatPage /> },

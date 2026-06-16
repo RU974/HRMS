@@ -42,6 +42,7 @@ class PerformanceReviewController extends Controller
             'employee_id' => 'required|exists:employees,id',
             'period' => 'required|string|max:100',
             'rating' => 'required|integer|min:1|max:5',
+            'template_id' => 'nullable|exists:performance_review_templates,id',
             'summary' => 'nullable|string|max:10000',
             'reviewer_id' => 'nullable|exists:users,id',
         ]);
@@ -71,6 +72,7 @@ class PerformanceReviewController extends Controller
             'employee_id' => 'sometimes|exists:employees,id',
             'period' => 'sometimes|string|max:100',
             'rating' => 'sometimes|integer|min:1|max:5',
+            'template_id' => 'nullable|exists:performance_review_templates,id',
             'summary' => 'nullable|string|max:10000',
             'reviewer_id' => 'nullable|exists:users,id',
         ]);

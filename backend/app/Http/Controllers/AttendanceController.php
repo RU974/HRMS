@@ -47,7 +47,10 @@ class AttendanceController extends Controller
         if ($request->has('year')) {
             $query->whereYear('date', $request->year);
         }
-        return $this->ok($query->paginate(15));
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
 
     public function show($id)

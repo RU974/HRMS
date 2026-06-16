@@ -9,6 +9,7 @@ class SalaryIncrement extends Model
 {
     protected $fillable = [
         'employee_id',
+        'appraisal_id',
         'effective_date',
         'old_salary',
         'new_salary',
@@ -34,5 +35,10 @@ class SalaryIncrement extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function appraisal(): BelongsTo
+    {
+        return $this->belongsTo(PerformanceAppraisal::class);
     }
 }

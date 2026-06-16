@@ -8,50 +8,47 @@ class ReportExportService
 {
     public function export(string $filename, array $columns, array $rows, string $format)
     {
+        $built = $this->buildExport($filename, $columns, $rows, $format);
+
+        return Response::make($built['content'], 200, [
+            'Content-Type' => $built['mime'],
+            'Content-Disposition' => 'attachment; filename="' . $built['filename'] . '"',
+        ]);
+    }
+
+    /**
+     * Builds the raw export payload (content/mime/filename) without wrapping
+     * it in an HTTP response, so it can also be used as a mail attachment.
+     */
+    public function buildExport(string $filename, array $columns, array $rows, string $format): array
+    {
         $format = strtolower(trim($format));
+
         if ($format === 'csv') {
-            return $this->csvResponse($filename, $columns, $rows);
+            return [
+                'content' => $this->toCsv($columns, $rows),
+                'mime' => 'text/csv; charset=UTF-8',
+                'filename' => $this->safeFileName($filename) . '.csv',
+            ];
         }
 
         if (in_array($format, ['excel', 'xlsx'], true)) {
-            return $this->excelResponse($filename, $columns, $rows);
+            return [
+                'content' => $this->toHtmlTable($columns, $rows),
+                'mime' => 'application/vnd.ms-excel; charset=UTF-8',
+                'filename' => $this->safeFileName($filename) . '.xls',
+            ];
         }
 
         if ($format === 'pdf') {
-            return $this->pdfResponse($filename, $columns, $rows);
+            return [
+                'content' => $this->toPdf($filename, $columns, $rows),
+                'mime' => 'application/pdf',
+                'filename' => $this->safeFileName($filename) . '.pdf',
+            ];
         }
 
         abort(422, 'Unsupported export format.');
-    }
-
-    private function csvResponse(string $filename, array $columns, array $rows)
-    {
-        $content = $this->toCsv($columns, $rows);
-
-        return Response::make($content, 200, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $this->safeFileName($filename) . '.csv"',
-        ]);
-    }
-
-    private function excelResponse(string $filename, array $columns, array $rows)
-    {
-        $content = $this->toHtmlTable($columns, $rows);
-
-        return Response::make($content, 200, [
-            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $this->safeFileName($filename) . '.xls"',
-        ]);
-    }
-
-    private function pdfResponse(string $filename, array $columns, array $rows)
-    {
-        $content = $this->toPdf($filename, $columns, $rows);
-
-        return Response::make($content, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $this->safeFileName($filename) . '.pdf"',
-        ]);
     }
 
     private function toCsv(array $columns, array $rows): string

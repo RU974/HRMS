@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { getPayrollReportSummary } from "@/services/report-service";
+import { listPayroll, type PayrollStatus } from "@/services/payroll-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
-import { downloadCsv, formatMonthYear, monthNames } from "@/modules/reports/report-utils";
+import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
+import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
+import { formatMonthYear, monthNames } from "@/modules/reports/report-utils";
 
 declare global { interface Window { Chart: any; } }
 
@@ -89,6 +91,7 @@ export function PayrollReportsPage() {
   );
 
   const rows = data ?? [];
+  const [drillStatus, setDrillStatus] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -110,20 +113,23 @@ export function PayrollReportsPage() {
               </select>
             </label>
           </div>
-          <Button variant="outline" onClick={() => downloadCsv(`payroll-${month}-${year}.csv`, ["Status","Records","Net Salary"], rows.map((r) => [r.status, r.total_records ?? 0, Number(r.total_net_salary ?? 0).toFixed(2)]))}>
-            Export CSV
-          </Button>
+          <ReportExportButtons path={`/reports/payroll?month=${month}&year=${year}`} filename={`payroll-report-${year}-${month}`} />
         </div>
 
         <h3 className="mb-3 text-base font-semibold">Summary — {formatMonthYear(month, year)}</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           {rows.length === 0 && <p className="col-span-3 text-sm text-[var(--muted)]">No data available.</p>}
           {rows.map((item) => (
-            <div key={item.status} className="rounded-2xl border border-[var(--border)] p-4">
+            <button
+              key={item.status}
+              type="button"
+              onClick={() => setDrillStatus(item.status)}
+              className="rounded-2xl border border-[var(--border)] p-4 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"
+            >
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] capitalize mb-1">{item.status}</p>
               <p className="text-2xl font-bold">{item.total_records ?? 0}</p>
               <p className="text-xs text-[var(--muted)]">{Number(item.total_net_salary ?? 0).toLocaleString()} net</p>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -132,6 +138,22 @@ export function PayrollReportsPage() {
           <PayrollTrendChart labels={trendLabels} amounts={trendAmounts} />
         </div>
       </Card>
+
+      {drillStatus && (
+        <ReportDrillDownPanel
+          title={`Payroll — ${drillStatus} (${formatMonthYear(month, year)})`}
+          queryKey={["reports", "payroll", "drilldown", drillStatus, month, year]}
+          queryFn={async () => (await listPayroll({ status: drillStatus as PayrollStatus, month, year })).data ?? []}
+          rowKey={(row) => row.id}
+          viewAllHref={`/payroll?status=${drillStatus}`}
+          onClose={() => setDrillStatus(null)}
+          columns={[
+            { header: "Employee", render: (row) => row.employee?.name ?? `#${row.employee_id}` },
+            { header: "Net Salary", render: (row) => Number(row.net_salary).toLocaleString() },
+            { header: "Payment Date", render: (row) => row.payment_date ?? "—" },
+          ]}
+        />
+      )}
 
       <ReportCrudSection reportType="payroll" />
     </div>

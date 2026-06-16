@@ -26,7 +26,7 @@ abstract class AbstractCandidateController extends Controller
     {
         $this->authorizePermission($request, 'recruitment:view');
 
-        $query = Candidate::with(['jobOpening', 'interviews'])->latest();
+        $query = Candidate::with(['jobOpening', 'interviews', 'employee'])->latest();
 
         if ($request->filled('job_opening_id')) {
             $query->where('job_opening_id', $request->job_opening_id);
@@ -100,14 +100,18 @@ abstract class AbstractCandidateController extends Controller
             'status' => $validated['status'] ?? 'active',
         ]);
 
-        return $this->ok($candidate->load('jobOpening'), 'Candidate created successfully', 201);
+        if ($candidate->stage === 'hired') {
+            $workflowService->convertToEmployee($candidate, $request->user()?->company_id);
+        }
+
+        return $this->ok($candidate->load(['jobOpening', 'employee']), 'Candidate created successfully', 201);
     }
 
     public function show($id)
     {
         $this->authorizePermission(request(), 'recruitment:view');
 
-        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load(['jobOpening', 'interviews']));
+        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load(['jobOpening', 'interviews', 'employee']));
     }
 
     public function update(Request $request, $id)
@@ -158,7 +162,11 @@ abstract class AbstractCandidateController extends Controller
 
         $candidate->update($validated);
 
-        return $this->ok($candidate->load(['jobOpening', 'interviews']), 'Candidate updated successfully');
+        if ($candidate->stage === 'hired') {
+            $workflowService->convertToEmployee($candidate, $request->user()?->company_id);
+        }
+
+        return $this->ok($candidate->load(['jobOpening', 'interviews', 'employee']), 'Candidate updated successfully');
     }
 
     public function destroy($id)

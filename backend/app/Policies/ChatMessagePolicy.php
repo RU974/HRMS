@@ -47,7 +47,17 @@ class ChatMessagePolicy
 
     private function isParticipant(User $user, ChatMessage $message): bool
     {
-        return $this->isSender($user, $message) || $this->isReceiver($user, $message);
+        if ($this->isSender($user, $message) || $this->isReceiver($user, $message)) {
+            return true;
+        }
+
+        if (!$message->conversation_id) {
+            return false;
+        }
+
+        return $message->conversation()->whereHas('participants', function ($query) use ($user): void {
+            $query->where('user_id', $user->id);
+        })->exists();
     }
 
     private function isSender(User $user, ChatMessage $message): bool

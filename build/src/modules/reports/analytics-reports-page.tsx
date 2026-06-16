@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { getReportsAnalytics, getLeaveReportSummary } from "@/services/report-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
-import { downloadCsv, formatMonthYear, monthNames } from "@/modules/reports/report-utils";
+import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
+import { formatMonthYear, monthNames } from "@/modules/reports/report-utils";
 
 const yearOptions = Array.from({ length: 5 }, (_, index) => new Date().getFullYear() - 2 + index).filter((year) => year >= 2000);
 
@@ -25,28 +26,7 @@ export function AnalyticsReportsPage() {
   });
 
   const leaveRows = useMemo(() => leaveQuery.data ?? [], [leaveQuery.data]);
-
-  const exportSummary = () => {
-    const analytics = analyticsQuery.data;
-    downloadCsv(
-      `analytics-summary-${month}-${year}.csv`,
-      ["Metric", "Value"],
-      [
-        ["Employees", analytics?.employees ?? 0],
-        ["Active Employees", analytics?.active_employees ?? 0],
-        ["Present", analytics?.attendance_present ?? 0],
-        ["Late", analytics?.attendance_late ?? 0],
-        ["Absent", analytics?.attendance_absent ?? 0],
-        ["Payroll Paid", analytics?.payroll_paid ?? 0],
-        ["Payroll Pending", analytics?.payroll_pending ?? 0],
-        ["Payroll Amount", analytics?.payroll_total_amount ?? 0],
-        ...leaveRows.map((row) => [
-          `Leave ${row.status}`,
-          row.count ?? 0,
-        ]),
-      ]
-    );
-  };
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-6">
@@ -71,31 +51,35 @@ export function AnalyticsReportsPage() {
               </select>
             </label>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={exportSummary}>Export CSV</Button>
-          </div>
+          <ReportExportButtons path={`/reports/analytics?month=${month}&year=${year}`} filename={`analytics-report-${year}-${month}`} />
         </div>
 
         <h3 className="text-lg font-semibold">HR Analytics ({formatMonthYear(month, year)})</h3>
+        <p className="mt-1 text-xs text-[var(--muted)]">Click a metric to drill into its detailed report.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Employees</p><p className="text-xl font-semibold">{analyticsQuery.data?.employees ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Active Employees</p><p className="text-xl font-semibold">{analyticsQuery.data?.active_employees ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Present</p><p className="text-xl font-semibold">{analyticsQuery.data?.attendance_present ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Late</p><p className="text-xl font-semibold">{analyticsQuery.data?.attendance_late ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Absent</p><p className="text-xl font-semibold">{analyticsQuery.data?.attendance_absent ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Payroll Paid</p><p className="text-xl font-semibold">{analyticsQuery.data?.payroll_paid ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Payroll Pending</p><p className="text-xl font-semibold">{analyticsQuery.data?.payroll_pending ?? 0}</p></div>
-          <div className="rounded-lg border border-[var(--border)]/70 p-3"><p className="text-xs text-[var(--muted)]">Payroll Amount</p><p className="text-xl font-semibold">${Number(analyticsQuery.data?.payroll_total_amount ?? 0).toLocaleString()}</p></div>
+          <button type="button" onClick={() => navigate("/reports/employees")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Employees</p><p className="text-xl font-semibold">{analyticsQuery.data?.employees ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/employees")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Active Employees</p><p className="text-xl font-semibold">{analyticsQuery.data?.active_employees ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/attendance")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Present</p><p className="text-xl font-semibold">{analyticsQuery.data?.attendance_present ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/attendance")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Late</p><p className="text-xl font-semibold">{analyticsQuery.data?.attendance_late ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/attendance")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Absent</p><p className="text-xl font-semibold">{analyticsQuery.data?.attendance_absent ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/payroll")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Payroll Paid</p><p className="text-xl font-semibold">{analyticsQuery.data?.payroll_paid ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/payroll")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Payroll Pending</p><p className="text-xl font-semibold">{analyticsQuery.data?.payroll_pending ?? 0}</p></button>
+          <button type="button" onClick={() => navigate("/reports/payroll")} className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"><p className="text-xs text-[var(--muted)]">Payroll Amount</p><p className="text-xl font-semibold">${Number(analyticsQuery.data?.payroll_total_amount ?? 0).toLocaleString()}</p></button>
         </div>
 
         <div className="mt-6">
           <h4 className="text-base font-semibold">Leave Breakdown</h4>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             {leaveRows.map((item) => (
-              <div key={item.status} className="rounded-lg border border-[var(--border)]/70 p-3">
+              <button
+                key={item.status}
+                type="button"
+                onClick={() => navigate("/reports/leave")}
+                className="rounded-lg border border-[var(--border)]/70 p-3 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"
+              >
                 <p className="text-xs uppercase text-[var(--muted)]">{item.status}</p>
                 <p className="text-xl font-semibold">{item.count ?? 0}</p>
-              </div>
+              </button>
             ))}
             {leaveRows.length === 0 && <p className="text-sm text-[var(--muted)]">No leave statistics available.</p>}
           </div>

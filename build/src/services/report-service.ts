@@ -1,4 +1,5 @@
-import { apiClient } from "./api-client";
+import { apiClient, API_BASE_URL } from "./api-client";
+import { useAuthStore } from "@/store/auth-store";
 
 export type ReportType = "attendance" | "employee" | "leave" | "payroll" | "custom";
 export type ReportStatus = "active" | "inactive";
@@ -9,6 +10,26 @@ export interface ReportUser {
   email: string;
 }
 
+export type ExportFormat = "csv" | "excel" | "pdf";
+
+export interface ReportSchedule {
+  enabled: boolean;
+  interval: "daily" | "weekly" | null;
+  recipients: string[];
+  format: ExportFormat;
+  timezone: string;
+  next_run_at: string | null;
+  last_sent_at: string | null;
+}
+
+export interface ReportScheduleUpdate {
+  enabled: boolean;
+  interval?: "daily" | "weekly";
+  recipients?: string[];
+  format?: ExportFormat;
+  timezone?: string;
+}
+
 export interface Report {
   id: number;
   name: string;
@@ -16,6 +37,7 @@ export interface Report {
   description?: string | null;
   status: ReportStatus;
   filters?: Record<string, unknown> | null;
+  schedule?: ReportSchedule;
   last_run_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -104,4 +126,43 @@ export function getLeaveReportSummary(month: number, year: number) {
 
 export function getReportsAnalytics(month: number, year: number) {
   return apiClient<ReportsAnalyticsSummary>(`/reports/analytics?month=${month}&year=${year}`);
+}
+
+export function updateReportSchedule(id: number, payload: ReportScheduleUpdate) {
+  return apiClient<Report>(`/reports/${id}/schedule`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+function parseExportFilename(header: string | null, fallback: string) {
+  if (!header) return fallback;
+  const match = /filename="?([^";]+)"?/.exec(header);
+  return match ? match[1] : fallback;
+}
+
+/**
+ * Downloads a backend-generated report export (CSV/Excel/PDF) by hitting the
+ * same summary endpoint with ?format=, bypassing apiClient's JSON parsing
+ * since the response body is a binary/text file, not a JSON envelope.
+ */
+export async function downloadReportExport(path: string, format: ExportFormat, fallbackFilename: string) {
+  const token = useAuthStore.getState().token;
+  const separator = path.includes("?") ? "&" : "?";
+  const response = await fetch(`${API_BASE_URL}${path}${separator}format=${format}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to export report (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const filename = parseExportFilename(response.headers.get("Content-Disposition"), fallbackFilename);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

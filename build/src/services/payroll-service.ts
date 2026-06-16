@@ -129,6 +129,7 @@ export interface SalaryGrade {
 export interface SalaryIncrement {
   id: number;
   employee_id: number;
+  appraisal_id?: number | null;
   effective_date: string;
   old_salary: number;
   new_salary: number;

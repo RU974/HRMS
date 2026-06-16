@@ -157,7 +157,12 @@ export function ApprovalsPage() {
                   <td className="p-3">
                     {approval.currentStep ? `#${approval.currentStep.step_order} ${approval.currentStep.approver_type}` : "N/A"}
                   </td>
-                  <td className="p-3 uppercase text-[var(--muted)]">{approval.status}</td>
+                  <td className="p-3 uppercase text-[var(--muted)]">
+                    {approval.status}
+                    {approval.escalated_at && (
+                      <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">ESCALATED</span>
+                    )}
+                  </td>
                   <td className="p-3">{approval.created_at?.slice(0, 10) ?? "-"}</td>
                   <td className="p-3 text-right">
                     <div className="flex flex-wrap justify-end gap-2">

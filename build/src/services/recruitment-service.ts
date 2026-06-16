@@ -23,9 +23,19 @@ export interface JobOpening {
   department?: { id: number; name: string } | null;
 }
 
+export interface ConvertedEmployee {
+  id: number;
+  name: string;
+  email: string;
+  designation?: string | null;
+  department_id?: number | null;
+  status: "active" | "inactive";
+}
+
 export interface Candidate {
   id: number;
   job_opening_id: number;
+  employee_id?: number | null;
   full_name: string;
   email: string;
   phone?: string | null;
@@ -40,6 +50,7 @@ export interface Candidate {
   onboarding_notes?: string | null;
   job_opening?: JobOpening | null;
   jobOpening?: JobOpening | null;
+  employee?: ConvertedEmployee | null;
 }
 
 export interface Interview {

@@ -33,6 +33,7 @@ class SalaryIncrementController extends Controller
 
         $validated = $request->validate([
             'employee_id'    => 'required|exists:employees,id',
+            'appraisal_id'   => 'nullable|exists:performance_appraisals,id',
             'effective_date' => 'required|date',
             'old_salary'     => 'required|numeric|min:0',
             'new_salary'     => 'required|numeric|min:0',

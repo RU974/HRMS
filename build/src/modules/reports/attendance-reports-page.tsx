@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { apiClient } from "@/services/api-client";
 import { getAttendanceReportSummary } from "@/services/report-service";
+import type { AttendanceItem } from "@/services/hr-management-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
-import { downloadCsv, formatMonthYear, monthNames } from "@/modules/reports/report-utils";
+import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
+import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
+import { formatMonthYear, monthNames } from "@/modules/reports/report-utils";
 
 declare global { interface Window { Chart: any; } }
 
@@ -90,6 +93,7 @@ export function AttendanceReportsPage() {
   }));
 
   const rows = data ?? [];
+  const [drillStatus, setDrillStatus] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -111,22 +115,25 @@ export function AttendanceReportsPage() {
               </select>
             </label>
           </div>
-          <Button variant="outline" onClick={() => downloadCsv(`attendance-${month}-${year}.csv`, ["Status","Count"], rows.map((r) => [r.status, r.count ?? 0]))}>
-            Export CSV
-          </Button>
+          <ReportExportButtons path={`/reports/attendance?month=${month}&year=${year}`} filename={`attendance-report-${year}-${month}`} />
         </div>
 
         <h3 className="mb-3 text-base font-semibold">Summary — {formatMonthYear(month, year)}</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {rows.length === 0 && <p className="col-span-4 text-sm text-[var(--muted)]">No data available.</p>}
           {rows.map((item) => (
-            <div key={item.status} className="rounded-2xl border border-[var(--border)] p-4">
+            <button
+              key={item.status}
+              type="button"
+              onClick={() => setDrillStatus(item.status)}
+              className="rounded-2xl border border-[var(--border)] p-4 text-left transition hover:border-[var(--primary)]/50 hover:bg-[var(--border)]/10"
+            >
               <div className="flex items-center gap-2 mb-1">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[item.status] ?? "#94a3b8" }} />
                 <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] capitalize">{item.status}</p>
               </div>
               <p className="text-2xl font-bold">{item.count ?? 0}</p>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -135,6 +142,28 @@ export function AttendanceReportsPage() {
           <AttendanceTrendChart trendRows={trendRows} />
         </div>
       </Card>
+
+      {drillStatus && (
+        <ReportDrillDownPanel
+          title={`Attendance — ${drillStatus} (${formatMonthYear(month, year)})`}
+          queryKey={["reports", "attendance", "drilldown", drillStatus, month, year]}
+          queryFn={async () => {
+            const response = await apiClient<{ data: AttendanceItem[] }>(
+              `/attendance?month=${month}&year=${year}&status=${drillStatus}&per_page=25`
+            );
+            return response.data ?? [];
+          }}
+          rowKey={(row) => row.id}
+          viewAllHref={`/attendance?status=${drillStatus}`}
+          onClose={() => setDrillStatus(null)}
+          columns={[
+            { header: "Employee", render: (row) => row.employee?.name ?? `#${row.employee_id}` },
+            { header: "Date", render: (row) => row.date },
+            { header: "Check In", render: (row) => row.check_in ?? "—" },
+            { header: "Check Out", render: (row) => row.check_out ?? "—" },
+          ]}
+        />
+      )}
 
       <ReportCrudSection reportType="attendance" />
     </div>

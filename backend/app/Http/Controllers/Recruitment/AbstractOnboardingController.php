@@ -26,7 +26,7 @@ abstract class AbstractOnboardingController extends Controller
     {
         $this->authorizePermission($request, 'recruitment:view');
 
-        $query = Candidate::with('jobOpening')
+        $query = Candidate::with(['jobOpening', 'employee'])
             ->where('stage', 'hired')
             ->latest();
 
@@ -77,14 +77,16 @@ abstract class AbstractOnboardingController extends Controller
             'onboarding_checklist' => $validated['onboarding_checklist'] ?? $candidate->onboarding_checklist,
         ]);
 
-        return $this->ok($candidate->load('jobOpening'), 'Onboarding created successfully', 201);
+        $workflowService->convertToEmployee($candidate, $request->user()?->company_id);
+
+        return $this->ok($candidate->load(['jobOpening', 'employee']), 'Onboarding created successfully', 201);
     }
 
     public function show($id)
     {
         $this->authorizePermission(request(), 'recruitment:view');
 
-        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load('jobOpening'));
+        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load(['jobOpening', 'employee']));
     }
 
     public function update(Request $request, $id)
@@ -114,7 +116,9 @@ abstract class AbstractOnboardingController extends Controller
             'stage' => 'hired',
         ]);
 
-        return $this->ok($candidate->load('jobOpening'), 'Onboarding updated successfully');
+        $workflowService->convertToEmployee($candidate, $request->user()?->company_id);
+
+        return $this->ok($candidate->load(['jobOpening', 'employee']), 'Onboarding updated successfully');
     }
 
     public function destroy($id)

@@ -6,7 +6,9 @@ use App\Events\LeaveRequested;
 use App\Events\LeaveStatusChanged;
 use App\Listeners\NotifyLeaveRequested;
 use App\Listeners\NotifyLeaveStatusChanged;
+use App\Models\ChatConversation;
 use App\Models\ChatMessage;
+use App\Policies\ChatConversationPolicy;
 use App\Policies\ChatMessagePolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -61,6 +63,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Explicitly register policies to avoid implicit resolution surprises
         Gate::policy(ChatMessage::class, ChatMessagePolicy::class);
+        Gate::policy(ChatConversation::class, ChatConversationPolicy::class);
 
         // Grant Super Admin unconditional access to all policies and gates.
         Gate::before(function ($user, $ability) {

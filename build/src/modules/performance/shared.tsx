@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
 
-export type PerformanceSectionKey = "reviews" | "kpis" | "goals" | "appraisals";
+export type PerformanceSectionKey = "reviews" | "kpis" | "goals" | "appraisals" | "templates" | "trend";
 
 export const performanceSections: Array<{
   key: PerformanceSectionKey;
@@ -33,6 +33,18 @@ export const performanceSections: Array<{
     title: "Appraisals",
     description: "Capture cycle-based appraisals, overall scores, strengths, and improvements.",
     path: "/performance/appraisals",
+  },
+  {
+    key: "templates",
+    title: "Templates",
+    description: "Configure rating scales and review templates instead of freehand scoring.",
+    path: "/performance/templates",
+  },
+  {
+    key: "trend",
+    title: "Trend",
+    description: "See how an employee's scores changed over time across reviews and appraisals.",
+    path: "/performance/trend",
   },
 ];
 

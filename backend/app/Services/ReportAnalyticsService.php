@@ -190,6 +190,17 @@ class ReportAnalyticsService
         return $data;
     }
 
+    /**
+     * Computes the next scheduled send time for a "daily" or "weekly"
+     * report delivery, anchored to 08:00 in the given timezone.
+     */
+    public static function computeNextRun(string $interval, string $timezone = 'UTC'): \Carbon\Carbon
+    {
+        return $interval === 'weekly'
+            ? \Carbon\Carbon::now($timezone)->addWeek()->setTime(8, 0)
+            : \Carbon\Carbon::now($timezone)->addDay()->setTime(8, 0);
+    }
+
     // ──────────────────────────────────────────────────────────────
     //  Scoping helpers
     // ──────────────────────────────────────────────────────────────

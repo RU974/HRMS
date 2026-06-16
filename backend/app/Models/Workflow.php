@@ -11,7 +11,7 @@ class Workflow extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name','module','definition','company_id'];
+    protected $fillable = ['name','module','definition','company_id','escalation_hours'];
 
     protected $casts = ['definition' => 'array'];
 

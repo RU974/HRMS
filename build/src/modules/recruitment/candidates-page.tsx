@@ -154,13 +154,14 @@ export function CandidatesPage() {
                 <th className="p-3">Status</th>
                 <th className="p-3">Rating</th>
                 <th className="p-3">Applied</th>
+                <th className="p-3">Employee</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {candidatesQuery.isLoading && (
                 <tr>
-                  <td className="p-4 text-[var(--muted)]" colSpan={8}>Loading candidates...</td>
+                  <td className="p-4 text-[var(--muted)]" colSpan={9}>Loading candidates...</td>
                 </tr>
               )}
               {!candidatesQuery.isLoading && candidates.map((item) => (
@@ -172,6 +173,15 @@ export function CandidatesPage() {
                   <td className="p-3 capitalize">{item.status}</td>
                   <td className="p-3">{item.rating ?? "-"}</td>
                   <td className="p-3">{formatRecruitmentDate(item.applied_at)}</td>
+                  <td className="p-3">
+                    {item.employee ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+                        {item.employee.name}
+                      </span>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
                       <Button
@@ -202,7 +212,7 @@ export function CandidatesPage() {
               ))}
               {!candidatesQuery.isLoading && candidates.length === 0 && (
                 <tr>
-                  <td className="p-6 text-center text-[var(--muted)]" colSpan={8}>No candidates found.</td>
+                  <td className="p-6 text-center text-[var(--muted)]" colSpan={9}>No candidates found.</td>
                 </tr>
               )}
             </tbody>

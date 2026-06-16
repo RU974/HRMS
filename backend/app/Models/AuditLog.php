@@ -22,6 +22,7 @@ class AuditLog extends Model
         'old_value',
         'new_value',
         'immutable',
+        'approval_id',
     ];
 
     protected $casts = [

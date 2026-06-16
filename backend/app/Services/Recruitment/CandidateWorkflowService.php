@@ -3,7 +3,14 @@
 namespace App\Services\Recruitment;
 
 use App\Models\Candidate;
+use App\Models\Employee;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CandidateWorkflowService
 {
@@ -86,5 +93,83 @@ class CandidateWorkflowService
             'terms' => $baseData['terms'] ?? null,
             'additional_notes' => $baseData['additional_notes'] ?? null,
         ], $data);
+    }
+
+    public function convertToEmployee(Candidate $candidate, ?string $companyId): Employee
+    {
+        if ($candidate->employee_id) {
+            return $candidate->employee ?? Employee::findOrFail($candidate->employee_id);
+        }
+
+        $jobOpening = $candidate->jobOpening;
+        if (! $jobOpening || ! $jobOpening->department_id) {
+            abort(422, 'Cannot convert this candidate to an employee because the linked job opening has no department.');
+        }
+
+        return DB::transaction(function () use ($candidate, $jobOpening, $companyId) {
+            $existingEmployee = Employee::where('email', $candidate->email)->first();
+            if ($existingEmployee) {
+                $candidate->update(['employee_id' => $existingEmployee->id]);
+
+                return $existingEmployee;
+            }
+
+            $user = User::where('email', $candidate->email)->first();
+            if (! $user) {
+                $user = User::create([
+                    'name' => $candidate->full_name,
+                    'email' => $candidate->email,
+                    'username' => Str::slug(explode('@', $candidate->email)[0]) . '-' . Str::lower(Str::random(4)),
+                    'password' => Hash::make(Str::password(12)),
+                    'company_id' => $companyId,
+                ]);
+            }
+
+            $this->assignEmployeeRole($user);
+
+            $offerData = $candidate->offer_letter_data ?? [];
+            $salary = is_numeric($offerData['salary'] ?? null)
+                ? (float) $offerData['salary']
+                : ((float) preg_replace('/[^0-9.]/', '', (string) ($offerData['salary'] ?? '')) ?: 0);
+
+            $joiningDate = $candidate->onboarding_start_date
+                ?? $offerData['start_date']
+                ?? now()->toDateString();
+
+            $employee = Employee::create([
+                'user_id' => $user->id,
+                'name' => $candidate->full_name,
+                'email' => $candidate->email,
+                'phone' => $candidate->phone,
+                'department_id' => $jobOpening->department_id,
+                'designation' => $jobOpening->title,
+                'employment_type' => $jobOpening->employment_type,
+                'joining_date' => $joiningDate,
+                'basic_salary' => $salary,
+                'allowances' => 0,
+                'salary' => $salary,
+                'status' => 'active',
+            ]);
+
+            $candidate->update(['employee_id' => $employee->id]);
+
+            return $employee;
+        });
+    }
+
+    private function assignEmployeeRole(User $user): void
+    {
+        $role = Role::firstOrCreate(
+            ['name' => User::ROLE_EMPLOYEE, 'company_id' => null],
+            ['guard_name' => 'web', 'description' => 'Default employee role', 'is_system' => true]
+        );
+
+        if (! $role) {
+            throw ValidationException::withMessages([
+                'role' => ['Default employee role could not be assigned.'],
+            ]);
+        }
+
+        $user->assignRole($role);
     }
 }

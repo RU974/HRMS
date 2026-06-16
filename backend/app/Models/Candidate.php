@@ -31,6 +31,7 @@ class Candidate extends Model
 
     protected $fillable = [
         'job_opening_id',
+        'employee_id',
         'company_id',
         'full_name',
         'email',
@@ -68,6 +69,11 @@ class Candidate extends Model
     public function interviews(): HasMany
     {
         return $this->hasMany(Interview::class);
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class);
     }
 
     public function canTransitionTo(string $targetStage): bool

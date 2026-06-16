@@ -7,6 +7,7 @@ use App\Events\ApprovalCreated;
 use App\Events\ApprovalEscalated;
 use App\Events\ApprovalRejected;
 use App\Models\Approval;
+use App\Services\AuditService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Event;
 
@@ -29,41 +30,45 @@ class ApprovalEscalationService
      */
     public static function escalateOverdueApprovals(): void
     {
-        $escalationThresholdHours = config('approval.escalation_threshold_hours', 48);
-        $thresholdTime = Carbon::now()->subHours($escalationThresholdHours);
+        $defaultThresholdHours = config('approval.escalation_threshold_hours', 48);
+        $fallbackThreshold = Carbon::now()->subHours($defaultThresholdHours);
 
-        // Find pending approvals that exceed the threshold
+        // Overdue when the per-step/per-workflow due_at has passed, or — for approvals
+        // started before due_at existed — the global default threshold from created_at.
         $overdueApprovals = Approval::where('status', 'pending')
-            ->where('created_at', '<', $thresholdTime)
-            ->where(function ($q) {
-                $q->whereNull('escalated_at')
-                    ->orWhere('escalated_at', '<', Carbon::now()->subHours(24));
+            ->whereNull('escalated_at')
+            ->where(function ($q) use ($fallbackThreshold) {
+                $q->where('due_at', '<=', Carbon::now())
+                    ->orWhere(function ($q2) use ($fallbackThreshold) {
+                        $q2->whereNull('due_at')->where('created_at', '<', $fallbackThreshold);
+                    });
             })
+            ->with('currentStep')
             ->get();
 
         foreach ($overdueApprovals as $approval) {
             try {
-                // Dispatch escalation event
+                $hours = $approval->currentStep?->escalation_hours
+                    ?? $approval->workflow?->escalation_hours
+                    ?? $defaultThresholdHours;
+
                 Event::dispatch(new ApprovalEscalated(
                     $approval,
-                    "Approval pending for more than {$escalationThresholdHours} hours"
+                    "Approval pending for more than {$hours} hours"
                 ));
 
-                // Mark as escalated
                 $approval->update(['escalated_at' => Carbon::now()]);
 
-                // Log the escalation
-                \App\Models\AuditLog::create([
-                    'user_id' => null,
+                AuditService::record([
                     'action' => 'approval_escalated',
-                    'entity_type' => 'Approval',
-                    'entity_id' => $approval->id,
-                    'changes' => [
-                        'escalated_at' => Carbon::now(),
-                        'reason' => "Escalation after {$escalationThresholdHours} hours",
+                    'module' => $approval->module,
+                    'company_id' => $approval->company_id,
+                    'approval_id' => $approval->id,
+                    'old_value' => null,
+                    'new_value' => [
+                        'escalated_at' => Carbon::now()->toDateTimeString(),
+                        'reason' => "Escalation after {$hours} hours",
                     ],
-                    'ip_address' => 'system',
-                    'user_agent' => 'approval-escalation-service',
                 ]);
             } catch (\Exception $e) {
                 \Log::error("Failed to escalate approval {$approval->id}", ['error' => $e->getMessage()]);

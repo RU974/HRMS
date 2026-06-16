@@ -128,11 +128,22 @@ export function ApprovalDetailPage() {
               </div>
               <div>
                 <p className="font-medium text-[var(--muted)]">Status</p>
-                <p className={`font-semibold uppercase ${statusColor}`}>{approval.status}</p>
+                <p className={`font-semibold uppercase ${statusColor}`}>
+                  {approval.status}
+                  {approval.escalated_at && <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">ESCALATED</span>}
+                </p>
               </div>
               <div>
                 <p className="font-medium text-[var(--muted)]">Workflow</p>
                 <p className="text-[var(--text)]">{approval.workflow?.name || "N/A"}</p>
+              </div>
+              <div>
+                <p className="font-medium text-[var(--muted)]">Requested by</p>
+                <p className="text-[var(--text)]">{approval.requester?.name ?? "-"}</p>
+              </div>
+              <div>
+                <p className="font-medium text-[var(--muted)]">Due</p>
+                <p className="text-[var(--text)]">{approval.due_at?.slice(0, 19).replace("T", " ") ?? "No deadline"}</p>
               </div>
               <div>
                 <p className="font-medium text-[var(--muted)]">Created</p>
@@ -186,6 +197,32 @@ export function ApprovalDetailPage() {
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {/* History */}
+          {approval.audit_trail && approval.audit_trail.length > 0 && (
+            <Card className="space-y-4 border-[var(--border)]/70 p-5">
+              <div>
+                <h3 className="text-lg font-semibold">History</h3>
+                <p className="text-sm text-[var(--muted)]">Every action taken on this request, in order.</p>
+              </div>
+              <ol className="space-y-3 border-l border-[var(--border)] pl-4">
+                {approval.audit_trail.map((entry) => (
+                  <li key={entry.id} className="relative text-sm">
+                    <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-[var(--primary)]" />
+                    <p className="font-medium text-[var(--text)] capitalize">{entry.action.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {entry.user?.name ?? "System"} · {entry.created_at?.slice(0, 19).replace("T", " ")}
+                    </p>
+                    {entry.new_value && (
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        {Object.entries(entry.new_value).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(", ")}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ol>
             </Card>
           )}
         </div>

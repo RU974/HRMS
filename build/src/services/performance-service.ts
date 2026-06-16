@@ -1,4 +1,5 @@
-import { apiClient } from "@/services/api-client";
+import { apiClient, API_BASE_URL } from "@/services/api-client";
+import { useAuthStore } from "@/store/auth-store";
 
 export interface PerformanceEmployee {
   id: number;
@@ -9,14 +10,27 @@ export interface PerformanceEmployee {
   employee_number?: string | null;
 }
 
+export interface PerformanceReviewTemplate {
+  id: number;
+  company_id?: number | null;
+  name: string;
+  scale_min: number;
+  scale_max: number;
+  criteria?: string[] | null;
+  is_active: boolean;
+  notes?: string | null;
+}
+
 export interface PerformanceReview {
   id: number;
   employee_id: number;
   reviewer_id: number | null;
+  template_id?: number | null;
   period: string;
   rating: number;
   summary: string | null;
   employee?: PerformanceEmployee | null;
+  template?: PerformanceReviewTemplate | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,23 +61,36 @@ export interface PerformanceGoal {
   updated_at: string;
 }
 
+export type AppraisalStatus = "draft" | "submitted" | "approved";
+
 export interface PerformanceAppraisal {
   id: number;
   employee_id: number;
   reviewer_id: number | null;
+  template_id?: number | null;
   cycle: string;
   overall_score: number;
+  status: AppraisalStatus;
   strengths: string | null;
   improvements: string | null;
   employee?: PerformanceEmployee | null;
+  template?: PerformanceReviewTemplate | null;
   created_at: string;
   updated_at: string;
 }
 
-export type PerformanceReviewPayload = Omit<PerformanceReview, "id" | "employee" | "created_at" | "updated_at">;
+export interface PerformanceTrendPoint {
+  type: "review" | "appraisal";
+  label: string;
+  score: number;
+  date: string;
+}
+
+export type PerformanceReviewPayload = Omit<PerformanceReview, "id" | "employee" | "template" | "created_at" | "updated_at">;
 export type PerformanceKpiPayload = Omit<PerformanceKpi, "id" | "employee" | "created_at" | "updated_at">;
 export type PerformanceGoalPayload = Omit<PerformanceGoal, "id" | "employee" | "created_at" | "updated_at">;
-export type PerformanceAppraisalPayload = Omit<PerformanceAppraisal, "id" | "employee" | "created_at" | "updated_at">;
+export type PerformanceAppraisalPayload = Omit<PerformanceAppraisal, "id" | "employee" | "template" | "created_at" | "updated_at">;
+export type PerformanceReviewTemplatePayload = Omit<PerformanceReviewTemplate, "id" | "company_id">;
 
 export function listPerformanceReviews(q = "") {
   const suffix = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
@@ -122,4 +149,40 @@ export function updatePerformanceAppraisal(id: number, payload: Partial<Performa
 }
 export function deletePerformanceAppraisal(id: number) {
   return apiClient<null>(`/performance-appraisals/${id}`, { method: "DELETE" });
+}
+
+export function bulkApproveAppraisals(ids: number[]) {
+  return apiClient<{ approved: number }>("/performance-appraisals/bulk-approve", { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+export async function downloadAppraisalExport(): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const response = await fetch(`${API_BASE_URL}/performance-appraisals/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`Export failed (${response.status})`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "performance-appraisals.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function getPerformanceTrend(employeeId: number) {
+  return apiClient<PerformanceTrendPoint[]>(`/performance/meta/trend/${employeeId}`);
+}
+
+export function listPerformanceReviewTemplates() {
+  return apiClient<PerformanceReviewTemplate[]>("/performance-review-templates");
+}
+export function createPerformanceReviewTemplate(payload: PerformanceReviewTemplatePayload) {
+  return apiClient<PerformanceReviewTemplate>("/performance-review-templates", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updatePerformanceReviewTemplate(id: number, payload: Partial<PerformanceReviewTemplatePayload>) {
+  return apiClient<PerformanceReviewTemplate>(`/performance-review-templates/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deletePerformanceReviewTemplate(id: number) {
+  return apiClient<null>(`/performance-review-templates/${id}`, { method: "DELETE" });
 }

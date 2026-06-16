@@ -24,6 +24,7 @@ use App\Http\Controllers\PerformanceGoalController;
 use App\Http\Controllers\PerformanceKpiController;
 use App\Http\Controllers\PerformanceMetaController;
 use App\Http\Controllers\PerformanceReviewController;
+use App\Http\Controllers\PerformanceReviewTemplateController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
@@ -37,8 +38,10 @@ use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\LicenseController;
 use App\Http\Controllers\WorkflowController;
 use App\Http\Controllers\ApprovalController;
+use App\Http\Controllers\ApprovalDelegationController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ChatConversationController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\Recruitment\CandidateController as RecruitmentCandidateController;
 use App\Http\Controllers\Recruitment\InterviewController as RecruitmentInterviewController;
@@ -97,6 +100,7 @@ $registerRoutes = function (): void {
             Route::get('/analytics', [ReportController::class, 'analytics']);
         });
         Route::middleware('permission:reports:view|reports:manage_settings')->apiResource('reports', ReportController::class);
+        Route::middleware('permission:reports:manage_settings')->put('reports/{id}/schedule', [ReportController::class, 'updateSchedule']);
 
         Route::middleware('permission:settings:manage_settings')->group(function () {
             Route::get('permissions', [RolePermissionController::class, 'permissions']);
@@ -149,10 +153,16 @@ $registerRoutes = function (): void {
             Route::get('approvals/{id}', [ApprovalController::class, 'show']);
         });
 
-        Route::middleware('permission:approvals:manage_settings')->group(function () {
-            Route::post('approvals', [ApprovalController::class, 'store']);
+        Route::middleware('permission:approvals:approve')->group(function () {
             Route::post('approvals/{id}/approve', [ApprovalController::class, 'approve']);
             Route::post('approvals/{id}/reject', [ApprovalController::class, 'reject']);
+            Route::get('approval-delegations', [ApprovalDelegationController::class, 'index']);
+            Route::post('approval-delegations', [ApprovalDelegationController::class, 'store']);
+            Route::delete('approval-delegations/{id}', [ApprovalDelegationController::class, 'destroy']);
+        });
+
+        Route::middleware('permission:approvals:manage_settings')->group(function () {
+            Route::post('approvals', [ApprovalController::class, 'store']);
             Route::apiResource('workflows', WorkflowController::class)->except(['create', 'edit']);
         });
 
@@ -308,10 +318,20 @@ $registerRoutes = function (): void {
         // Communication routes — Professional+ feature
         Route::middleware('license.feature:communication')->group(function () {
             Route::middleware('throttle:communication')->apiResource('announcements', AnnouncementController::class);
+            Route::middleware('throttle:communication')->group(function () {
+                Route::post('announcements/upload-image', [AnnouncementController::class, 'uploadImage']);
+                Route::post('announcements/{id}/read', [AnnouncementController::class, 'markRead']);
+                Route::get('announcements/{id}/reads', [AnnouncementController::class, 'reads']);
+            });
             Route::middleware('throttle:communication')->apiResource('notifications', NotificationController::class);
             Route::middleware('throttle:communication')->group(function () {
                 Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
+                Route::get('chat-messages/{id}/attachment', [ChatMessageController::class, 'downloadAttachment']);
                 Route::apiResource('chat-messages', ChatMessageController::class);
+                Route::apiResource('chat-conversations', ChatConversationController::class)->only(['index', 'store', 'show']);
+                Route::post('chat-conversations/{id}/read', [ChatConversationController::class, 'markRead']);
+                Route::post('chat-conversations/{id}/participants', [ChatConversationController::class, 'addParticipant']);
+                Route::delete('chat-conversations/{id}/participants/{userId}', [ChatConversationController::class, 'removeParticipant']);
             });
         });
 
@@ -320,8 +340,12 @@ $registerRoutes = function (): void {
             Route::apiResource('performance-reviews', PerformanceReviewController::class);
             Route::apiResource('performance-kpis', PerformanceKpiController::class);
             Route::apiResource('performance-goals', PerformanceGoalController::class);
+            Route::post('performance-appraisals/bulk-approve', [PerformanceAppraisalController::class, 'bulkApprove']);
+            Route::get('performance-appraisals/export', [PerformanceAppraisalController::class, 'export']);
             Route::apiResource('performance-appraisals', PerformanceAppraisalController::class);
+            Route::apiResource('performance-review-templates', PerformanceReviewTemplateController::class)->only(['index', 'store', 'update', 'destroy']);
             Route::get('performance/meta/employees', [PerformanceMetaController::class, 'employees']);
+            Route::get('performance/meta/trend/{employeeId}', [PerformanceMetaController::class, 'trend']);
         });
     });
 };

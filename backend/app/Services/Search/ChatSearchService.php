@@ -17,7 +17,10 @@ class ChatSearchService
             ->with(['sender:id,name,email,company_id', 'receiver:id,name,email,company_id'])
             ->where(function ($builder) use ($user): void {
                 $builder->where('sender_id', $user->id)
-                    ->orWhere('receiver_id', $user->id);
+                    ->orWhere('receiver_id', $user->id)
+                    ->orWhereHas('conversation.participants', function ($participantQuery) use ($user): void {
+                        $participantQuery->where('user_id', $user->id);
+                    });
 
                 if ($user->can('chat:view') || $user->can('chat:manage_settings')) {
                     if ($user->company_id) {
@@ -66,6 +69,12 @@ class ChatSearchService
     private function canSee(User $user, ChatMessage $message): bool
     {
         if ($message->sender_id === $user->id || $message->receiver_id === $user->id) {
+            return true;
+        }
+
+        if ($message->conversation_id && $message->conversation()->whereHas('participants', function ($query) use ($user): void {
+            $query->where('user_id', $user->id);
+        })->exists()) {
             return true;
         }
 

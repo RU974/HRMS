@@ -9,14 +9,20 @@ class ChatMessage extends Model
 {
     protected $fillable = [
         'company_id',
+        'conversation_id',
         'sender_id',
         'receiver_id',
         'message',
         'is_read',
+        'attachment_path',
+        'attachment_name',
+        'attachment_mime',
+        'attachment_size',
     ];
 
     protected $casts = [
         'is_read' => 'boolean',
+        'attachment_size' => 'integer',
     ];
 
     public function sender(): BelongsTo
@@ -29,8 +35,18 @@ class ChatMessage extends Model
         return $this->belongsTo(User::class, 'receiver_id');
     }
 
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(ChatConversation::class, 'conversation_id');
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function hasAttachment(): bool
+    {
+        return !empty($this->attachment_path);
     }
 }

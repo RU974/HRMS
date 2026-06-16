@@ -184,8 +184,13 @@ class CommunicationModuleTest extends TestCase
 
         Sanctum::actingAs($sender);
 
+        $conversation = $this->postJson('/api/v1/chat-conversations', [
+            'type' => 'direct',
+            'participant_ids' => [$receiver->id],
+        ])->assertCreated()->json('data');
+
         $response = $this->postJson('/api/v1/chat-messages', [
-            'receiver_id' => $receiver->id,
+            'conversation_id' => $conversation['id'],
             'message' => 'Hello team, this is a test message.',
         ]);
 

@@ -35,7 +35,7 @@ class RolePermissionSeeder extends Seeder
                 'recruitment:view', 'recruitment:create', 'recruitment:edit',
                 'documents:view', 'documents:create', 'documents:edit', 'documents:delete',
                 'approvals:view', 'approvals:approve', 'approvals:manage_settings',
-                'reports:view', 'announcement:view', 'announcement:create', 'announcement:edit',
+                'reports:view', 'reports:export', 'announcement:view', 'announcement:create', 'announcement:edit',
                 'performance:view', 'performance:edit',
                 'chat:view', 'chat:create',
             ],

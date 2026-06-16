@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, ArrowRight, Mail } from "lucide-react";
+import { MessageCircle, ArrowRight, Mail, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { listChatMessages, updateChatMessage } from "@/services/chat-service";
+import { listConversations, markConversationRead } from "@/services/chat-service";
 import { useAuthStore } from "@/store/auth-store";
 
 function formatRelativeTime(value: string) {
@@ -39,23 +39,16 @@ export function ChatDropdown() {
   const [open, setOpen] = useState(false);
   const user = useAuthStore((state) => state.user);
 
-  const chatQuery = useQuery({
-    queryKey: ["chat-messages", "unread", user?.id],
-    queryFn: () => {
-      if (!user?.id) {
-        return Promise.resolve([] as Array<{ id: number; sender?: { name: string }; message: string; created_at: string }>);
-      }
-
-      return listChatMessages({ receiver_id: user.id, read: "unread" });
-    },
+  const conversationsQuery = useQuery({
+    queryKey: ["chat-conversations", user?.id],
+    queryFn: () => listConversations(),
     enabled: Boolean(user?.id)
   });
 
   const markReadMutation = useMutation({
-    mutationFn: (id: number) => updateChatMessage(id, { is_read: true }),
+    mutationFn: (id: number) => markConversationRead(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
-      await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+      await queryClient.invalidateQueries({ queryKey: ["chat-conversations"] });
     }
   });
 
@@ -81,13 +74,20 @@ export function ChatDropdown() {
     };
   }, []);
 
-  const unreadMessages = chatQuery.data ?? [];
-  const badgeCount = unreadMessages.length;
+  const unreadConversations = (conversationsQuery.data ?? []).filter((c) => c.unread_count > 0);
+  const badgeCount = unreadConversations.reduce((sum, c) => sum + c.unread_count, 0);
+
+  function conversationLabel(conversation: (typeof unreadConversations)[number]) {
+    if (conversation.type === "group") {
+      return conversation.name ?? "Group chat";
+    }
+    const other = conversation.participants.find((p) => p.id !== user?.id);
+    return other?.name ?? "Unknown sender";
+  }
 
   async function markAllAsRead() {
-    await Promise.all(unreadMessages.map((item) => updateChatMessage(item.id, { is_read: true })));
-    await queryClient.invalidateQueries({ queryKey: ["chat-messages", "unread"] });
-    await queryClient.invalidateQueries({ queryKey: ["chat-messages"] });
+    await Promise.all(unreadConversations.map((c) => markConversationRead(c.id)));
+    await queryClient.invalidateQueries({ queryKey: ["chat-conversations"] });
   }
 
   if (!user) {
@@ -135,31 +135,38 @@ export function ChatDropdown() {
           </div>
 
           <div className="max-h-[34rem] overflow-y-auto px-4 py-3">
-            {chatQuery.isLoading ? (
+            {conversationsQuery.isLoading ? (
               <p className="text-sm text-[var(--muted)]">Loading messages...</p>
-            ) : unreadMessages.length > 0 ? (
+            ) : unreadConversations.length > 0 ? (
               <div className="space-y-2">
-                {unreadMessages.slice(0, 5).map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--border)]/20 p-3">
+                {unreadConversations.slice(0, 5).map((conversation) => (
+                  <div key={conversation.id} className="rounded-2xl border border-[var(--border)] bg-[var(--border)]/20 p-3">
                     <div className="flex items-start gap-3">
                       <div className="mt-0.5 rounded-full bg-[var(--primary)]/10 p-2 text-[var(--primary)]">
-                        <Mail className="h-4 w-4" />
+                        {conversation.type === "group" ? <Users className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold">{item.sender?.name ?? "Unknown sender"}</p>
-                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.message}</p>
+                            <p className="truncate text-sm font-semibold">{conversationLabel(conversation)}</p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">
+                              {conversation.last_message?.message || "Sent an attachment"}
+                            </p>
                           </div>
+                          <span className="shrink-0 rounded-full bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                            {conversation.unread_count}
+                          </span>
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-[var(--muted)]">{formatRelativeTime(item.created_at)}</span>
+                          <span className="text-[11px] text-[var(--muted)]">
+                            {conversation.last_message ? formatRelativeTime(conversation.last_message.created_at) : ""}
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
                             className="h-8 px-3 text-xs"
                             onClick={async () => {
-                              await markReadMutation.mutateAsync(item.id);
+                              await markReadMutation.mutateAsync(conversation.id);
                             }}
                             disabled={markReadMutation.isPending}
                           >

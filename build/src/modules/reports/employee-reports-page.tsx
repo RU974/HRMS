@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { getEmployeeReportSummary } from "@/services/report-service";
+import { getEmployeesPage } from "@/services/employee-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
-import { downloadCsv } from "@/modules/reports/report-utils";
-import { Button } from "@/components/ui/button";
+import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
+import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
 
 declare global { interface Window { Chart: any; } }
 
@@ -54,14 +55,13 @@ export function EmployeeReportsPage() {
 
   const rows = useMemo(() => data ?? [], [data]);
   const total = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+  const [drillStatus, setDrillStatus] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <PageHeader title="Employee Reports" subtitle="Workforce composition and status breakdown." />
-        <Button variant="outline" onClick={() => downloadCsv("employees-summary.csv", ["Status","Count"], rows.map((r) => [r.status, r.count ?? 0]))}>
-          Export CSV
-        </Button>
+        <ReportExportButtons path="/reports/employees" filename="employee-report" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -92,7 +92,11 @@ export function EmployeeReportsPage() {
                   </tr>
                 ))}
                 {rows.map((item, i) => (
-                  <tr key={item.status} className="border-b border-[var(--border)]/50">
+                  <tr
+                    key={item.status}
+                    className="cursor-pointer border-b border-[var(--border)]/50 hover:bg-[var(--border)]/20"
+                    onClick={() => setDrillStatus(item.status)}
+                  >
                     <td className="p-3">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[i % STATUS_COLORS.length] }} />
@@ -117,6 +121,23 @@ export function EmployeeReportsPage() {
           </div>
         </Card>
       </div>
+
+      {drillStatus && (
+        <ReportDrillDownPanel
+          title={`Employees — ${drillStatus}`}
+          queryKey={["reports", "employees", "drilldown", drillStatus]}
+          queryFn={async () => (await getEmployeesPage({ per_page: 25, status: drillStatus })).data ?? []}
+          rowKey={(row) => row.id}
+          viewAllHref={`/employees?status=${drillStatus}`}
+          onClose={() => setDrillStatus(null)}
+          columns={[
+            { header: "Name", render: (row) => row.name },
+            { header: "Email", render: (row) => row.email },
+            { header: "Department", render: (row) => row.department?.name ?? "—" },
+            { header: "Designation", render: (row) => row.designation ?? "—" },
+          ]}
+        />
+      )}
 
       <ReportCrudSection reportType="employee" />
     </div>

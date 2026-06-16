@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Announcement extends Model
 {
@@ -12,6 +13,8 @@ class Announcement extends Model
         'title',
         'body',
         'target',
+        'category',
+        'tags',
         'is_published',
         'published_at',
         'created_by',
@@ -20,6 +23,7 @@ class Announcement extends Model
     protected $casts = [
         'is_published' => 'boolean',
         'published_at' => 'datetime',
+        'tags' => 'array',
     ];
 
     public function creator(): BelongsTo
@@ -30,5 +34,10 @@ class Announcement extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function reads(): HasMany
+    {
+        return $this->hasMany(AnnouncementRead::class);
     }
 }

@@ -3,10 +3,35 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
+import { Modal } from "@/components/modals/modal";
 import { useAuthStore } from "@/store/auth-store";
-import { createReport, deleteReport, getReports, type Report, type ReportStatus, type ReportType, updateReport } from "@/services/report-service";
+import {
+  createReport,
+  deleteReport,
+  getReports,
+  updateReport,
+  updateReportSchedule,
+  type Report,
+  type ReportSchedule,
+  type ReportStatus,
+  type ReportType,
+} from "@/services/report-service";
 
 const reportStatuses: ReportStatus[] = ["active", "inactive"];
+
+interface ScheduleFormState {
+  enabled: boolean;
+  interval: "daily" | "weekly";
+  recipients: string;
+  format: "csv" | "excel" | "pdf";
+}
+
+const defaultScheduleForm = (schedule?: ReportSchedule): ScheduleFormState => ({
+  enabled: schedule?.enabled ?? false,
+  interval: schedule?.interval ?? "daily",
+  recipients: schedule?.recipients?.join(", ") ?? "",
+  format: schedule?.format ?? "csv",
+});
 
 interface ReportFormState {
   name: string;
@@ -28,6 +53,8 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
   const [editing, setEditing] = useState<Report | null>(null);
   const [form, setForm] = useState<ReportFormState>(defaultForm);
   const [error, setError] = useState<string | null>(null);
+  const [scheduling, setScheduling] = useState<Report | null>(null);
+  const [scheduleForm, setScheduleForm] = useState<ScheduleFormState>(defaultScheduleForm());
 
   const { data, isLoading, error: listError } = useQuery({
     queryKey: ["reports", reportType, moduleKey, search, statusFilter],
@@ -64,6 +91,28 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
     onError: (err: Error) => setError(err.message),
   });
 
+  const scheduleMutation = useMutation({
+    mutationFn: async (payload: ScheduleFormState) => {
+      const recipients = payload.recipients
+        .split(",")
+        .map((email) => email.trim())
+        .filter(Boolean);
+
+      return updateReportSchedule(scheduling!.id, {
+        enabled: payload.enabled,
+        interval: payload.enabled ? payload.interval : undefined,
+        recipients: payload.enabled ? recipients : undefined,
+        format: payload.enabled ? payload.format : undefined,
+      });
+    },
+    onSuccess: async () => {
+      setError(null);
+      setScheduling(null);
+      await queryClient.invalidateQueries({ queryKey: ["reports"] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const totalReports = useMemo(() => data?.total ?? 0, [data?.total]);
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -83,6 +132,21 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
       description: report.description ?? "",
       status: report.status,
     });
+  };
+
+  const startSchedule = (report: Report) => {
+    setError(null);
+    setScheduling(report);
+    setScheduleForm(defaultScheduleForm(report.schedule));
+  };
+
+  const onSubmitSchedule = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (scheduleForm.enabled && !scheduleForm.recipients.trim()) {
+      setError("At least one recipient email is required to enable scheduled delivery.");
+      return;
+    }
+    scheduleMutation.mutate(scheduleForm);
   };
 
   return (
@@ -159,6 +223,9 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
                   {canManageReports ? (
                     <div className="flex gap-2">
                       <Button variant="outline" onClick={() => startEdit(report)}>Edit</Button>
+                      <Button variant="outline" onClick={() => startSchedule(report)}>
+                        {report.schedule?.enabled ? "Scheduled" : "Schedule"}
+                      </Button>
                       <Button variant="ghost" onClick={() => deleteMutation.mutate(report.id)} disabled={deleteMutation.isPending}>Delete</Button>
                     </div>
                   ) : (
@@ -172,6 +239,72 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
         </table>
       </div>
       <div className="mt-4 text-xs text-[var(--muted)]">{totalReports} reports</div>
+
+      {scheduling && (
+        <Modal title={`Schedule delivery — ${scheduling.name}`} onClose={() => setScheduling(null)}>
+          <form className="space-y-4" onSubmit={onSubmitSchedule}>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={scheduleForm.enabled}
+                onChange={(event) => setScheduleForm((prev) => ({ ...prev, enabled: event.target.checked }))}
+              />
+              Email this report automatically
+            </label>
+
+            {scheduleForm.enabled && (
+              <>
+                <label className="block text-sm text-[var(--muted)]">
+                  Frequency
+                  <select
+                    className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+                    value={scheduleForm.interval}
+                    onChange={(event) => setScheduleForm((prev) => ({ ...prev, interval: event.target.value as "daily" | "weekly" }))}
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                </label>
+
+                <label className="block text-sm text-[var(--muted)]">
+                  Format
+                  <select
+                    className="mt-1 h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+                    value={scheduleForm.format}
+                    onChange={(event) => setScheduleForm((prev) => ({ ...prev, format: event.target.value as "csv" | "excel" | "pdf" }))}
+                  >
+                    <option value="csv">CSV</option>
+                    <option value="excel">Excel</option>
+                    <option value="pdf">PDF</option>
+                  </select>
+                </label>
+
+                <label className="block text-sm text-[var(--muted)]">
+                  Recipients (comma-separated emails)
+                  <FormInput
+                    value={scheduleForm.recipients}
+                    onChange={(event) => setScheduleForm((prev) => ({ ...prev, recipients: event.target.value }))}
+                    placeholder="manager@company.com, hr@company.com"
+                  />
+                </label>
+
+                {scheduling.schedule?.next_run_at && (
+                  <p className="text-xs text-[var(--muted)]">
+                    Next run: {new Date(scheduling.schedule.next_run_at).toLocaleString()}
+                  </p>
+                )}
+              </>
+            )}
+
+            <div className="flex gap-2">
+              <Button type="submit" className="w-full" disabled={scheduleMutation.isPending}>
+                Save schedule
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setScheduling(null)}>Cancel</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </Card>
   );
 }

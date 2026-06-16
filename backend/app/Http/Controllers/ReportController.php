@@ -123,6 +123,57 @@ class ReportController extends Controller
         return $this->ok(null, 'Report deleted successfully');
     }
 
+    public function updateSchedule(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'reports:manage_settings');
+
+        $report = Report::findOrFail($id);
+        $this->assertCompanyAccess($request, $report);
+
+        $validated = $request->validate([
+            'enabled' => 'required|boolean',
+            'interval' => ['required_if:enabled,1', Rule::in(['daily', 'weekly'])],
+            'recipients' => 'required_if:enabled,1|array|min:1',
+            'recipients.*' => 'email',
+            'format' => ['nullable', Rule::in(['csv', 'excel', 'pdf'])],
+            'timezone' => 'nullable|string|max:64',
+        ]);
+
+        $filters = $report->filters ?? [];
+        $existingSchedule = is_array($filters['schedule'] ?? null) ? $filters['schedule'] : [];
+        $timezone = $validated['timezone'] ?? $existingSchedule['timezone'] ?? config('app.timezone');
+
+        if ($validated['enabled']) {
+            $filters['schedule'] = [
+                'enabled' => true,
+                'interval' => $validated['interval'],
+                'recipients' => $validated['recipients'],
+                'format' => $validated['format'] ?? ($existingSchedule['format'] ?? 'csv'),
+                'timezone' => $timezone,
+                'next_run_at' => ReportAnalyticsService::computeNextRun($validated['interval'], $timezone)->toIso8601String(),
+                'last_sent_at' => $existingSchedule['last_sent_at'] ?? null,
+            ];
+        } else {
+            $filters['schedule'] = [
+                'enabled' => false,
+                'interval' => $existingSchedule['interval'] ?? null,
+                'recipients' => $existingSchedule['recipients'] ?? [],
+                'format' => $existingSchedule['format'] ?? 'csv',
+                'timezone' => $timezone,
+                'next_run_at' => null,
+                'last_sent_at' => $existingSchedule['last_sent_at'] ?? null,
+            ];
+        }
+
+        $report->update([
+            'filters' => $filters,
+            'updated_by' => $request->user()?->id,
+        ]);
+
+        $service = new ReportAnalyticsService();
+        return $this->ok($service->enrichReport($report), 'Report schedule updated successfully');
+    }
+
     public function employees(Request $request)
     {
         $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
