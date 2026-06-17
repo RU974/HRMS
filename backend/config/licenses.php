@@ -10,8 +10,8 @@ return [
     | the product for different product teams without touching source code.
     |
     */
-    'issued_by'     => env('LICENSE_ISSUED_BY',     'Slingshottech'),
-    'support_email' => env('LICENSE_SUPPORT_EMAIL', 'support@slingshottech.com'),
+    'issued_by'     => env('LICENSE_ISSUED_BY',     'Slingshotteck'),
+    'support_email' => env('LICENSE_SUPPORT_EMAIL', 'support@slingshotteck.com'),
 
     /*
     |--------------------------------------------------------------------------

@@ -520,8 +520,8 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
         </div>
         <div className="p-5 space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-            Enter the license key provided by Slingshottech. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
-            <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshottech.com" className="underline">sales@slingshottech.com</a></span>
+            Enter the license key provided by Slingshotteck. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
+            <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshotteck.com" className="underline">sales@slingshotteck.com</a></span>
           </div>
           <div className="space-y-1.5">
             <label className={labelCls}>License Key</label>
@@ -1628,8 +1628,8 @@ export function LicensingTab() {
             </div>
             <p className="mt-4 text-center text-xs text-[var(--muted)]">
               Need a custom plan? Contact{" "}
-              <a href="mailto:sales@slingshottech.com" className="text-[var(--primary)] hover:underline">
-                sales@slingshottech.com
+              <a href="mailto:sales@slingshotteck.com" className="text-[var(--primary)] hover:underline">
+                sales@slingshotteck.com
               </a>
             </p>
           </div>
