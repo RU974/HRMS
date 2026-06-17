@@ -5,6 +5,7 @@ import { Modal } from "@/components/modals/modal";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { createDesignation, deleteDesignation, listDesignations, updateDesignation } from "@/services/hr-management-service";
+import { toast } from "@/components/notifications/toast";
 
 export function DesignationsPage() {
   const queryClient = useQueryClient();
@@ -18,16 +19,17 @@ export function DesignationsPage() {
     mutationFn: async () => editingId ? updateDesignation(editingId, { name }) : createDesignation({ name }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["hr", "designations"] });
+      toast.success("Saved", editingId ? "Designation updated successfully." : "Designation created successfully.");
       setModalOpen(false);
       setEditingId(null);
       setName("");
     },
-    onError: (e: Error) => setError(e.message)
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); }
   });
   const deleteMutation = useMutation({
     mutationFn: deleteDesignation,
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "designations"] }); },
-    onError: (e: Error) => setError(e.message)
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "designations"] }); toast.success("Deleted", "Designation removed successfully."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); }
   });
 
   return <div className="space-y-6">

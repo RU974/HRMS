@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { apiClient } from "@/services/api-client";
+import { toast } from "@/components/notifications/toast";
 import {
   AppraisalStatus,
   GoalStatus,
@@ -184,138 +185,155 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
     mutationFn: createPerformanceReview,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "reviews"] });
+      toast.success("Review created", "Performance review saved successfully.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const updateReviewMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceReviewPayload> }) => updatePerformanceReview(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "reviews"] });
+      toast.success("Review updated", "Performance review updated.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const deleteReviewMutation = useMutation({
     mutationFn: deletePerformanceReview,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "reviews"] });
+      toast.success("Deleted", "Performance review removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const createKpiMutation = useMutation({
     mutationFn: createPerformanceKpi,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "kpis"] });
+      toast.success("KPI created", "KPI saved successfully.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const updateKpiMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceKpiPayload> }) => updatePerformanceKpi(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "kpis"] });
+      toast.success("KPI updated", "KPI updated successfully.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const deleteKpiMutation = useMutation({
     mutationFn: deletePerformanceKpi,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "kpis"] });
+      toast.success("Deleted", "KPI removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const createGoalMutation = useMutation({
     mutationFn: createPerformanceGoal,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "goals"] });
+      toast.success("Goal created", "Performance goal saved.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const updateGoalMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceGoalPayload> }) => updatePerformanceGoal(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "goals"] });
+      toast.success("Goal updated", "Performance goal updated.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const deleteGoalMutation = useMutation({
     mutationFn: deletePerformanceGoal,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "goals"] });
+      toast.success("Deleted", "Performance goal removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const createAppraisalMutation = useMutation({
     mutationFn: createPerformanceAppraisal,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] });
+      toast.success("Appraisal created", "Appraisal saved successfully.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const updateAppraisalMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceAppraisalPayload> }) => updatePerformanceAppraisal(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] });
+      toast.success("Appraisal updated", "Appraisal updated successfully.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const deleteAppraisalMutation = useMutation({
     mutationFn: deletePerformanceAppraisal,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] });
+      toast.success("Deleted", "Appraisal removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
   const bulkApproveMutation = useMutation({
     mutationFn: bulkApproveAppraisals,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "appraisals"] });
+      toast.success("Appraisals approved", "Selected appraisals have been approved.");
       setSelectedAppraisalIds([]);
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Approval failed", e.message); setError(e.message); },
   });
 
   const createTemplateMutation = useMutation({
     mutationFn: createPerformanceReviewTemplate,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "templates"] });
+      toast.success("Template created", "Review template saved.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const updateTemplateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<PerformanceReviewTemplatePayload> }) => updatePerformanceReviewTemplate(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "templates"] });
+      toast.success("Template updated", "Review template updated.");
       closeModal();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const deleteTemplateMutation = useMutation({
     mutationFn: deletePerformanceReviewTemplate,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["performance", "templates"] });
+      toast.success("Deleted", "Review template removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const createIncrementMutation = useMutation({
     mutationFn: createSalaryIncrement,
     onSuccess: () => {
+      toast.success("Increment saved", "Salary increment recorded successfully.");
       setIncrementModalOpen(false);
       setIncrementForm(incrementDefaults);
       setIncrementError(null);
     },
-    onError: (e: Error) => setIncrementError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setIncrementError(e.message); },
   });
 
   const activeData = useMemo(() => {

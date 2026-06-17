@@ -11,6 +11,7 @@ import { apiClient } from "@/services/api-client";
 import { listDepartments, listDesignations, listShifts, listLeaves, listAttendance } from "@/services/hr-management-service";
 import { getEmployees, type Employee } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30";
 
@@ -386,12 +387,14 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
 
   const promoMutation = useMutation({
     mutationFn: (data: typeof promoForm) => apiClient(`/employees/${employeeId}/promotions`, { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); setPromoModal(false); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); toast.success("Saved", "Promotion record added successfully."); setPromoModal(false); },
+    onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const promoDeleteMutation = useMutation({
     mutationFn: (id: number) => apiClient(`/employees/${employeeId}/promotions/${id}`, { method: "DELETE" }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); toast.success("Deleted", "Promotion record removed."); },
+    onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
   const typeLabel: Record<string, string> = { promotion: "Promotion", transfer: "Transfer", demotion: "Demotion", grade_change: "Grade Change" };
@@ -597,11 +600,12 @@ export function EmployeeDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
       await queryClient.invalidateQueries({ queryKey: ["employees"] });
+      toast.success("Employee updated", "Employee details have been saved.");
       setSaveSuccess(true);
       setSaveError(null);
       setTimeout(() => setEditOpen(false), 800);
     },
-    onError: (e: Error) => setSaveError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setSaveError(e.message); },
   });
 
   async function handleSave(e: React.FormEvent) {

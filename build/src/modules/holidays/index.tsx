@@ -5,6 +5,7 @@ import { Modal } from "@/components/modals/modal";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { HolidayItem, createHoliday, deleteHoliday, listHolidays, updateHoliday } from "@/services/hr-management-service";
+import { toast } from "@/components/notifications/toast";
 
 export function HolidaysPage() {
   const queryClient = useQueryClient();
@@ -13,8 +14,8 @@ export function HolidaysPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<HolidayItem | null>(null);
   const [form, setForm] = useState({ name: "", holiday_date: "", is_optional: false });
-  const saveMutation = useMutation({ mutationFn: async () => editing ? updateHoliday(editing.id, form) : createHoliday(form), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "holidays"] }); setModalOpen(false); }, onError: (e: Error) => setError(e.message) });
-  const deleteMutation = useMutation({ mutationFn: deleteHoliday, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "holidays"] }); }, onError: (e: Error) => setError(e.message) });
+  const saveMutation = useMutation({ mutationFn: async () => editing ? updateHoliday(editing.id, form) : createHoliday(form), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "holidays"] }); toast.success("Saved", editing ? "Holiday updated successfully." : "Holiday created successfully."); setModalOpen(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const deleteMutation = useMutation({ mutationFn: deleteHoliday, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "holidays"] }); toast.success("Deleted", "Holiday removed successfully."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   return <div className="space-y-6">
     <PageHeader title="Holidays" subtitle="Create and maintain holiday calendar entries." />

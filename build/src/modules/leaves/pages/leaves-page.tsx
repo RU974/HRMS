@@ -29,6 +29,7 @@ import {
   updateLeaveType,
 } from "@/services/hr-management-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 // ── Shared ─────────────────────────────────────────────────────────────────────
 const selectClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
@@ -317,39 +318,39 @@ export function LeavesPage() {
   // Mutations
   const createMutation = useMutation({
     mutationFn: () => createLeave(leaveForm),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); setLeaveModal(false); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); toast.success("Leave requested", "Your leave request has been submitted."); setLeaveModal(false); },
+    onError: (e: Error) => { toast.error("Failed to submit", e.message); setError(e.message); },
   });
   const updateMutation = useMutation({
     mutationFn: () => updateLeave(editLeave!.id, { type: leaveForm.type, from_date: leaveForm.from_date, to_date: leaveForm.to_date, half_day: leaveForm.half_day, status: leaveForm.status }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); setLeaveModal(false); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); toast.success("Leave updated", "Leave request has been updated."); setLeaveModal(false); },
+    onError: (e: Error) => { toast.error("Update failed", e.message); setError(e.message); },
   });
   const deleteMutation = useMutation({
     mutationFn: deleteLeave,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }),
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); toast.success("Deleted", "Leave request removed."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
   const statusMutation = useMutation({
     mutationFn: ({ id, status, reason }: { id: number; status: LeaveItem["status"]; reason?: string }) =>
       updateLeave(id, { status, reason }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); setRejectModal(null); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leaves"] }); toast.success("Status updated", "Leave request status has been changed."); setRejectModal(null); },
+    onError: (e: Error) => { toast.error("Action failed", e.message); setError(e.message); },
   });
   const deleteTypeMutation = useMutation({
     mutationFn: deleteLeaveType,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["hr","leave-types"] }),
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["hr","leave-types"] }); toast.success("Deleted", "Leave type removed."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
   const blackoutMutation = useMutation({
     mutationFn: () => createLeaveBlackout({ name: blackoutForm.name, start_date: blackoutForm.start_date, end_date: blackoutForm.end_date, leave_type_id: blackoutForm.leave_type_id ? Number(blackoutForm.leave_type_id) : null }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leave-blackouts"] }); setBlackoutModal(false); setBlackoutForm({ name:"", start_date:"", end_date:"", leave_type_id:"" }); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr","leave-blackouts"] }); toast.success("Blackout created", "Leave blackout period saved."); setBlackoutModal(false); setBlackoutForm({ name:"", start_date:"", end_date:"", leave_type_id:"" }); },
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
   const deleteBlackoutMutation = useMutation({
     mutationFn: deleteLeaveBlackout,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["hr","leave-blackouts"] }),
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["hr","leave-blackouts"] }); toast.success("Deleted", "Leave blackout removed."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   function openLeave(leave?: LeaveItem) {

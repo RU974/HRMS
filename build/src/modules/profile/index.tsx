@@ -10,6 +10,7 @@ import { useAuthStore, getCurrentPermissionKeys } from "@/store/auth-store";
 import { getUserRoleKeys, isSuperAdminRole } from "@/config/rbac";
 import { me } from "@/services/auth-service";
 import { apiClient } from "@/services/api-client";
+import { toast } from "@/components/notifications/toast";
 
 const inputClass =
   "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30";
@@ -102,10 +103,11 @@ export function ProfilePage() {
       const fresh = await me();
       setUser(fresh);
       await queryClient.invalidateQueries({ queryKey: ["auth-me"] });
+      toast.success("Profile saved", "Your profile has been updated successfully.");
       setProfileMsg({ type: "success", text: "Profile updated successfully." });
       setTimeout(() => setProfileMsg(null), 3500);
     },
-    onError: (e: Error) => setProfileMsg({ type: "error", text: e.message }),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setProfileMsg({ type: "error", text: e.message }); },
   });
 
   const pwMutation = useMutation({
@@ -116,10 +118,11 @@ export function ProfilePage() {
       }),
     onSuccess: () => {
       setPwForm({ current_password: "", password: "", password_confirmation: "" });
+      toast.success("Password changed", "Your password has been updated successfully.");
       setPwMsg({ type: "success", text: "Password changed successfully." });
       setTimeout(() => setPwMsg(null), 3500);
     },
-    onError: (e: Error) => setPwMsg({ type: "error", text: e.message }),
+    onError: (e: Error) => { toast.error("Password change failed", e.message); setPwMsg({ type: "error", text: e.message }); },
   });
 
   function handlePhotoChange(e: ChangeEvent<HTMLInputElement>) {

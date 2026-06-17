@@ -13,6 +13,7 @@ import {
   type WorkflowStepPayload,
   type ConditionOperator,
 } from "@/services/approval-service";
+import { toast } from "@/components/notifications/toast";
 
 const OPERATORS: ConditionOperator[] = [">", ">=", "<", "<=", "==", "!="];
 const CONDITION_FIELDS = ["salary", "amount", "days", "leave_days", "grade"];
@@ -77,10 +78,13 @@ export function WorkflowsPage() {
     },
     onSuccess: () => {
       resetForm();
+      toast.success("Workflow created", "Approval workflow created successfully.");
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
     },
     onError: (error) => {
-      setFormError(error instanceof Error ? error.message : "Unable to create workflow.");
+      const msg = error instanceof Error ? error.message : "Unable to create workflow.";
+      toast.error("Save failed", msg);
+      setFormError(msg);
     },
   });
 
@@ -88,10 +92,13 @@ export function WorkflowsPage() {
     mutationFn: deleteWorkflow,
     onSuccess: () => {
       setMutationError(null);
+      toast.success("Deleted", "Workflow removed successfully.");
       queryClient.invalidateQueries({ queryKey: ["workflows"] });
     },
     onError: (error) => {
-      setMutationError(error instanceof Error ? error.message : "Unable to delete workflow.");
+      const msg = error instanceof Error ? error.message : "Unable to delete workflow.";
+      toast.error("Delete failed", msg);
+      setMutationError(msg);
     },
   });
 

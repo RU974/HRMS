@@ -15,6 +15,7 @@ import {
   updateOnboarding,
 } from "@/services/recruitment-service";
 import { RecruitmentSubnav, formatRecruitmentDate } from "./shared";
+import { toast } from "@/components/notifications/toast";
 
 const defaultOnboardingForm: OnboardingPayload = {
   candidate_id: 0,
@@ -45,26 +46,29 @@ export function OnboardingPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "onboarding"] });
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] });
+      toast.success("Onboarding started", "Onboarding record created successfully.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<Omit<OnboardingPayload, "candidate_id">> }) => updateOnboarding(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "onboarding"] });
+      toast.success("Onboarding updated", "Onboarding record saved.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteOnboarding,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "onboarding"] });
+      toast.success("Deleted", "Onboarding record removed.");
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
   const onboardings = onboardingQuery.data?.data ?? [];

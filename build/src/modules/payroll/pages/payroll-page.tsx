@@ -61,6 +61,7 @@ import {
   updateTaxBracket,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const sel = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
@@ -187,8 +188,8 @@ export function PayrollPage() {
   const [genYear,  setGenYear]  = useState(new Date().getFullYear());
   const genMut = useMutation({
     mutationFn: () => generatePayroll({ month: genMonth, year: genYear }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); setGenModal(false); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); toast.success("Payroll generated", "Payroll records have been generated successfully."); setGenModal(false); },
+    onError: (e: Error) => { toast.error("Generation failed", e.message); setError(e.message); },
   });
 
   // ── Bank export ──────────────────────────────────────────────────────────────
@@ -208,25 +209,25 @@ export function PayrollPage() {
   const [payrollForm,  setPayrollForm]  = useState({ employee_id: 0, month: new Date().getMonth() + 1, year: new Date().getFullYear(), base_salary: 0, bonus: 0, deductions: 0, tax: 0, payment_date: "", status: "draft" as PayrollRecord["status"] });
   const [payrollDetail, setPayrollDetail] = useState<PayrollRecord | null>(null);
 
-  const payrollCreate = useMutation({ mutationFn: () => createPayroll({ ...payrollForm, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax) }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); setPayrollModal(false); }, onError: (e: Error) => setError(e.message) });
-  const payrollUpdate = useMutation({ mutationFn: () => updatePayroll(payrollEdit!.id, { bonus: payrollForm.bonus, deductions: payrollForm.deductions, tax: payrollForm.tax, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax), payment_date: payrollForm.payment_date, status: payrollForm.status }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); setPayrollModal(false); }, onError: (e: Error) => setError(e.message) });
-  const payrollDelete = useMutation({ mutationFn: deletePayroll, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","base"] }), onError: (e: Error) => setError(e.message) });
-  const payrollPaid   = useMutation({ mutationFn: markPayrollPaid, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","base"] }), onError: (e: Error) => setError(e.message) });
-  const payrollApprov = useMutation({ mutationFn: approvePayroll,  onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","base"] }), onError: (e: Error) => setError(e.message) });
+  const payrollCreate = useMutation({ mutationFn: () => createPayroll({ ...payrollForm, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax) }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); toast.success("Payroll created", "Payroll record created successfully."); setPayrollModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const payrollUpdate = useMutation({ mutationFn: () => updatePayroll(payrollEdit!.id, { bonus: payrollForm.bonus, deductions: payrollForm.deductions, tax: payrollForm.tax, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax), payment_date: payrollForm.payment_date, status: payrollForm.status }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); toast.success("Payroll updated", "Payroll record updated successfully."); setPayrollModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const payrollDelete = useMutation({ mutationFn: deletePayroll, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); toast.success("Deleted", "Payroll record removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
+  const payrollPaid   = useMutation({ mutationFn: markPayrollPaid, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); toast.success("Marked as paid", "Payroll has been marked as paid."); }, onError: (e: Error) => { toast.error("Action failed", e.message); setError(e.message); } });
+  const payrollApprov = useMutation({ mutationFn: approvePayroll,  onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","base"] }); toast.success("Approved", "Payroll has been approved."); }, onError: (e: Error) => { toast.error("Approval failed", e.message); setError(e.message); } });
 
   // ── Salary slip ──────────────────────────────────────────────────────────────
   const [slipPayrollId, setSlipPayrollId] = useState(0);
   const [slipDate,      setSlipDate]      = useState("");
-  const slipMut = useMutation({ mutationFn: () => createSalarySlipFromPayroll(slipPayrollId, slipDate), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); setSlipPayrollId(0); setSlipDate(""); }, onError: (e: Error) => setError(e.message) });
+  const slipMut = useMutation({ mutationFn: () => createSalarySlipFromPayroll(slipPayrollId, slipDate), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); toast.success("Salary slip created", "Salary slip generated successfully."); setSlipPayrollId(0); setSlipDate(""); }, onError: (e: Error) => { toast.error("Failed to create slip", e.message); setError(e.message); } });
 
   // ── Processing form ──────────────────────────────────────────────────────────
   const [procModal, setProcModal] = useState(false);
   const [procEdit,  setProcEdit]  = useState<PayrollProcessing | null>(null);
   const [procForm,  setProcForm]  = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), status: "draft" as PayrollProcessing["status"], processed_at: "", notes: "" });
 
-  const procCreate = useMutation({ mutationFn: () => createPayrollProcessing({ ...procForm, processed_at: procForm.processed_at || null, notes: procForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","processings"] }); setProcModal(false); }, onError: (e: Error) => setError(e.message) });
-  const procUpdate = useMutation({ mutationFn: () => updatePayrollProcessing(procEdit!.id, { status: procForm.status, processed_at: procForm.processed_at || null, notes: procForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","processings"] }); setProcModal(false); }, onError: (e: Error) => setError(e.message) });
-  const procDelete = useMutation({ mutationFn: deletePayrollProcessing, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","processings"] }), onError: (e: Error) => setError(e.message) });
+  const procCreate = useMutation({ mutationFn: () => createPayrollProcessing({ ...procForm, processed_at: procForm.processed_at || null, notes: procForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","processings"] }); toast.success("Processing created", "Payroll processing record saved."); setProcModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const procUpdate = useMutation({ mutationFn: () => updatePayrollProcessing(procEdit!.id, { status: procForm.status, processed_at: procForm.processed_at || null, notes: procForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","processings"] }); toast.success("Processing updated", "Payroll processing record updated."); setProcModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const procDelete = useMutation({ mutationFn: deletePayrollProcessing, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","processings"] }); toast.success("Deleted", "Processing record removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Payslip form ─────────────────────────────────────────────────────────────
   const [payslipModal,  setPayslipModal]  = useState(false);
@@ -235,63 +236,63 @@ export function PayrollPage() {
   const [payslipStatF,  setPayslipStatF]  = useState<Payslip["status"] | "">("");
   const [payslipForm,   setPayslipForm]   = useState({ employee_id: 0, payroll_id: 0, slip_number: "", issue_date: "", status: "draft" as Payslip["status"], file_url: "", notes: "" });
 
-  const payslipCreate = useMutation({ mutationFn: () => createPayslip({ ...payslipForm, file_url: payslipForm.file_url || null, notes: payslipForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); setPayslipModal(false); }, onError: (e: Error) => setError(e.message) });
-  const payslipUpdate = useMutation({ mutationFn: () => updatePayslip(payslipEdit!.id, { status: payslipForm.status, issue_date: payslipForm.issue_date, file_url: payslipForm.file_url || undefined, notes: payslipForm.notes || undefined }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); setPayslipModal(false); }, onError: (e: Error) => setError(e.message) });
-  const payslipDelete = useMutation({ mutationFn: deletePayslip, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }), onError: (e: Error) => setError(e.message) });
+  const payslipCreate = useMutation({ mutationFn: () => createPayslip({ ...payslipForm, file_url: payslipForm.file_url || null, notes: payslipForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); toast.success("Payslip created", "Payslip saved successfully."); setPayslipModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const payslipUpdate = useMutation({ mutationFn: () => updatePayslip(payslipEdit!.id, { status: payslipForm.status, issue_date: payslipForm.issue_date, file_url: payslipForm.file_url || undefined, notes: payslipForm.notes || undefined }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); toast.success("Payslip updated", "Payslip updated successfully."); setPayslipModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const payslipDelete = useMutation({ mutationFn: deletePayslip, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","payslips"] }); toast.success("Deleted", "Payslip removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Bonus form ───────────────────────────────────────────────────────────────
   const [bonusModal, setBonusModal] = useState(false);
   const [bonusEdit,  setBonusEdit]  = useState<Bonus | null>(null);
   const [bonusForm,  setBonusForm]  = useState({ employee_id: 0, payroll_id: 0, title: "", amount: 0, taxable: false, effective_date: "", notes: "" });
 
-  const bonusCreate = useMutation({ mutationFn: () => createBonus({ ...bonusForm, payroll_id: bonusForm.payroll_id || null, notes: bonusForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","bonuses"] }); setBonusModal(false); }, onError: (e: Error) => setError(e.message) });
-  const bonusUpdate = useMutation({ mutationFn: () => updateBonus(bonusEdit!.id, { title: bonusForm.title, amount: bonusForm.amount, taxable: bonusForm.taxable, effective_date: bonusForm.effective_date, notes: bonusForm.notes || null, payroll_id: bonusForm.payroll_id || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","bonuses"] }); setBonusModal(false); }, onError: (e: Error) => setError(e.message) });
-  const bonusDelete = useMutation({ mutationFn: deleteBonus, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","bonuses"] }), onError: (e: Error) => setError(e.message) });
+  const bonusCreate = useMutation({ mutationFn: () => createBonus({ ...bonusForm, payroll_id: bonusForm.payroll_id || null, notes: bonusForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","bonuses"] }); toast.success("Bonus added", "Bonus record saved successfully."); setBonusModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const bonusUpdate = useMutation({ mutationFn: () => updateBonus(bonusEdit!.id, { title: bonusForm.title, amount: bonusForm.amount, taxable: bonusForm.taxable, effective_date: bonusForm.effective_date, notes: bonusForm.notes || null, payroll_id: bonusForm.payroll_id || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","bonuses"] }); toast.success("Bonus updated", "Bonus record updated successfully."); setBonusModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const bonusDelete = useMutation({ mutationFn: deleteBonus, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","bonuses"] }); toast.success("Deleted", "Bonus removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Deduction form ───────────────────────────────────────────────────────────
   const [dedModal, setDedModal] = useState(false);
   const [dedEdit,  setDedEdit]  = useState<Deduction | null>(null);
   const [dedForm,  setDedForm]  = useState({ employee_id: 0, payroll_id: 0, title: "", amount: 0, type: "other" as DeductionType, effective_date: "", notes: "" });
 
-  const dedCreate = useMutation({ mutationFn: () => createDeduction({ ...dedForm, payroll_id: dedForm.payroll_id || null, notes: dedForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","deductions"] }); setDedModal(false); }, onError: (e: Error) => setError(e.message) });
-  const dedUpdate = useMutation({ mutationFn: () => updateDeduction(dedEdit!.id, { title: dedForm.title, amount: dedForm.amount, type: dedForm.type, effective_date: dedForm.effective_date, notes: dedForm.notes || null, payroll_id: dedForm.payroll_id || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","deductions"] }); setDedModal(false); }, onError: (e: Error) => setError(e.message) });
-  const dedDelete = useMutation({ mutationFn: deleteDeduction, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","deductions"] }), onError: (e: Error) => setError(e.message) });
+  const dedCreate = useMutation({ mutationFn: () => createDeduction({ ...dedForm, payroll_id: dedForm.payroll_id || null, notes: dedForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","deductions"] }); toast.success("Deduction added", "Deduction record saved."); setDedModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const dedUpdate = useMutation({ mutationFn: () => updateDeduction(dedEdit!.id, { title: dedForm.title, amount: dedForm.amount, type: dedForm.type, effective_date: dedForm.effective_date, notes: dedForm.notes || null, payroll_id: dedForm.payroll_id || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","deductions"] }); toast.success("Deduction updated", "Deduction record updated."); setDedModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const dedDelete = useMutation({ mutationFn: deleteDeduction, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","deductions"] }); toast.success("Deleted", "Deduction removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Tax bracket form ─────────────────────────────────────────────────────────
   const [taxModal, setTaxModal] = useState(false);
   const [taxEdit,  setTaxEdit]  = useState<TaxBracket | null>(null);
   const [taxForm,  setTaxForm]  = useState({ name: "", min_income: 0, max_income: "" as number | "", rate: 0, sort_order: 0 });
 
-  const taxCreate = useMutation({ mutationFn: () => createTaxBracket({ ...taxForm, max_income: taxForm.max_income === "" ? null : Number(taxForm.max_income) }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","tax-brackets"] }); setTaxModal(false); }, onError: (e: Error) => setError(e.message) });
-  const taxUpdate = useMutation({ mutationFn: () => updateTaxBracket(taxEdit!.id, { ...taxForm, max_income: taxForm.max_income === "" ? null : Number(taxForm.max_income) }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","tax-brackets"] }); setTaxModal(false); }, onError: (e: Error) => setError(e.message) });
-  const taxDelete = useMutation({ mutationFn: deleteTaxBracket, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","tax-brackets"] }), onError: (e: Error) => setError(e.message) });
+  const taxCreate = useMutation({ mutationFn: () => createTaxBracket({ ...taxForm, max_income: taxForm.max_income === "" ? null : Number(taxForm.max_income) }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","tax-brackets"] }); toast.success("Tax bracket saved", "Tax bracket created successfully."); setTaxModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const taxUpdate = useMutation({ mutationFn: () => updateTaxBracket(taxEdit!.id, { ...taxForm, max_income: taxForm.max_income === "" ? null : Number(taxForm.max_income) }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","tax-brackets"] }); toast.success("Tax bracket updated", "Tax bracket updated successfully."); setTaxModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const taxDelete = useMutation({ mutationFn: deleteTaxBracket, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","tax-brackets"] }); toast.success("Deleted", "Tax bracket removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Salary grade form ────────────────────────────────────────────────────────
   const [gradeModal, setGradeModal] = useState(false);
   const [gradeEdit,  setGradeEdit]  = useState<SalaryGrade | null>(null);
   const [gradeForm,  setGradeForm]  = useState({ name: "", min_salary: 0, max_salary: 0, basic_percent: 50, hra_percent: 20, transport_allowance: 0, other_allowance: 0, notes: "" });
 
-  const gradeCreate = useMutation({ mutationFn: () => createSalaryGrade({ ...gradeForm, notes: gradeForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","salary-grades"] }); setGradeModal(false); }, onError: (e: Error) => setError(e.message) });
-  const gradeUpdate = useMutation({ mutationFn: () => updateSalaryGrade(gradeEdit!.id, { ...gradeForm, notes: gradeForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","salary-grades"] }); setGradeModal(false); }, onError: (e: Error) => setError(e.message) });
-  const gradeDelete = useMutation({ mutationFn: deleteSalaryGrade, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","salary-grades"] }), onError: (e: Error) => setError(e.message) });
+  const gradeCreate = useMutation({ mutationFn: () => createSalaryGrade({ ...gradeForm, notes: gradeForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","salary-grades"] }); toast.success("Salary grade saved", "Salary grade created successfully."); setGradeModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const gradeUpdate = useMutation({ mutationFn: () => updateSalaryGrade(gradeEdit!.id, { ...gradeForm, notes: gradeForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","salary-grades"] }); toast.success("Salary grade updated", "Salary grade updated successfully."); setGradeModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const gradeDelete = useMutation({ mutationFn: deleteSalaryGrade, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","salary-grades"] }); toast.success("Deleted", "Salary grade removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Salary increment form ────────────────────────────────────────────────────
   const [incModal, setIncModal] = useState(false);
   const [incEdit,  setIncEdit]  = useState<SalaryIncrement | null>(null);
   const [incForm,  setIncForm]  = useState({ employee_id: 0, effective_date: "", old_salary: 0, new_salary: 0, reason: "", notes: "" });
 
-  const incCreate = useMutation({ mutationFn: () => createSalaryIncrement({ ...incForm, reason: incForm.reason || null, notes: incForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","increments"] }); setIncModal(false); }, onError: (e: Error) => setError(e.message) });
-  const incUpdate = useMutation({ mutationFn: () => updateSalaryIncrement(incEdit!.id, { effective_date: incForm.effective_date, old_salary: incForm.old_salary, new_salary: incForm.new_salary, reason: incForm.reason || null, notes: incForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","increments"] }); setIncModal(false); }, onError: (e: Error) => setError(e.message) });
-  const incDelete = useMutation({ mutationFn: deleteSalaryIncrement, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","increments"] }), onError: (e: Error) => setError(e.message) });
+  const incCreate = useMutation({ mutationFn: () => createSalaryIncrement({ ...incForm, reason: incForm.reason || null, notes: incForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","increments"] }); toast.success("Increment saved", "Salary increment recorded successfully."); setIncModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const incUpdate = useMutation({ mutationFn: () => updateSalaryIncrement(incEdit!.id, { effective_date: incForm.effective_date, old_salary: incForm.old_salary, new_salary: incForm.new_salary, reason: incForm.reason || null, notes: incForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","increments"] }); toast.success("Increment updated", "Salary increment updated."); setIncModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const incDelete = useMutation({ mutationFn: deleteSalaryIncrement, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","increments"] }); toast.success("Deleted", "Salary increment removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Loan form ────────────────────────────────────────────────────────────────
   const [loanModal, setLoanModal] = useState(false);
   const [loanEdit,  setLoanEdit]  = useState<LoanAdvance | null>(null);
   const [loanForm,  setLoanForm]  = useState({ employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "" as number | "", start_date: "", end_date: "", notes: "" });
 
-  const loanCreate = useMutation({ mutationFn: () => createLoanAdvance({ ...loanForm, emi_amount: loanForm.emi_amount === "" ? null : Number(loanForm.emi_amount), end_date: loanForm.end_date || null, notes: loanForm.notes || null, status: "active" }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","loans"] }); setLoanModal(false); }, onError: (e: Error) => setError(e.message) });
-  const loanUpdate = useMutation({ mutationFn: () => updateLoanAdvance(loanEdit!.id, { title: loanForm.title, outstanding_balance: loanForm.outstanding_balance, emi_amount: loanForm.emi_amount === "" ? null : Number(loanForm.emi_amount), end_date: loanForm.end_date || null, notes: loanForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","loans"] }); setLoanModal(false); }, onError: (e: Error) => setError(e.message) });
-  const loanDelete = useMutation({ mutationFn: deleteLoanAdvance, onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["payroll","loans"] }), onError: (e: Error) => setError(e.message) });
+  const loanCreate = useMutation({ mutationFn: () => createLoanAdvance({ ...loanForm, emi_amount: loanForm.emi_amount === "" ? null : Number(loanForm.emi_amount), end_date: loanForm.end_date || null, notes: loanForm.notes || null, status: "active" }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","loans"] }); toast.success("Loan added", "Loan / advance record saved."); setLoanModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const loanUpdate = useMutation({ mutationFn: () => updateLoanAdvance(loanEdit!.id, { title: loanForm.title, outstanding_balance: loanForm.outstanding_balance, emi_amount: loanForm.emi_amount === "" ? null : Number(loanForm.emi_amount), end_date: loanForm.end_date || null, notes: loanForm.notes || null }), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll","loans"] }); toast.success("Loan updated", "Loan / advance record updated."); setLoanModal(false); }, onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); } });
+  const loanDelete = useMutation({ mutationFn: deleteLoanAdvance, onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll","loans"] }); toast.success("Deleted", "Loan / advance removed."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   // ── Render ───────────────────────────────────────────────────────────────────
   const payrolls   = payrollsQ.data ?? [];

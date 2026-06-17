@@ -5,6 +5,7 @@ import { Modal } from "@/components/modals/modal";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { ShiftItem, createShift, deleteShift, listShifts, updateShift } from "@/services/hr-management-service";
+import { toast } from "@/components/notifications/toast";
 
 export function ShiftsPage() {
   const queryClient = useQueryClient();
@@ -15,10 +16,10 @@ export function ShiftsPage() {
   const [form, setForm] = useState({ name: "", start_time: "09:00", end_time: "17:00", grace_minutes: 0, is_active: true });
   const saveMutation = useMutation({
     mutationFn: async () => editing ? updateShift(editing.id, form) : createShift(form),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "shifts"] }); setModalOpen(false); },
-    onError: (e: Error) => setError(e.message)
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "shifts"] }); toast.success("Saved", editing ? "Shift updated successfully." : "Shift created successfully."); setModalOpen(false); },
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); }
   });
-  const deleteMutation = useMutation({ mutationFn: deleteShift, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "shifts"] }); }, onError: (e: Error) => setError(e.message) });
+  const deleteMutation = useMutation({ mutationFn: deleteShift, onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "shifts"] }); toast.success("Deleted", "Shift removed successfully."); }, onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); } });
 
   return <div className="space-y-6">
     <PageHeader title="Shifts" subtitle="Manage shift times and active state." />

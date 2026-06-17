@@ -10,6 +10,7 @@ import {
   createDelegation,
   deleteDelegation,
 } from "@/services/approval-service";
+import { toast } from "@/components/notifications/toast";
 
 function toDatetimeLocal(ts: string) {
   return new Date(ts).toISOString().slice(0, 16);
@@ -38,14 +39,16 @@ export function DelegationsPage() {
       setEndsAt("");
       setNotes("");
       setFormError(null);
+      toast.success("Delegation created", "Approval delegation has been set up.");
       queryClient.invalidateQueries({ queryKey: ["approval-delegations"] });
     },
-    onError: (error) => setFormError(error instanceof Error ? error.message : "Unable to create delegation."),
+    onError: (error) => { const msg = error instanceof Error ? error.message : "Unable to create delegation."; toast.error("Failed to create delegation", msg); setFormError(msg); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteDelegation,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["approval-delegations"] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["approval-delegations"] }); toast.success("Deleted", "Delegation removed."); },
+    onError: (error) => toast.error("Delete failed", error instanceof Error ? error.message : "Unable to delete delegation."),
   });
 
   const delegations = delegationsQuery.data ?? [];

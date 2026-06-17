@@ -89,6 +89,26 @@ const EDITION_CFG: Record<LicenseEdition, {
   Enterprise:   { icon: Crown,  gradient: "from-violet-700 to-purple-900",  border: "border-violet-400/30", badge: "bg-violet-100 text-violet-700",  label: "Enterprise"   },
 };
 
+// ─── Edition seat + feature defaults ─────────────────────────────────────────
+const EDITION_DEFAULTS: Record<LicenseEdition, {
+  max_employees: string; // "" = unlimited (sends null to API)
+  max_users: string;
+  features: string[];
+}> = {
+  Starter:      { max_employees: "25",  max_users: "5",  features: ["attendance", "leaves"] },
+  Professional: { max_employees: "200", max_users: "50", features: ["attendance", "leaves", "payroll", "performance", "communication"] },
+  Enterprise:   { max_employees: "",    max_users: "",   features: ["attendance", "leaves", "payroll", "performance", "communication", "recruitment"] },
+};
+
+const FEATURE_OPTIONS: { value: string; label: string; minEdition: LicenseEdition }[] = [
+  { value: "attendance",    label: "Attendance",          minEdition: "Starter"      },
+  { value: "leaves",        label: "Leave Management",    minEdition: "Starter"      },
+  { value: "payroll",       label: "Payroll",             minEdition: "Professional" },
+  { value: "performance",   label: "Performance Reviews", minEdition: "Professional" },
+  { value: "communication", label: "Communication",       minEdition: "Professional" },
+  { value: "recruitment",   label: "Recruitment",         minEdition: "Enterprise"   },
+];
+
 // ─── Usage ring SVG ───────────────────────────────────────────────────────────
 function UsageRing({ used, max, label, color }: { used: number; max: number; label: string; color: string }) {
   const pct   = usagePct(used, max);
@@ -574,18 +594,26 @@ function IssueModal({
   // NOTE: This component is mounted with a `key` prop at the call site so that
   // React remounts it fresh whenever the target license or prefill company changes.
   // That means useState here always runs with the correct initial values.
+  const defaultEdition = (license?.edition ?? "Professional") as LicenseEdition;
   const [form, setForm] = useState({
     licensee_name:  license?.licensee_name  ?? prefillCompanyName,
     licensee_email: license?.licensee_email ?? "",
-    edition:        (license?.edition ?? "Professional") as LicenseEdition,
-    max_employees:  String(license?.max_employees ?? 50),
-    max_users:      String(license?.max_users     ?? 20),
+    edition:        defaultEdition,
+    // When editing: preserve existing values (null → "" means unlimited for Enterprise)
+    // When creating: use edition defaults
+    max_employees:  license
+      ? (license.max_employees != null ? String(license.max_employees) : "")
+      : EDITION_DEFAULTS[defaultEdition].max_employees,
+    max_users:      license
+      ? (license.max_users != null ? String(license.max_users) : "")
+      : EDITION_DEFAULTS[defaultEdition].max_users,
     expires_at:     license?.expires_at?.slice(0, 10) ?? "",
     issued_by:      license?.issued_by      ?? "",
     support_email:  license?.support_email  ?? "",
-    features:       Array.isArray(license?.features)
-      ? license.features.join(", ")
-      : (license?.features as string | undefined) ?? "",
+    // Store features as string[] for checkbox binding; fall back to edition defaults
+    features:       Array.isArray(license?.features) && license.features.length > 0
+      ? license.features as string[]
+      : EDITION_DEFAULTS[defaultEdition].features,
     // Prefer license's own company when editing, otherwise use prefill from row
     company_id: license?.company?.id ?? prefillCompanyId,
   });
@@ -609,12 +637,13 @@ function IssueModal({
         licensee_name:  form.licensee_name,
         licensee_email: form.licensee_email,
         edition:        form.edition,
-        max_employees:  Number(form.max_employees),
-        max_users:      Number(form.max_users),
+        // Empty string means unlimited (Enterprise) → send null so backend skips enforcement
+        max_employees:  form.max_employees === "" ? null : Number(form.max_employees),
+        max_users:      form.max_users     === "" ? null : Number(form.max_users),
         expires_at:     form.expires_at || null,
         issued_by:      form.issued_by  || null,
         support_email:  form.support_email || null,
-        features:       form.features.split(",").map((f) => f.trim()).filter(Boolean),
+        features:       form.features,
       };
 
       // Only attach company_id when issuing a new license as Super Admin
@@ -635,9 +664,22 @@ function IssueModal({
 
   if (!open) return null;
 
-  const set = (k: keyof typeof form) =>
+  const set = (k: Exclude<keyof typeof form, "features">) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  // Changing edition auto-fills seat limits and module features
+  const handleEditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const edition = e.target.value as LicenseEdition;
+    const d = EDITION_DEFAULTS[edition];
+    setForm((p) => ({ ...p, edition, max_employees: d.max_employees, max_users: d.max_users, features: d.features }));
+  };
+
+  const toggleFeature = (value: string, checked: boolean) =>
+    setForm((p) => ({
+      ...p,
+      features: checked ? [...p.features, value] : p.features.filter((f) => f !== value),
+    }));
 
   // Super Admin must pick a company before issuing
   const missingCompany = isSuperAdmin && !license && !form.company_id;
@@ -702,7 +744,7 @@ function IssueModal({
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Edition</label>
-              <select className={inputCls} value={form.edition} onChange={set("edition")}>
+              <select className={inputCls} value={form.edition} onChange={handleEditionChange}>
                 {(["Starter", "Professional", "Enterprise"] as LicenseEdition[]).map((e) => (
                   <option key={e}>{e}</option>
                 ))}
@@ -710,11 +752,33 @@ function IssueModal({
             </div>
             <div className="space-y-1.5">
               <label className={labelCls}>Max Employees</label>
-              <input className={inputCls} type="number" min="1" max="100000" value={form.max_employees} onChange={set("max_employees")} />
+              <input
+                className={inputCls}
+                type="number"
+                min="1"
+                max="100000"
+                placeholder="Unlimited"
+                value={form.max_employees}
+                onChange={set("max_employees")}
+              />
+              {form.max_employees === "" && (
+                <p className="text-[10px] text-[var(--muted)]">No limit (Enterprise)</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className={labelCls}>Max Users</label>
-              <input className={inputCls} type="number" min="1" max="10000" value={form.max_users} onChange={set("max_users")} />
+              <input
+                className={inputCls}
+                type="number"
+                min="1"
+                max="10000"
+                placeholder="Unlimited"
+                value={form.max_users}
+                onChange={set("max_users")}
+              />
+              {form.max_users === "" && (
+                <p className="text-[10px] text-[var(--muted)]">No limit (Enterprise)</p>
+              )}
             </div>
           </div>
 
@@ -736,10 +800,26 @@ function IssueModal({
             <input className={inputCls} type="email" value={form.support_email} onChange={set("support_email")} />
           </div>
 
-          {/* ── Features ── */}
-          <div className="space-y-1.5">
-            <label className={labelCls}>Features (comma-separated)</label>
-            <textarea className={inputCls} rows={2} placeholder="payroll, attendance, leaves, performance" value={form.features} onChange={set("features")} />
+          {/* ── Module access (features) ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className={labelCls}>Module Access</label>
+              <span className="text-[10px] text-[var(--muted)]">Auto-set by edition · customisable</span>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 grid grid-cols-2 gap-2">
+              {FEATURE_OPTIONS.map(({ value, label, minEdition }) => (
+                <label key={value} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.features.includes(value)}
+                    onChange={(e) => toggleFeature(value, e.target.checked)}
+                    className="h-3.5 w-3.5 rounded accent-[var(--primary)]"
+                  />
+                  <span className="text-sm text-[var(--text)]">{label}</span>
+                  <span className="ml-auto text-[10px] text-[var(--muted)] shrink-0">{minEdition}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* ── Overwrite confirmation (editing an existing license only) ── */}

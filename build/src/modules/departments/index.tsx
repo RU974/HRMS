@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/loaders/loading-spinner";
 import { createDepartment, deleteDepartment, getDepartment, listDepartments, updateDepartment, DepartmentDetailItem } from "@/services/hr-management-service";
+import { toast } from "@/components/notifications/toast";
 
 export function DepartmentsPage() {
   const queryClient = useQueryClient();
@@ -22,11 +23,12 @@ export function DepartmentsPage() {
     mutationFn: async () => editingId ? updateDepartment(editingId, { name }) : createDepartment({ name }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["hr", "departments"] });
+      toast.success("Saved", editingId ? "Department updated successfully." : "Department created successfully.");
       setModalOpen(false);
       setEditingId(null);
       setName("");
     },
-    onError: (e: Error) => setError(e.message)
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); }
   });
   const detailsMutation = useMutation({
     mutationFn: async (id: number) => getDepartment(id),
@@ -38,8 +40,8 @@ export function DepartmentsPage() {
   });
   const deleteMutation = useMutation({
     mutationFn: deleteDepartment,
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "departments"] }); },
-    onError: (e: Error) => setError(e.message)
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["hr", "departments"] }); toast.success("Deleted", "Department removed successfully."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); }
   });
 
   return <div className="space-y-6">

@@ -12,6 +12,7 @@ import {
   type ApprovalStatus,
 } from "@/services/approval-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 const approvalStatuses = ["", "pending", "approved", "rejected", "cancelled"] as const;
 
@@ -37,10 +38,13 @@ export function ApprovalsPage() {
     mutationFn: ({ id, notes }: { id: number; notes?: string | null }) => approveApproval(id, { notes }),
     onSuccess: () => {
       setMutationError(null);
+      toast.success("Approved", "Request has been approved.");
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
     },
     onError: (error) => {
-      setMutationError(error instanceof Error ? error.message : "Unable to approve request.");
+      const msg = error instanceof Error ? error.message : "Unable to approve request.";
+      toast.error("Approval failed", msg);
+      setMutationError(msg);
     },
   });
 
@@ -48,10 +52,13 @@ export function ApprovalsPage() {
     mutationFn: ({ id, notes }: { id: number; notes?: string | null }) => rejectApproval(id, { notes }),
     onSuccess: () => {
       setMutationError(null);
+      toast.success("Rejected", "Request has been rejected.");
       queryClient.invalidateQueries({ queryKey: ["approvals"] });
     },
     onError: (error) => {
-      setMutationError(error instanceof Error ? error.message : "Unable to reject request.");
+      const msg = error instanceof Error ? error.message : "Unable to reject request.";
+      toast.error("Rejection failed", msg);
+      setMutationError(msg);
     },
   });
 

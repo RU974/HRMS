@@ -13,6 +13,7 @@ import { checkInAttendance, checkOutAttendance } from "@/services/hr-management-
 import { useAuthStore } from "@/store/auth-store";
 import { getVisibleSidebarSections } from "@/config/sidebar-config";
 import { isSuperAdminRole } from "@/config/rbac";
+import { toast } from "@/components/notifications/toast";
 
 function isActivePath(currentPath: string, currentSearch: string, target?: string) {
   if (!target) return false;
@@ -350,7 +351,12 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
 
   const logoutMutation = useMutation({
     mutationFn: logoutRequest,
-    onSettled: () => { logout(); qc.clear(); navigate("/auth/login"); },
+    onSettled: () => {
+      toast.info("Goodbye!", `See you soon, ${user?.name?.split(" ")[0] ?? "there"}.`);
+      logout();
+      qc.clear();
+      navigate("/auth/login");
+    },
   });
 
   const initials = (user?.name ?? "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();

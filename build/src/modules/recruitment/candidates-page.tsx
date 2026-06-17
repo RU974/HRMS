@@ -15,6 +15,7 @@ import {
   updateCandidate,
 } from "@/services/recruitment-service";
 import { RecruitmentSubnav, formatRecruitmentDate } from "./shared";
+import { toast } from "@/components/notifications/toast";
 
 const defaultCandidateForm: CandidatePayload = {
   job_opening_id: 0,
@@ -50,9 +51,10 @@ export function CandidatesPage() {
     mutationFn: createCandidate,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] });
+      toast.success("Candidate added", "Candidate profile created successfully.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const updateMutation = useMutation({
@@ -60,9 +62,10 @@ export function CandidatesPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] });
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "onboarding"] });
+      toast.success("Candidate updated", "Candidate details saved successfully.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const deleteMutation = useMutation({
@@ -71,8 +74,9 @@ export function CandidatesPage() {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "candidates"] });
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "onboarding"] });
+      toast.success("Deleted", "Candidate removed.");
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
   const candidates = candidatesQuery.data?.data ?? [];

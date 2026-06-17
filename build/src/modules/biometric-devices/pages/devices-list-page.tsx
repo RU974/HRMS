@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 import {
   BiometricDevice,
   CreateBiometricDevicePayload,
@@ -42,9 +43,10 @@ export function DevicesListPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
       setModalOpen(false);
+      toast.success("Device added", "Biometric device added successfully.");
       setSuccessMsg("Device added successfully.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
 
   const updateMutation = useMutation({
@@ -54,27 +56,30 @@ export function DevicesListPage() {
       queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
       setModalOpen(false);
       setEditing(null);
+      toast.success("Device updated", "Biometric device updated successfully.");
       setSuccessMsg("Device updated successfully.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteBiometricDevice,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
+      toast.success("Deleted", "Device removed successfully.");
       setSuccessMsg("Device removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const syncMutation = useMutation({
     mutationFn: triggerBiometricDeviceSync,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
+      toast.info("Sync started", "Check Sync Logs for progress.");
       setSuccessMsg("Sync started. Check Sync Logs for progress.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Sync failed", e.message); setError(e.message); },
   });
 
   async function handleTestConnection(id: number) {

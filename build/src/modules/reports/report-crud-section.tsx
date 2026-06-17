@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 import {
   createReport,
   deleteReport,
@@ -78,17 +79,19 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
       setError(null);
       setEditing(null);
       setForm(defaultForm);
+      toast.success("Report saved", editing ? "Report updated successfully." : "Report created successfully.");
       await queryClient.invalidateQueries({ queryKey: ["reports"] });
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => { toast.error("Save failed", err.message); setError(err.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteReport,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast.success("Deleted", "Report removed successfully.");
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => { toast.error("Delete failed", err.message); setError(err.message); },
   });
 
   const scheduleMutation = useMutation({
@@ -108,9 +111,10 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
     onSuccess: async () => {
       setError(null);
       setScheduling(null);
+      toast.success("Schedule saved", "Report schedule updated successfully.");
       await queryClient.invalidateQueries({ queryKey: ["reports"] });
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => { toast.error("Schedule failed", err.message); setError(err.message); },
   });
 
   const totalReports = useMemo(() => data?.total ?? 0, [data?.total]);

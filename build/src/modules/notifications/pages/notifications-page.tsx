@@ -16,6 +16,7 @@ import {
   updateNotification,
 } from "@/services/notification-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 type ReadFilter = "all" | "read" | "unread";
 type GroupFilter = "all" | "info" | "warning" | "success" | "error";
@@ -94,21 +95,21 @@ export function NotificationsPage() {
 
   const createMutation = useMutation({
     mutationFn: createNotification,
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["notifications"] }); closeModal(); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["notifications"] }); toast.success("Notification sent", "Notification created successfully."); closeModal(); },
+    onError: (e: Error) => { toast.error("Failed to send", e.message); setError(e.message); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<NotificationPayload> }) =>
       updateNotification(id, payload),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["notifications"] }); closeModal(); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["notifications"] }); toast.success("Notification updated", "Changes saved successfully."); closeModal(); },
+    onError: (e: Error) => { toast.error("Update failed", e.message); setError(e.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteNotification,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
-    onError: (e: Error) => setError(e.message),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["notifications"] }); toast.success("Deleted", "Notification removed."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   function openCreate() {

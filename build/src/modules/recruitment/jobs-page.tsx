@@ -15,6 +15,7 @@ import {
   updateJobOpening,
 } from "@/services/recruitment-service";
 import { RecruitmentSubnav, formatRecruitmentDate } from "./shared";
+import { toast } from "@/components/notifications/toast";
 
 const defaultJobForm: JobOpeningPayload = {
   title: "",
@@ -49,26 +50,29 @@ export function JobsPage() {
     mutationFn: createJobOpening,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "jobs"] });
+      toast.success("Job posted", "Job opening created successfully.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<JobOpeningPayload> }) => updateJobOpening(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "jobs"] });
+      toast.success("Job updated", "Job opening updated successfully.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteJobOpening,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "jobs"] });
+      toast.success("Deleted", "Job opening removed.");
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
   const jobs = jobsQuery.data?.data ?? [];

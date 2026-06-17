@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "@/components/notifications/toast";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,8 @@ export function EmployeeFormPage() {
 
   const mutation = useMutation({
     mutationFn: (payload: FormData) => createEmployee(payload),
-    onSuccess: () => navigate("/employees"),
+    onSuccess: () => { toast.success("Employee added", "New employee has been created successfully."); navigate("/employees"); },
+    onError: (e: Error) => toast.error("Failed to save", e.message),
   });
 
   function handleChange<K extends keyof typeof form>(key: K, value: string) {

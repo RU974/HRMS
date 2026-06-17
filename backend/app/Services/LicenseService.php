@@ -21,10 +21,36 @@ class LicenseService
             ->get();
     }
 
+    // ─── Edition defaults ─────────────────────────────────────────────────────
+
+    private function editionDefaults(string $edition): array
+    {
+        return match ($edition) {
+            'Professional' => [
+                'max_employees' => 200,
+                'max_users'     => 50,
+                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication'],
+            ],
+            'Enterprise' => [
+                'max_employees' => null,
+                'max_users'     => null,
+                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication', 'recruitment'],
+            ],
+            default => [ // Starter
+                'max_employees' => 25,
+                'max_users'     => 5,
+                'features'      => ['attendance', 'leaves'],
+            ],
+        };
+    }
+
     // ─── Create ───────────────────────────────────────────────────────────────
 
     public function create(array $data, ?string $companyId): License
     {
+        $edition  = $data['edition'] ?? 'Starter';
+        $defaults = $this->editionDefaults($edition);
+
         $license = new License();
         $license->fill($data);
         $license->company_id    = $data['company_id'] ?? $companyId;
@@ -32,7 +58,10 @@ class LicenseService
         $license->issued_at     = now();
         $license->issued_by     = $data['issued_by'] ?? config('licenses.issued_by');
         $license->support_email = $data['support_email'] ?? config('licenses.support_email');
-        $license->features      = $data['features'] ?? [];
+        // Fall back to edition defaults when values are absent from the request
+        $license->max_employees = array_key_exists('max_employees', $data) ? $data['max_employees'] : $defaults['max_employees'];
+        $license->max_users     = array_key_exists('max_users', $data)     ? $data['max_users']     : $defaults['max_users'];
+        $license->features      = !empty($data['features']) ? $data['features'] : $defaults['features'];
         $license->metadata      = $data['metadata'] ?? [];
         $license->status        = 'trial';
         $license->is_active     = true;

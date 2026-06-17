@@ -16,6 +16,7 @@ import {
   updateInterview,
 } from "@/services/recruitment-service";
 import { RecruitmentSubnav, formatRecruitmentDate } from "./shared";
+import { toast } from "@/components/notifications/toast";
 
 const defaultInterviewForm: InterviewPayload = {
   candidate_id: 0,
@@ -47,26 +48,29 @@ export function InterviewsPage() {
     mutationFn: createInterview,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
+      toast.success("Interview scheduled", "Interview has been scheduled successfully.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<InterviewPayload> }) => updateInterview(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
+      toast.success("Interview updated", "Interview details saved.");
       closeModal();
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteInterview,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
+      toast.success("Deleted", "Interview removed.");
     },
-    onError: (mutationError: Error) => setError(mutationError.message),
+    onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
   const interviews = interviewsQuery.data?.data ?? [];

@@ -15,6 +15,7 @@ import {
   saveEmployeeMapping,
 } from "@/services/biometric-device-service";
 import { EmployeeMappingRow, EmployeeMappingTable } from "../components/employee-mapping-table";
+import { toast } from "@/components/notifications/toast";
 
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
 
@@ -51,10 +52,12 @@ export function DeviceMappingPage() {
     mutationFn: saveEmployeeMapping,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["biometric-mappings", deviceId] });
+      toast.success("Mapping saved", "Employee device mapping saved successfully.");
       setSuccessMsg("Mapping saved.");
       setSavingEmployeeId(null);
     },
     onError: (e: Error) => {
+      toast.error("Save failed", e.message);
       setError(e.message);
       setSavingEmployeeId(null);
     },
@@ -64,9 +67,10 @@ export function DeviceMappingPage() {
     mutationFn: deleteEmployeeMapping,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["biometric-mappings", deviceId] });
+      toast.success("Deleted", "Mapping removed.");
       setSuccessMsg("Mapping removed.");
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const autoMatchMutation = useMutation({
@@ -77,19 +81,23 @@ export function DeviceMappingPage() {
         edits[s.employee_id] = { device_user_id: s.device_user_id, card_number: "" };
       });
       setLocalEdits((prev) => ({ ...prev, ...edits }));
-      setSuccessMsg(`Found ${suggestions.length} suggested match(es). Review and click Save for each.`);
+      const msg = `Found ${suggestions.length} suggested match(es). Review and click Save for each.`;
+      toast.info("Auto-match complete", msg);
+      setSuccessMsg(msg);
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Auto-match failed", e.message); setError(e.message); },
   });
 
   const importMutation = useMutation({
     mutationFn: (file: File) => bulkImportEmployeeMappings(deviceId, file),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["biometric-mappings", deviceId] });
-      setSuccessMsg(`Imported ${result.imported} mapping(s). Skipped ${result.skipped}.`);
+      const msg = `Imported ${result.imported} mapping(s). Skipped ${result.skipped}.`;
+      toast.success("Import complete", msg);
+      setSuccessMsg(msg);
       setImportFile(null);
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => { toast.error("Import failed", e.message); setError(e.message); },
   });
 
   const employees = employeesQuery.data?.data ?? [];

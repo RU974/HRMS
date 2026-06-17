@@ -19,6 +19,7 @@ import {
   uploadAnnouncementImage,
 } from "@/services/announcement-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 type FilterState = "all" | "published" | "draft";
 type PublishMode = "now" | "schedule" | "draft";
@@ -105,21 +106,21 @@ export function AnnouncementsPage() {
 
   const createMutation = useMutation({
     mutationFn: createAnnouncement,
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["announcements"] }); closeModal(); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["announcements"] }); toast.success("Announcement published", "Your announcement has been created."); closeModal(); },
+    onError: (e: Error) => { toast.error("Failed to publish", e.message); setError(e.message); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: Partial<AnnouncementPayload> }) =>
       updateAnnouncement(id, payload),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["announcements"] }); closeModal(); },
-    onError: (e: Error) => setError(e.message),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["announcements"] }); toast.success("Announcement updated", "Your changes have been saved."); closeModal(); },
+    onError: (e: Error) => { toast.error("Failed to update", e.message); setError(e.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteAnnouncement,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["announcements"] }),
-    onError: (e: Error) => setError(e.message),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["announcements"] }); toast.success("Deleted", "Announcement removed successfully."); },
+    onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); },
   });
 
   const markReadMutation = useMutation({

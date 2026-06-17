@@ -16,6 +16,7 @@ import {
   type EmployeeDocumentItem,
 } from "@/services/hr-management-service";
 import { useAuthStore } from "@/store/auth-store";
+import { toast } from "@/components/notifications/toast";
 
 const documentCategories = ["CNIC", "Contract", "Certificate", "ID", "Other"] as const;
 const visibilityOptions = [
@@ -147,26 +148,29 @@ export function EmployeeDocumentsPage() {
     mutationFn: (payload: FormData) => createEmployeeDocument(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["hr", "employee-documents"] });
+      toast.success("Document uploaded", "Employee document saved successfully.");
       setModalOpen(false);
     },
-    onError: (error: Error) => setError(error.message),
+    onError: (error: Error) => { toast.error("Upload failed", error.message); setError(error.message); },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: FormData }) => updateEmployeeDocument(id, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["hr", "employee-documents"] });
+      toast.success("Document updated", "Employee document updated successfully.");
       setModalOpen(false);
     },
-    onError: (error: Error) => setError(error.message),
+    onError: (error: Error) => { toast.error("Update failed", error.message); setError(error.message); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteEmployeeDocument,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["hr", "employee-documents"] });
+      toast.success("Deleted", "Document removed successfully.");
     },
-    onError: (error: Error) => setError(error.message),
+    onError: (error: Error) => { toast.error("Delete failed", error.message); setError(error.message); },
   });
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
