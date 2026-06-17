@@ -372,6 +372,11 @@ export function ChatPage() {
                   return (
                     <label
                       key={u.id}
+                      onClick={() =>
+                        setNewChatUserIds((prev) =>
+                          prev.includes(u.id) ? prev.filter((id) => id !== u.id) : [...prev, u.id]
+                        )
+                      }
                       className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition ${
                         checked ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "text-[var(--text)] hover:bg-[var(--border)]/30"
                       }`}
