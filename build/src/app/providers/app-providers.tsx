@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { getTheme } from "@/services/theme-service";
 import { useAuthStore } from "@/store/auth-store";
 import { getResolvedTheme, useThemeStore } from "@/store/theme-store";
+import { ToastContainer } from "@/components/notifications/toast";
 
 const queryClient = new QueryClient();
 
@@ -89,5 +90,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     };
   }, [hydrateTheme]);
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ToastContainer />
+    </QueryClientProvider>
+  );
 }

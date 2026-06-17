@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { TopNavbar } from "@/components/navbar/top-navbar";
 import { Breadcrumbs } from "@/components/breadcrumbs/breadcrumbs";
-import { ToastContainer } from "@/components/notifications/toast";
 import { ErrorBoundary } from "@/app/error/error-boundary";
 import { useLayoutStore } from "@/store/layout-store";
 
@@ -66,8 +65,6 @@ export function AppLayout() {
         </main>
       </div>
 
-      {/* ── Global toast stack ── */}
-      <ToastContainer />
     </div>
   );
 }
