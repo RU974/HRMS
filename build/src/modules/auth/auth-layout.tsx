@@ -86,7 +86,7 @@ export function AuthLayout() {
 
           {/* bottom tagline */}
           <p className="text-[12px] tracking-wide text-slate-600">
-            © {new Date().getFullYear()} HRMS · All rights reserved
+            © {new Date().getFullYear()} HRMS-Slingshotteck · All rights reserved
           </p>
         </div>
       </div>

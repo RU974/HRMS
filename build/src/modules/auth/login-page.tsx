@@ -248,7 +248,7 @@ export function LoginPage() {
 
       {/* below-card footnote */}
       <p className="mt-5 text-center text-[11.5px] text-[var(--muted)]/50">
-        © {new Date().getFullYear()} HRMS · All rights reserved
+        © {new Date().getFullYear()} HRMS-Slingshotteck · All rights reserved
       </p>
     </div>
   );

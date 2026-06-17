@@ -38,8 +38,12 @@ function fmtDate(s?: string | null) {
   return new Date(s).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+// Raw percentage, intentionally NOT clamped to 100 so over-limit usage (e.g.
+// stale seat counts after a plan downgrade) stays visible instead of reading
+// as a deceptively-healthy 100%. Callers that draw a fixed-size ring should
+// clamp the drawn arc separately while still showing the true percentage.
 function usagePct(used: number, max: number) {
-  return max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0;
+  return max > 0 ? Math.round((used / max) * 100) : 0;
 }
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -90,7 +94,7 @@ function UsageRing({ used, max, label, color }: { used: number; max: number; lab
   const pct   = usagePct(used, max);
   const r     = 30;
   const circ  = 2 * Math.PI * r;
-  const dash  = (pct / 100) * circ;
+  const dash  = (Math.min(100, pct) / 100) * circ;
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="relative h-20 w-20">
@@ -516,8 +520,8 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
         </div>
         <div className="p-5 space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
-            Enter the license key provided by Slingshotteck. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
-            <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshotteck.com" className="underline">sales@slingshotteck.com</a></span>
+            Enter the license key provided by Slingshottech. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
+            <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshottech.com" className="underline">sales@slingshottech.com</a></span>
           </div>
           <div className="space-y-1.5">
             <label className={labelCls}>License Key</label>
@@ -586,6 +590,7 @@ function IssueModal({
     company_id: license?.company?.id ?? prefillCompanyId,
   });
   const [errMsg, setErrMsg] = useState("");
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
 
   // Fetch the company list only when the modal is open and the caller is Super Admin
   // and we are issuing a new license (not editing an existing one).
@@ -737,6 +742,14 @@ function IssueModal({
             <textarea className={inputCls} rows={2} placeholder="payroll, attendance, leaves, performance" value={form.features} onChange={set("features")} />
           </div>
 
+          {/* ── Overwrite confirmation (editing an existing license only) ── */}
+          {license && confirmOverwrite && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              This will overwrite the existing license details for <strong>{license.licensee_name}</strong>. Click "Confirm & Save" to proceed.
+            </div>
+          )}
+
           {/* ── Error ── */}
           {errMsg && (
             <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
@@ -750,13 +763,19 @@ function IssueModal({
               Cancel
             </button>
             <button
-              onClick={() => void mutation.mutate()}
+              onClick={() => {
+                if (license && !confirmOverwrite) {
+                  setConfirmOverwrite(true);
+                  return;
+                }
+                void mutation.mutate();
+              }}
               disabled={!canSubmit}
               className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               {mutation.isPending
                 ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> Saving…</>
-                : license ? "Save Changes" : "Issue License"
+                : license ? (confirmOverwrite ? "Confirm & Save" : "Save Changes") : "Issue License"
               }
             </button>
           </div>
@@ -908,7 +927,7 @@ function CompanyLicenseRow({
                   <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ${barColor(s.pct)}`}
-                      style={{ width: `${s.pct}%` }}
+                      style={{ width: `${Math.min(100, s.pct)}%` }}
                     />
                   </div>
                 </div>
@@ -1532,12 +1551,12 @@ export function LicensingTab() {
                       </span>
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-[var(--border)]">
-                      <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${pct}%` }} />
+                      <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${Math.min(100, pct)}%` }} />
                     </div>
                     {pct >= 80 && (
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-600">
                         <AlertTriangle className="h-3 w-3" />
-                        {pct >= 90 ? "Critical — approaching limit" : "Nearing limit — consider upgrading"}
+                        {pct > 100 ? "Over limit — usage exceeds plan allowance" : pct >= 90 ? "Critical — approaching limit" : "Nearing limit — consider upgrading"}
                       </p>
                     )}
                   </div>
@@ -1609,8 +1628,8 @@ export function LicensingTab() {
             </div>
             <p className="mt-4 text-center text-xs text-[var(--muted)]">
               Need a custom plan? Contact{" "}
-              <a href="mailto:sales@slingshotteck.com" className="text-[var(--primary)] hover:underline">
-                sales@slingshotteck.com
+              <a href="mailto:sales@slingshottech.com" className="text-[var(--primary)] hover:underline">
+                sales@slingshottech.com
               </a>
             </p>
           </div>

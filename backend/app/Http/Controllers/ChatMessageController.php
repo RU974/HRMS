@@ -93,7 +93,7 @@ class ChatMessageController extends Controller
             $query->where('is_read', $readValue);
         }
 
-        return $this->ok($query->latest()->get());
+        return $this->ok($query->latest()->limit(300)->get());
     }
 
     public function store(Request $request)

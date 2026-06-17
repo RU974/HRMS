@@ -13,14 +13,28 @@ class ExpireTrialLicenses extends Command
     public function handle(): int
     {
         $trialDays = config('licenses.trial_days', 14);
-        $cutoff    = now()->subDays($trialDays);
 
-        $count = License::query()
+        // Trial age must be judged in each company's own timezone, not the
+        // server's default — otherwise a license issued late in the day for a
+        // company several hours behind UTC could be expired up to a day early.
+        $candidates = License::query()
             ->where('status', 'trial')
             ->where('is_active', true)
             ->whereNull('activated_at')
-            ->where('issued_at', '<=', $cutoff)
-            ->update(['status' => 'expired']);
+            ->where('issued_at', '<=', now()->subDays($trialDays))
+            ->with('company:id,timezone')
+            ->get();
+
+        $expiredIds = $candidates->filter(function (License $license) use ($trialDays) {
+            $timezone = $license->company?->timezone ?: config('app.timezone');
+            $cutoff   = now($timezone)->subDays($trialDays);
+
+            return $license->issued_at->copy()->setTimezone($timezone)->lte($cutoff);
+        })->pluck('id');
+
+        $count = $expiredIds->isEmpty()
+            ? 0
+            : License::whereIn('id', $expiredIds)->update(['status' => 'expired']);
 
         $this->info("Expired {$count} trial license(s) older than {$trialDays} days.");
 

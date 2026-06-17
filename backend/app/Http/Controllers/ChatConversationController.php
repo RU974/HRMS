@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ChatConversation;
+use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,20 +21,40 @@ class ChatConversationController extends Controller
                 $query->where('user_id', $user->id);
             })
             ->with([
-                'participants:id,name,email',
+                'participants' => function ($query): void {
+                    $query->select('users.id', 'users.name', 'users.email')->withPivot('last_read_at');
+                },
                 'messages' => function ($query): void {
                     $query->latest()->limit(1)->with('sender:id,name,email');
                 },
             ])
-            ->get()
-            ->map(function (ChatConversation $conversation) use ($user) {
-                $myPivot = $conversation->participants->firstWhere('id', $user->id);
-                $lastReadAt = $myPivot?->pivot?->last_read_at;
+            ->get();
 
-                $unreadCount = $conversation->messages()
-                    ->where('sender_id', '!=', $user->id)
-                    ->when($lastReadAt, fn ($query) => $query->where('created_at', '>', $lastReadAt), fn ($query) => $query)
-                    ->count();
+        $unreadCounts = collect();
+
+        if ($conversations->isNotEmpty()) {
+            $unreadCounts = ChatMessage::query()
+                ->whereIn('conversation_id', $conversations->pluck('id'))
+                ->where('sender_id', '!=', $user->id)
+                ->where(function ($builder) use ($conversations, $user): void {
+                    foreach ($conversations as $conversation) {
+                        $myPivot = $conversation->participants->firstWhere('id', $user->id);
+                        $lastReadAt = $myPivot?->pivot?->last_read_at;
+
+                        $builder->orWhere(function ($q) use ($conversation, $lastReadAt): void {
+                            $q->where('conversation_id', $conversation->id)
+                                ->when($lastReadAt, fn ($inner) => $inner->where('created_at', '>', $lastReadAt));
+                        });
+                    }
+                })
+                ->selectRaw('conversation_id, count(*) as total')
+                ->groupBy('conversation_id')
+                ->pluck('total', 'conversation_id');
+        }
+
+        $conversations = $conversations
+            ->map(function (ChatConversation $conversation) use ($unreadCounts) {
+                $unreadCount = $unreadCounts[$conversation->id] ?? 0;
 
                 return [
                     'id' => $conversation->id,
@@ -104,7 +125,11 @@ class ChatConversationController extends Controller
 
     public function show(Request $request, int $id)
     {
-        $conversation = ChatConversation::with('participants:id,name,email')->findOrFail($id);
+        $conversation = ChatConversation::with([
+            'participants' => function ($query): void {
+                $query->select('users.id', 'users.name', 'users.email')->withPivot('last_read_at');
+            },
+        ])->findOrFail($id);
         $this->authorize('view', $conversation);
 
         return $this->ok($conversation);

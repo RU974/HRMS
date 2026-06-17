@@ -31,6 +31,16 @@ function formatTime(ts: string) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function formatDayDivider(ts: string) {
+  const d = new Date(ts);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+}
+
 function formatBytes(bytes?: number | null) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -451,12 +461,28 @@ export function ChatPage() {
                   </div>
                 )}
 
-                {filteredThread.map((msg) => {
+                {filteredThread.map((msg, idx) => {
                   const isMine = msg.sender_id === currentUserId;
                   const sender = selectedConversation.participants.find((p) => p.id === msg.sender_id);
+                  const prev = filteredThread[idx - 1];
+                  const showDayDivider = !prev || new Date(prev.created_at).toDateString() !== new Date(msg.created_at).toDateString();
+                  const isGrouped = !showDayDivider && prev?.sender_id === msg.sender_id &&
+                    new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60 * 1000;
                   return (
-                    <div key={msg.id} className={`flex gap-2 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
+                    <div key={msg.id}>
+                      {showDayDivider && (
+                        <div className="my-3 flex items-center gap-3">
+                          <div className="h-px flex-1 bg-[var(--border)]" />
+                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+                            {formatDayDivider(msg.created_at)}
+                          </span>
+                          <div className="h-px flex-1 bg-[var(--border)]" />
+                        </div>
+                      )}
+                      <div className={`flex gap-2 ${isMine ? "flex-row-reverse" : "flex-row"} ${isGrouped ? "mt-0.5" : ""}`}>
                       <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                        isGrouped ? "opacity-0" : ""
+                      } ${
                         isMine ? "bg-[var(--primary)] text-white" : "bg-[var(--border)] text-[var(--muted)]"
                       }`}>
                         {isMine ? getInitials(currentUser?.name ?? "Me") : getInitials(sender?.name ?? msg.sender?.name ?? "?")}
@@ -529,6 +555,7 @@ export function ChatPage() {
                             </button>
                           </div>
                         )}
+                      </div>
                       </div>
                     </div>
                   );

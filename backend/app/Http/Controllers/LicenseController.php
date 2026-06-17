@@ -81,7 +81,6 @@ class LicenseController extends Controller
             'max_users'      => ['nullable', 'integer', 'min:1', 'max:10000'],
             'expires_at'     => ['nullable', 'date'],
             'activated_at'   => ['nullable', 'date'],
-            'status'         => ['nullable', 'in:trial,active,expired,suspended'],
             'issued_by'      => ['nullable', 'string', 'max:255'],
             'support_email'  => ['nullable', 'email', 'max:255'],
             'features'       => ['nullable', 'array'],
@@ -182,7 +181,7 @@ class LicenseController extends Controller
         $this->authorizePermission($request, 'licenses:manage_settings');
 
         $validated = $request->validate([
-            'license_key' => ['required', 'string'],
+            'license_key' => ['required', 'string', 'regex:/^HRMS-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/i'],
         ]);
 
         try {

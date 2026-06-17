@@ -14,6 +14,10 @@ Artisan::command('inspire', function () {
 // Mark unactivated trial licenses as expired after config('licenses.trial_days') days.
 Schedule::command('licenses:expire-trials')->dailyAt('00:05');
 
+// Mark active licenses as expired once their expires_at date has passed.
+// Runs hourly so dashboards reflect expiry promptly without mutating data on read.
+Schedule::command('licenses:expire-active')->hourly();
+
 // Email licensees whose licenses expire in 30, 14, 7, or 1 day(s).
 Schedule::command('licenses:notify-expiring')->dailyAt('08:00');
 

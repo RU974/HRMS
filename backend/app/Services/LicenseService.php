@@ -46,12 +46,12 @@ class LicenseService
 
     public function update(License $license, array $data): License
     {
+        // `status` is intentionally not mass-assignable here — it is derived by
+        // recalculateStatus() or set explicitly via the dedicated suspend()/
+        // unsuspend()/activate() flows, so it can't be bypassed into an invalid
+        // state through this generic update endpoint.
         $license->fill($data);
-
-        if (isset($data['expires_at']) || isset($data['activated_at'])) {
-            $license->recalculateStatus();
-        }
-
+        $license->recalculateStatus();
         $license->save();
 
         return $license->fresh(['company']);
@@ -78,6 +78,18 @@ class LicenseService
 
         if ($license->activated_at) {
             return $license->load('company');
+        }
+
+        if ($license->company_id) {
+            $hasOtherActive = License::where('company_id', $license->company_id)
+                ->where('id', '!=', $license->id)
+                ->where('is_active', true)
+                ->where('status', 'active')
+                ->exists();
+
+            if ($hasOtherActive) {
+                throw new \RuntimeException('This company already has an active license. Please revoke or let the existing license expire before activating a new one.');
+            }
         }
 
         $license->activated_at = now();
@@ -116,9 +128,10 @@ class LicenseService
             ->with('company:id,name')
             ->first();
 
+        // Reflect expiry in this response without writing during a read request;
+        // the licenses:expire-active scheduled command persists the transition.
         if ($license && $license->expires_at?->isPast() && $license->status !== 'expired') {
             $license->status = 'expired';
-            $license->save();
         }
 
         return [
@@ -212,10 +225,10 @@ class LicenseService
             // Current license = first record that is still active (not revoked)
             $license = $companyLicenses->first(fn ($l) => $l->is_active);
 
-            // Auto-expire if past expiry date
+            // Reflect expiry in this response without writing during a read request;
+            // the licenses:expire-active scheduled command persists the transition.
             if ($license && $license->expires_at?->isPast() && $license->status !== 'expired') {
                 $license->status = 'expired';
-                $license->save();
             }
 
             // History = everything except the current license
