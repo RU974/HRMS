@@ -253,6 +253,9 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
   );
 }
 
+// ─── Edition tier ranking (Starter=0, Professional=1, Enterprise=2) ──────────
+const TIER_RANK: Record<LicenseEdition, number> = { Starter: 0, Professional: 1, Enterprise: 2 };
+
 // ─── Edition plan cards ───────────────────────────────────────────────────────
 const PLANS: Array<{
   edition: LicenseEdition;
@@ -294,9 +297,16 @@ const PLANS: Array<{
   },
 ];
 
-function PlanCard({ plan, current }: { plan: typeof PLANS[0]; current: boolean }) {
+function PlanCard({ plan, current, onSelect, ctaLabel }: {
+  plan: typeof PLANS[0];
+  current: boolean;
+  onSelect?: () => void;
+  ctaLabel?: string;
+}) {
   const cfg = EDITION_CFG[plan.edition];
   const Icon = cfg.icon;
+  const defaultCta = plan.edition === "Enterprise" ? "Contact Sales" : "Start Free Trial";
+  const cta = ctaLabel ?? defaultCta;
 
   return (
     <div className={`relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
@@ -342,12 +352,15 @@ function PlanCard({ plan, current }: { plan: typeof PLANS[0]; current: boolean }
             <CheckCircle2 className="h-4 w-4" /> Current Plan
           </div>
         ) : (
-          <button className={`w-full rounded-xl py-2 text-sm font-semibold transition ${
-            plan.highlighted
-              ? "bg-[var(--primary)] text-white hover:opacity-90"
-              : "border border-[var(--border)] text-[var(--text)] hover:bg-[var(--background)]"
-          }`}>
-            {plan.edition === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
+          <button
+            onClick={onSelect}
+            className={`w-full rounded-xl py-2 text-sm font-semibold transition ${
+              plan.highlighted
+                ? "bg-[var(--primary)] text-white hover:opacity-90"
+                : "border border-[var(--border)] text-[var(--text)] hover:bg-[var(--background)]"
+            }`}
+          >
+            {cta}
           </button>
         )}
       </div>
@@ -581,7 +594,7 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
 // ─── Issue / Edit modal ───────────────────────────────────────────────────────
 function IssueModal({
   open, onClose, onSuccess, license, isSuperAdmin = false,
-  prefillCompanyId = "", prefillCompanyName = "",
+  prefillCompanyId = "", prefillCompanyName = "", prefillEdition,
 }: {
   open: boolean;
   onClose: () => void;
@@ -590,11 +603,12 @@ function IssueModal({
   isSuperAdmin?: boolean;
   prefillCompanyId?: string;
   prefillCompanyName?: string;
+  prefillEdition?: LicenseEdition;
 }) {
   // NOTE: This component is mounted with a `key` prop at the call site so that
   // React remounts it fresh whenever the target license or prefill company changes.
   // That means useState here always runs with the correct initial values.
-  const defaultEdition = (license?.edition ?? "Professional") as LicenseEdition;
+  const defaultEdition = (license?.edition ?? prefillEdition ?? "Professional") as LicenseEdition;
   const [form, setForm] = useState({
     licensee_name:  license?.licensee_name  ?? prefillCompanyName,
     licensee_email: license?.licensee_email ?? "",
@@ -1327,6 +1341,7 @@ export function LicensingTab() {
   // Pre-filled company when SA clicks "Issue" from a specific company row
   const [prefillCompanyId,   setPrefillCompanyId]   = useState<string>("");
   const [prefillCompanyName, setPrefillCompanyName] = useState<string>("");
+  const [prefillEdition,     setPrefillEdition]     = useState<LicenseEdition | undefined>(undefined);
 
   // License targeted by suspend / unsuspend / revoke actions
   const [actionLicense, setActionLicense] = useState<LicenseItem | undefined>(undefined);
@@ -1411,13 +1426,14 @@ export function LicensingTab() {
       <div className="space-y-6">
         {/* Issue modal — may be pre-filled with a company from the row */}
         <IssueModal
-          key={`issue-${prefillCompanyId}`}
+          key={`issue-${prefillCompanyId}-${prefillEdition ?? ""}`}
           open={issueOpen}
-          onClose={() => { setIssueOpen(false); setPrefillCompanyId(""); setPrefillCompanyName(""); }}
+          onClose={() => { setIssueOpen(false); setPrefillCompanyId(""); setPrefillCompanyName(""); setPrefillEdition(undefined); }}
           onSuccess={invalidate}
           isSuperAdmin={true}
           prefillCompanyId={prefillCompanyId}
           prefillCompanyName={prefillCompanyName}
+          prefillEdition={prefillEdition}
         />
 
         {/* Edit modal — editing a specific company's license */}
@@ -1468,7 +1484,7 @@ export function LicensingTab() {
         {/* Issue new license button — floating in action bar */}
         <div className="flex justify-end">
           <button
-            onClick={() => { setPrefillCompanyId(""); setPrefillCompanyName(""); setIssueOpen(true); }}
+            onClick={() => { setPrefillCompanyId(""); setPrefillCompanyName(""); setPrefillEdition(undefined); setIssueOpen(true); }}
             className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
           >
             <Plus className="h-4 w-4" /> Issue New License
@@ -1492,7 +1508,18 @@ export function LicensingTab() {
             <div className="border-t border-[var(--border)] p-5">
               <div className="grid gap-4 sm:grid-cols-3">
                 {PLANS.map((p) => (
-                  <PlanCard key={p.edition} plan={p} current={false} />
+                  <PlanCard
+                    key={p.edition}
+                    plan={p}
+                    current={false}
+                    ctaLabel="Issue License"
+                    onSelect={() => {
+                      setPrefillEdition(p.edition);
+                      setPrefillCompanyId("");
+                      setPrefillCompanyName("");
+                      setIssueOpen(true);
+                    }}
+                  />
                 ))}
               </div>
             </div>
@@ -1702,9 +1729,36 @@ export function LicensingTab() {
         {showPlans && (
           <div className="border-t border-[var(--border)] p-5">
             <div className="grid gap-4 sm:grid-cols-3">
-              {PLANS.map((p) => (
-                <PlanCard key={p.edition} plan={p} current={p.edition === license?.edition} />
-              ))}
+              {PLANS.map((p) => {
+                const isCurrent = p.edition === license?.edition;
+                const currentRank = license ? TIER_RANK[license.edition] : -1;
+                const planRank = TIER_RANK[p.edition];
+
+                let ctaLabel: string | undefined;
+                let onSelect: (() => void) | undefined;
+
+                if (!isCurrent) {
+                  if (p.edition === "Enterprise") {
+                    ctaLabel = "Contact Sales";
+                    onSelect = () => { window.location.href = "mailto:sales@slingshotteck.com"; };
+                  } else {
+                    ctaLabel = license
+                      ? (planRank > currentRank ? "Upgrade" : "Downgrade")
+                      : "Start Free Trial";
+                    onSelect = () => setActivateOpen(true);
+                  }
+                }
+
+                return (
+                  <PlanCard
+                    key={p.edition}
+                    plan={p}
+                    current={isCurrent}
+                    ctaLabel={ctaLabel}
+                    onSelect={onSelect}
+                  />
+                );
+              })}
             </div>
             <p className="mt-4 text-center text-xs text-[var(--muted)]">
               Need a custom plan? Contact{" "}

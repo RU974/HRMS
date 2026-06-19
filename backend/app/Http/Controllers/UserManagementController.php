@@ -27,30 +27,14 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'users:create');
 
-        // ── License seat check ───────────────────────────────────────────────
-        // Enforce max_users limit for company-scoped users. Super Admin is exempt.
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $license = \App\Models\License::query()
-                ->where('company_id', $companyId)
-                ->where('is_active', true)
-                ->whereIn('status', ['active', 'trial'])
-                ->orderByDesc('activated_at')
-                ->orderByDesc('created_at')
-                ->first();
-
-            if ($license && $license->max_users > 0) {
-                $currentCount = \App\Models\User::where('company_id', $companyId)->count();
-
-                if ($currentCount >= $license->max_users) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "User seat limit reached. Your {$license->edition} license allows a maximum of {$license->max_users} users. Please upgrade your license or remove an existing user.",
-                    ], 422);
-                }
-            }
+        if (
+            ! $request->user()?->hasAnyRole([\App\Models\User::ROLE_SUPER_ADMIN]) &&
+            ! app(\App\Services\LicenseService::class)->canAddUser($request->user()?->company_id)
+        ) {
+            return response()->json([
+                'message' => 'User seat limit reached. Upgrade your license to add more users.',
+            ], 403);
         }
-        // ────────────────────────────────────────────────────────────────────
 
         $validated = $request->validate([
             'name'       => 'required|string|max:255',

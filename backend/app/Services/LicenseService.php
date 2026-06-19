@@ -134,12 +134,62 @@ class LicenseService
         return $license->fresh(['company']);
     }
 
+    // ─── Seat-limit guards ────────────────────────────────────────────────────
+
+    public function canAddEmployee(?string $companyId = null): bool
+    {
+        $license = License::query()
+            ->forCompany($companyId)
+            ->active()
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $license) {
+            return true;
+        }
+        if ($license->max_employees === null) {
+            return true;
+        }
+
+        $count = Employee::where('status', 'active')
+            ->when($companyId, fn ($q) => $q->whereHas('user', fn ($u) => $u->where('company_id', $companyId)))
+            ->count();
+
+        return $count < $license->max_employees;
+    }
+
+    public function canAddUser(?string $companyId = null): bool
+    {
+        $license = License::query()
+            ->forCompany($companyId)
+            ->active()
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $license) {
+            return true;
+        }
+        if ($license->max_users === null) {
+            return true;
+        }
+
+        $count = User::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN))
+            ->whereDoesntHave('employee')
+            ->count();
+
+        return $count < $license->max_users;
+    }
+
     // ─── Usage (single company) ───────────────────────────────────────────────
 
     public function usage(?string $companyId): array
     {
         $employeeQuery = Employee::query()->where('status', 'active');
-        $userQuery     = User::query();
+        $userQuery     = User::query()
+            ->whereDoesntHave('employee')
+            ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN));
 
         if ($companyId) {
             $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
@@ -221,7 +271,10 @@ class LicenseService
         // ── Paginated company rows ────────────────────────────────────────────
         $paginator = Company::query()
             ->where('is_active', true)
-            ->withCount('users')
+            ->withCount(['users' => fn ($q) => $q
+                ->whereDoesntHave('employee')
+                ->whereDoesntHave('roles', fn ($r) => $r->where('name', User::ROLE_SUPER_ADMIN)),
+            ])
             ->orderBy('name')
             ->paginate($perPage, ['*'], 'page', $page);
 
