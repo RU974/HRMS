@@ -4,6 +4,7 @@ import { MicOff, VideoOff } from "lucide-react";
 interface VideoTileProps {
   stream: MediaStream | null;
   name: string;
+  /** Silence THIS tile's audio output (use for local preview to prevent echo) */
   muted?: boolean;
   noVideo?: boolean;
   isLocal?: boolean;
@@ -19,16 +20,27 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-export function VideoTile({ stream, name, muted = false, noVideo = false, isLocal = false, size = "lg" }: VideoTileProps) {
+export function VideoTile({
+  stream,
+  name,
+  muted = false,
+  noVideo = false,
+  isLocal = false,
+  size = "lg",
+}: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Separate audio element so sound keeps playing even when video track is off
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
+    if (videoRef.current) videoRef.current.srcObject = stream ?? null;
   }, [stream]);
 
-  const hasVideo = stream && stream.getVideoTracks().some((t) => t.enabled) && !noVideo;
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.srcObject = stream ?? null;
+  }, [stream]);
+
+  const hasVideo = !!stream && stream.getVideoTracks().some((t) => t.enabled) && !noVideo;
 
   return (
     <div
@@ -36,12 +48,18 @@ export function VideoTile({ stream, name, muted = false, noVideo = false, isLoca
         size === "sm" ? "h-28 w-44" : "h-full w-full"
       }`}
     >
+      {/* Always-on audio output for remote participants — prevents audio loss when camera turns off */}
+      {!isLocal && !muted && (
+        <audio ref={audioRef} autoPlay playsInline className="hidden" />
+      )}
+
       {hasVideo ? (
+        // Video element is always muted; audio comes from the <audio> element above
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          muted={muted || isLocal}
+          muted
           className={`h-full w-full object-cover ${isLocal ? "scale-x-[-1]" : ""}`}
         />
       ) : (
@@ -53,15 +71,15 @@ export function VideoTile({ stream, name, muted = false, noVideo = false, isLoca
         </div>
       )}
 
-      {/* Name overlay */}
+      {/* Name / mute overlay */}
       <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/50 px-2 py-0.5 text-xs text-white">
         {muted && <MicOff className="h-3 w-3" />}
         <span>{isLocal ? "You" : name}</span>
       </div>
 
-      {noVideo && (
+      {(noVideo || !hasVideo) && !isLocal && (
         <div className="absolute right-2 top-2 rounded-md bg-black/50 p-1">
-          <VideoOff className="h-3.5 w-3.5 text-white" />
+          <VideoOff className="h-3.5 w-3.5 text-white/60" />
         </div>
       )}
     </div>

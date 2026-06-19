@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Minimize2, Maximize2 } from "lucide-react";
 import { Call, endCall, getCall } from "@/services/call-service";
-import { useWebRTC } from "@/hooks/use-webrtc";
+import { useWebRTC, PeerStream } from "@/hooks/use-webrtc";
 import { VideoTile } from "./VideoTile";
 import { stopRingtone } from "@/lib/ringtone";
 
@@ -16,14 +16,32 @@ function formatDuration(s: number) {
   return `${m}:${(s % 60).toString().padStart(2, "0")}`;
 }
 
+/** Renders a hidden <audio> element that plays a remote peer's audio stream. */
+function RemoteAudio({ stream }: { stream: MediaStream }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.srcObject = stream;
+    // Chrome may block autoplay — try resuming on first user interaction
+    const play = () => el.play().catch(() => {});
+    el.play().catch(() => {
+      document.addEventListener("click", play, { once: true });
+    });
+    return () => {
+      document.removeEventListener("click", play);
+      el.srcObject = null;
+    };
+  }, [stream]);
+  return <audio ref={ref} autoPlay playsInline className="hidden" />;
+}
+
 export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: ActiveCallWindowProps) {
-  const [call, setCall] = useState(initialCall);
+  const [call, setCall] = useState<Call>(initialCall);
   const [minimized, setMinimized] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [ending, setEnding] = useState(false);
-  const [statusText, setStatusText] = useState<string>(
-    initialCall.status === "ringing" ? "Ringing…" : "Connecting…"
-  );
+  const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "failed">("connecting");
 
   const { localStream, peerStreams, isMuted, isCameraOff, cleanup, toggleMute, toggleCamera } =
     useWebRTC({
@@ -31,103 +49,121 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
       localUserId: currentUserId,
       callType: call.type,
       enabled: true,
+      onPeerConnected: () => setConnectionStatus("connected"),
+      onPeerFailed: () => setConnectionStatus("failed"),
     });
 
-  // Stop any playing ringtone as soon as we're in the active window
+  // Stop any playing ringtone the moment we enter the call window
   useEffect(() => { stopRingtone(); }, []);
 
-  // Timer — starts once call is active
+  // Mark connected once we receive any remote stream
+  useEffect(() => {
+    if (peerStreams.length > 0) setConnectionStatus("connected");
+  }, [peerStreams.length]);
+
+  // Count-up timer (only when call is active)
   useEffect(() => {
     if (call.status !== "active") return;
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [call.status]);
 
-  // Poll call status — detect remote hang-up, update participant states
+  // Poll backend: detect remote hang-up, refresh participant statuses
   useEffect(() => {
     const id = setInterval(async () => {
       try {
         const updated = await getCall(call.id);
         setCall(updated);
-
         if (updated.status === "ended" || updated.status === "missed") {
           cleanup();
           onEnded();
-          return;
-        }
-
-        const joined = updated.participants.filter(
-          (p) => p.user_id !== currentUserId && p.status === "joined"
-        ).length;
-
-        if (updated.status === "active" && joined > 0) {
-          setStatusText(""); // connected — timer takes over
-        } else if (updated.status === "ringing") {
-          const anyOnline = updated.participants.some(
-            (p) => p.user_id !== currentUserId && p.status === "invited"
-          );
-          setStatusText(anyOnline ? "Ringing…" : "Calling…");
         }
       } catch {
-        // ignore
+        // ignore transient errors
       }
     }, 2000);
-
     return () => clearInterval(id);
-  }, [call.id, currentUserId, cleanup, onEnded]);
+  }, [call.id, cleanup, onEnded]);
 
   const handleEnd = useCallback(async () => {
     if (ending) return;
     setEnding(true);
-    try {
-      await endCall(call.id);
-    } catch {
-      // ignore
-    } finally {
-      cleanup();
-      onEnded();
-    }
+    try { await endCall(call.id); } catch { /* ignore */ }
+    cleanup();
+    onEnded();
   }, [call.id, cleanup, ending, onEnded]);
 
+  const otherParticipant = call.participants.find((p) => p.user_id !== currentUserId);
   const callName =
-    call.participants.find((p) => p.user_id !== currentUserId)?.user.name ??
-    (call.call_type === "group" ? "Group Call" : "Call");
+    call.call_type === "group"
+      ? `Group Call (${call.participants.length})`
+      : (otherParticipant?.user.name ?? "Call");
 
-  const displayStatus = call.status === "active" && peerStreams.length > 0
-    ? formatDuration(elapsed)
-    : statusText || formatDuration(elapsed);
+  function statusLine() {
+    if (connectionStatus === "failed") return "Connection failed";
+    if (connectionStatus === "connected") return formatDuration(elapsed);
+    if (call.status === "ringing") {
+      const anyInvited = call.participants.some(
+        (p) => p.user_id !== currentUserId && p.status === "invited"
+      );
+      return anyInvited ? "Ringing…" : "Calling…";
+    }
+    return "Connecting…";
+  }
 
-  // ── Minimized pip ──
+  // ── Minimised PiP ──────────────────────────────────────────────────────────
   if (minimized) {
     return (
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3 shadow-2xl">
-        <div className={`h-2 w-2 rounded-full ${peerStreams.length > 0 ? "bg-green-400 animate-pulse" : "bg-yellow-400 animate-ping"}`} />
-        <span className="text-sm font-medium text-white">{callName}</span>
-        <span className="min-w-[3rem] text-center text-xs text-gray-400">{displayStatus}</span>
-        <button
-          onClick={() => setMinimized(false)}
-          className="rounded-lg p-1.5 text-gray-400 transition hover:bg-white/10 hover:text-white"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </button>
-        <button
-          onClick={handleEnd}
-          className="rounded-lg bg-red-500 p-1.5 text-white transition hover:bg-red-600"
-        >
-          <PhoneOff className="h-4 w-4" />
-        </button>
-      </div>
+      <>
+        {/* Keep audio alive even when minimised */}
+        {peerStreams.map((ps) => <RemoteAudio key={ps.userId} stream={ps.stream} />)}
+
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3 shadow-2xl ring-1 ring-white/10">
+          <div
+            className={`h-2.5 w-2.5 rounded-full ${
+              connectionStatus === "connected"
+                ? "bg-green-400 animate-pulse"
+                : connectionStatus === "failed"
+                ? "bg-red-400"
+                : "bg-yellow-400 animate-ping"
+            }`}
+          />
+          <span className="text-sm font-medium text-white">{callName}</span>
+          <span className="min-w-[3.5rem] text-center text-xs text-gray-400">{statusLine()}</span>
+          <button
+            onClick={() => setMinimized(false)}
+            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-white/10 hover:text-white"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleEnd}
+            className="rounded-lg bg-red-500 p-1.5 text-white transition hover:bg-red-600"
+          >
+            <PhoneOff className="h-4 w-4" />
+          </button>
+        </div>
+      </>
     );
   }
 
-  // ── Full screen ──
+  // ── Full-screen call window ────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-950">
+      {/*
+        Hidden <audio> elements for EVERY peer stream.
+        This is the primary fix: audio-only calls never had output elements.
+        Video calls also need this so audio continues when a camera is turned off.
+      */}
+      {peerStreams.map((ps) => <RemoteAudio key={ps.userId} stream={ps.stream} />)}
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4">
         <div>
           <p className="text-lg font-semibold text-white">{callName}</p>
-          <p className="text-sm text-gray-400">{displayStatus}</p>
+          <p className={`text-sm ${connectionStatus === "failed" ? "text-red-400" : "text-gray-400"}`}>
+            {statusLine()}
+          </p>
         </div>
         <button
           onClick={() => setMinimized(true)}
@@ -137,57 +173,16 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
         </button>
       </div>
 
-      {/* Main area */}
-      <div className="flex flex-1 items-center justify-center gap-4 overflow-hidden px-6">
-        {peerStreams.length === 0 ? (
-          /* Waiting / ringing state */
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative">
-              <span className="absolute inset-0 animate-ping rounded-full bg-gray-600/60" />
-              <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gray-700 text-2xl font-bold text-white">
-                {callName.slice(0, 2).toUpperCase()}
-              </div>
-            </div>
-            <p className="text-gray-300">{statusText || "Connecting…"}</p>
-          </div>
-        ) : call.type === "video" ? (
-          /* Video grid */
-          <div
-            className={`grid h-full w-full gap-3 ${
-              peerStreams.length === 1 ? "grid-cols-1" : "grid-cols-2"
-            }`}
-          >
-            {peerStreams.map((ps) => {
-              const p = call.participants.find((x) => x.user_id === ps.userId);
-              return (
-                <VideoTile
-                  key={ps.userId}
-                  stream={ps.stream}
-                  name={p?.user.name ?? String(ps.userId)}
-                  size="lg"
-                />
-              );
-            })}
-          </div>
+      {/* Main content area */}
+      <div className="flex flex-1 items-center justify-center overflow-hidden px-6">
+        {call.type === "video" ? (
+          <VideoContent peerStreams={peerStreams} call={call} currentUserId={currentUserId} connectionStatus={connectionStatus} />
         ) : (
-          /* Audio-only avatars */
-          <div className="flex flex-wrap justify-center gap-8">
-            {call.participants
-              .filter((p) => p.user_id !== currentUserId && p.status === "joined")
-              .map((p) => (
-                <div key={p.user_id} className="flex flex-col items-center gap-3">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-700 text-xl font-bold text-white">
-                    {p.user.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <p className="text-sm text-gray-300">{p.user.name}</p>
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
-                </div>
-              ))}
-          </div>
+          <AudioContent peerStreams={peerStreams} call={call} currentUserId={currentUserId} connectionStatus={connectionStatus} />
         )}
       </div>
 
-      {/* Local video PiP */}
+      {/* Local video PiP (video calls only) */}
       {call.type === "video" && localStream && (
         <div className="absolute bottom-28 right-6">
           <VideoTile stream={localStream} name="You" muted noVideo={isCameraOff} isLocal size="sm" />
@@ -227,6 +222,114 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
           <PhoneOff className="h-7 w-7" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function WaitingAvatar({ name, status }: { name: string; status: string }) {
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative">
+        <span className="absolute inset-0 animate-ping rounded-full bg-gray-600/40" />
+        <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gray-700 text-2xl font-bold text-white">
+          {name.slice(0, 2).toUpperCase()}
+        </div>
+      </div>
+      <p className="text-gray-400">{status}</p>
+    </div>
+  );
+}
+
+function AudioContent({
+  peerStreams,
+  call,
+  currentUserId,
+  connectionStatus,
+}: {
+  peerStreams: PeerStream[];
+  call: Call;
+  currentUserId: number;
+  connectionStatus: "connecting" | "connected" | "failed";
+}) {
+  const joinedParticipants = call.participants.filter(
+    (p) => p.user_id !== currentUserId && (p.status === "joined" || p.status === "invited")
+  );
+
+  if (connectionStatus !== "connected" || peerStreams.length === 0) {
+    const name = joinedParticipants[0]?.user.name ?? "...";
+    const label =
+      connectionStatus === "failed"
+        ? "Connection failed — check your network"
+        : call.status === "ringing"
+        ? "Ringing…"
+        : "Connecting…";
+    return <WaitingAvatar name={name} status={label} />;
+  }
+
+  return (
+    <div className="flex flex-wrap justify-center gap-10">
+      {joinedParticipants.map((p) => {
+        const hasStream = peerStreams.some((ps) => ps.userId === p.user_id);
+        return (
+          <div key={p.user_id} className="flex flex-col items-center gap-3">
+            <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-gray-700 text-2xl font-bold text-white">
+              {p.user.name.slice(0, 2).toUpperCase()}
+              {hasStream && (
+                <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-green-500 ring-2 ring-gray-950">
+                  <Mic className="h-2.5 w-2.5 text-white" />
+                </span>
+              )}
+            </div>
+            <p className="text-sm font-medium text-gray-200">{p.user.name}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function VideoContent({
+  peerStreams,
+  call,
+  currentUserId,
+  connectionStatus,
+}: {
+  peerStreams: PeerStream[];
+  call: Call;
+  currentUserId: number;
+  connectionStatus: "connecting" | "connected" | "failed";
+}) {
+  if (peerStreams.length === 0) {
+    const name =
+      call.participants.find((p) => p.user_id !== currentUserId)?.user.name ?? "...";
+    const label =
+      connectionStatus === "failed"
+        ? "Connection failed"
+        : call.status === "ringing"
+        ? "Ringing…"
+        : "Connecting…";
+    return <WaitingAvatar name={name} status={label} />;
+  }
+
+  return (
+    <div
+      className={`grid h-full w-full gap-3 ${
+        peerStreams.length === 1 ? "grid-cols-1" : "grid-cols-2"
+      }`}
+    >
+      {peerStreams.map((ps) => {
+        const p = call.participants.find((x) => x.user_id === ps.userId);
+        return (
+          <VideoTile
+            key={ps.userId}
+            stream={ps.stream}
+            name={p?.user.name ?? String(ps.userId)}
+            size="lg"
+          />
+        );
+      })}
     </div>
   );
 }

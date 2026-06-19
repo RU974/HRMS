@@ -5,6 +5,17 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
+  // Free public TURN relay — handles symmetric NAT and firewall scenarios.
+  // Replace with your own coturn / Twilio / Xirsys credentials for production.
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
 ];
 
 export type PeerStream = { userId: number; stream: MediaStream };
@@ -14,9 +25,11 @@ interface UseWebRTCOptions {
   localUserId: number;
   callType: "audio" | "video";
   enabled: boolean;
+  onPeerConnected?: () => void;
+  onPeerFailed?: () => void;
 }
 
-export function useWebRTC({ callId, localUserId, callType, enabled }: UseWebRTCOptions) {
+export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnected, onPeerFailed }: UseWebRTCOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [peerStreams, setPeerStreams] = useState<PeerStream[]>([]);
   const [isMuted, setIsMuted] = useState(false);
@@ -61,8 +74,18 @@ export function useWebRTC({ callId, localUserId, callType, enabled }: UseWebRTCO
       };
 
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+        if (pc.connectionState === "connected") {
+          onPeerConnected?.();
+        } else if (pc.connectionState === "failed") {
+          onPeerFailed?.();
           setPeerStreams((prev) => prev.filter((p) => p.userId !== remoteUserId));
+        } else if (pc.connectionState === "disconnected") {
+          // Briefly disconnected (network blip) — don't remove stream yet
+          setTimeout(() => {
+            if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+              setPeerStreams((prev) => prev.filter((p) => p.userId !== remoteUserId));
+            }
+          }, 5000);
         }
       };
 
@@ -76,7 +99,8 @@ export function useWebRTC({ callId, localUserId, callType, enabled }: UseWebRTCO
       pcs.current.set(remoteUserId, pc);
       return pc;
     },
-    [callId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [callId, onPeerConnected, onPeerFailed]
   );
 
   // Flush queued ICE candidates after remote SDP is set.
