@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sendSignal, getSignals, CallSignal } from "@/services/call-service";
+import { sendSignal, getSignals, getCall, CallSignal } from "@/services/call-service";
 
-const ICE_SERVERS = [
+const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
 ];
 
 export type PeerStream = { userId: number; stream: MediaStream };
@@ -11,46 +12,51 @@ export type PeerStream = { userId: number; stream: MediaStream };
 interface UseWebRTCOptions {
   callId: number | null;
   localUserId: number;
-  remoteUserIds: number[];
   callType: "audio" | "video";
   enabled: boolean;
-  onCallEnded?: () => void;
 }
 
-export function useWebRTC({ callId, localUserId, remoteUserIds, callType, enabled, onCallEnded }: UseWebRTCOptions) {
+export function useWebRTC({ callId, localUserId, callType, enabled }: UseWebRTCOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [peerStreams, setPeerStreams] = useState<PeerStream[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  const peerConnections = useRef<Map<number, RTCPeerConnection>>(new Map());
+  // Refs are stable across re-renders — safe to use inside intervals
+  const pcs = useRef<Map<number, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
-  const signalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isInitiatorRef = useRef(false);
+  // ICE candidates received before remote SDP was set
+  const icePending = useRef<Map<number, RTCIceCandidateInit[]>>(new Map());
+  // Peers we've already done role assignment for (prevents duplicate offers)
+  const handledPeers = useRef<Set<number>>(new Set());
 
-  const createPeerConnection = useCallback(
+  // Get-or-create a peer connection for remoteUserId.
+  const getOrCreatePC = useCallback(
     (remoteUserId: number): RTCPeerConnection => {
+      if (pcs.current.has(remoteUserId)) {
+        return pcs.current.get(remoteUserId)!;
+      }
+
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-      pc.onicecandidate = (event) => {
-        if (event.candidate && callId) {
+      pc.onicecandidate = (e) => {
+        if (e.candidate && callId) {
           sendSignal(callId, {
             to_user_id: remoteUserId,
             type: "ice-candidate",
-            payload: event.candidate.toJSON() as Record<string, unknown>,
+            payload: e.candidate.toJSON() as Record<string, unknown>,
           }).catch(() => {});
         }
       };
 
-      pc.ontrack = (event) => {
-        const [remoteStream] = event.streams;
+      pc.ontrack = (e) => {
+        const [stream] = e.streams;
+        if (!stream) return;
         setPeerStreams((prev) => {
-          const existing = prev.find((p) => p.userId === remoteUserId);
-          if (existing) {
-            return prev.map((p) => (p.userId === remoteUserId ? { ...p, stream: remoteStream } : p));
-          }
-          return [...prev, { userId: remoteUserId, stream: remoteStream }];
+          const exists = prev.some((p) => p.userId === remoteUserId);
+          if (exists) return prev.map((p) => (p.userId === remoteUserId ? { ...p, stream } : p));
+          return [...prev, { userId: remoteUserId, stream }];
         });
       };
 
@@ -60,71 +66,98 @@ export function useWebRTC({ callId, localUserId, remoteUserIds, callType, enable
         }
       };
 
-      // Add local tracks
+      // Attach existing local tracks
       if (localStreamRef.current) {
         for (const track of localStreamRef.current.getTracks()) {
           pc.addTrack(track, localStreamRef.current);
         }
       }
 
-      peerConnections.current.set(remoteUserId, pc);
+      pcs.current.set(remoteUserId, pc);
       return pc;
     },
     [callId]
   );
 
-  const processSignals = useCallback(
-    async (signals: CallSignal[]) => {
-      for (const signal of signals) {
-        const fromId = signal.from_user_id;
-        let pc = peerConnections.current.get(fromId);
-        if (!pc) {
-          pc = createPeerConnection(fromId);
-        }
+  // Flush queued ICE candidates after remote SDP is set.
+  const flushPendingICE = useCallback(async (remoteUserId: number, pc: RTCPeerConnection) => {
+    const pending = icePending.current.get(remoteUserId) ?? [];
+    if (pending.length === 0) return;
+    icePending.current.delete(remoteUserId);
+    for (const c of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch {
+        // stale candidate — ignore
+      }
+    }
+  }, []);
 
-        try {
-          if (signal.type === "offer") {
-            await pc.setRemoteDescription(
-              new RTCSessionDescription(signal.payload as unknown as RTCSessionDescriptionInit)
-            );
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            if (callId) {
-              await sendSignal(callId, {
-                to_user_id: fromId,
-                type: "answer",
-                payload: { type: answer.type, sdp: answer.sdp ?? "" },
-              });
-            }
-          } else if (signal.type === "answer") {
-            if (pc.signalingState !== "stable") {
-              await pc.setRemoteDescription(
-                new RTCSessionDescription(signal.payload as unknown as RTCSessionDescriptionInit)
-              );
-            }
-          } else if (signal.type === "ice-candidate") {
-            await pc.addIceCandidate(new RTCIceCandidate(signal.payload as unknown as RTCIceCandidateInit));
+  // Process a single signaling message.
+  const processSignal = useCallback(
+    async (signal: CallSignal) => {
+      const fromId = signal.from_user_id;
+
+      try {
+        if (signal.type === "offer") {
+          const pc = getOrCreatePC(fromId);
+
+          // Perfect-negotiation: if collision, polite peer (lower id) rolls back.
+          const collision =
+            pc.signalingState !== "stable" || handledPeers.current.has(fromId);
+          const isPolite = localUserId < fromId;
+
+          if (collision && !isPolite) return; // impolite peer ignores colliding offer
+
+          await pc.setRemoteDescription(
+            new RTCSessionDescription(signal.payload as unknown as RTCSessionDescriptionInit)
+          );
+          await flushPendingICE(fromId, pc);
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+
+          if (callId) {
+            await sendSignal(callId, {
+              to_user_id: fromId,
+              type: "answer",
+              payload: { type: answer.type, sdp: answer.sdp ?? "" },
+            });
           }
-        } catch {
-          // Silently ignore stale signals
+        } else if (signal.type === "answer") {
+          const pc = pcs.current.get(fromId);
+          if (!pc || pc.signalingState === "stable") return;
+          await pc.setRemoteDescription(
+            new RTCSessionDescription(signal.payload as unknown as RTCSessionDescriptionInit)
+          );
+          await flushPendingICE(fromId, pc);
+        } else if (signal.type === "ice-candidate") {
+          const pc = pcs.current.get(fromId);
+          const init = signal.payload as unknown as RTCIceCandidateInit;
+          if (pc && pc.remoteDescription) {
+            await pc.addIceCandidate(new RTCIceCandidate(init));
+          } else {
+            // Queue until after setRemoteDescription
+            const q = icePending.current.get(fromId) ?? [];
+            q.push(init);
+            icePending.current.set(fromId, q);
+          }
         }
+      } catch {
+        // ignore signaling errors silently
       }
     },
-    [callId, createPeerConnection]
+    [callId, localUserId, getOrCreatePC, flushPendingICE]
   );
 
-  // Acquire media and set up peer connections
+  // Acquire camera/mic.
   useEffect(() => {
     if (!enabled || !callId) return;
-
     let cancelled = false;
 
-    async function setup() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: callType === "video",
-        });
+    navigator.mediaDevices
+      .getUserMedia({ audio: true, video: callType === "video" })
+      .then((stream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -132,100 +165,93 @@ export function useWebRTC({ callId, localUserId, remoteUserIds, callType, enable
         localStreamRef.current = stream;
         setLocalStream(stream);
         setIsReady(true);
-      } catch {
-        setIsReady(true); // proceed without media if permission denied
-      }
-    }
-
-    setup();
+      })
+      .catch(() => {
+        if (!cancelled) setIsReady(true); // continue without local media
+      });
 
     return () => {
       cancelled = true;
     };
   }, [enabled, callId, callType]);
 
-  // As initiator: create offers for all remote users once ready
+  // Main polling loop: detect newly-joined peers and process signals.
+  // Runs every 1.5 s once media is ready.
+  //
+  // Role assignment (prevents offer collisions):
+  //   Higher user_id → sends offer (offerer)
+  //   Lower  user_id → waits for offer (answerer)
   useEffect(() => {
-    if (!isReady || !callId || !enabled || remoteUserIds.length === 0) return;
-    if (!isInitiatorRef.current) return;
+    if (!isReady || !callId || !enabled) return;
 
-    async function sendOffers() {
-      for (const remoteId of remoteUserIds) {
-        if (peerConnections.current.has(remoteId)) continue;
-        const pc = createPeerConnection(remoteId);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await sendSignal(callId!, {
-          to_user_id: remoteId,
-          type: "offer",
-          payload: { type: offer.type, sdp: offer.sdp ?? "" },
-        });
-      }
-    }
-
-    sendOffers().catch(() => {});
-  }, [isReady, callId, enabled, remoteUserIds, createPeerConnection]);
-
-  // Poll for signals
-  useEffect(() => {
-    if (!enabled || !callId || !isReady) return;
-
-    signalPollRef.current = setInterval(async () => {
+    const intervalId = setInterval(async () => {
       try {
+        // 1. Fetch call state and handle newly-joined participants
+        const callData = await getCall(callId);
+
+        const joinedIds = callData.participants
+          .filter((p) => p.user_id !== localUserId && p.status === "joined")
+          .map((p) => p.user_id);
+
+        for (const remoteId of joinedIds) {
+          if (handledPeers.current.has(remoteId)) continue;
+          handledPeers.current.add(remoteId);
+
+          if (localUserId > remoteId) {
+            // We are the offerer (higher id) — create PC and send offer
+            const pc = getOrCreatePC(remoteId);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            await sendSignal(callId, {
+              to_user_id: remoteId,
+              type: "offer",
+              payload: { type: offer.type, sdp: offer.sdp ?? "" },
+            });
+          } else {
+            // We are the answerer (lower id) — pre-create PC and wait for their offer
+            getOrCreatePC(remoteId);
+          }
+        }
+
+        // 2. Fetch and process pending signals for us
         const signals = await getSignals(callId);
-        if (signals && signals.length > 0) {
-          await processSignals(signals);
+        for (const signal of signals) {
+          await processSignal(signal);
         }
       } catch {
-        // ignore
+        // ignore — might be network hiccup
       }
     }, 1500);
 
-    return () => {
-      if (signalPollRef.current) clearInterval(signalPollRef.current);
-    };
-  }, [enabled, callId, isReady, processSignals]);
-
-  const markAsInitiator = useCallback(() => {
-    isInitiatorRef.current = true;
-  }, []);
+    return () => clearInterval(intervalId);
+  }, [isReady, callId, enabled, localUserId, getOrCreatePC, processSignal]);
 
   const cleanup = useCallback(() => {
-    if (signalPollRef.current) clearInterval(signalPollRef.current);
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    peerConnections.current.forEach((pc) => pc.close());
-    peerConnections.current.clear();
+    pcs.current.forEach((pc) => pc.close());
+    pcs.current.clear();
+    icePending.current.clear();
+    handledPeers.current.clear();
     setLocalStream(null);
     setPeerStreams([]);
     setIsReady(false);
-    isInitiatorRef.current = false;
   }, []);
 
   const toggleMute = useCallback(() => {
-    const stream = localStreamRef.current;
-    if (!stream) return;
-    const enabled = !isMuted;
-    stream.getAudioTracks().forEach((t) => (t.enabled = !enabled));
-    setIsMuted(enabled);
-  }, [isMuted]);
+    setIsMuted((prev) => {
+      const next = !prev;
+      localStreamRef.current?.getAudioTracks().forEach((t) => (t.enabled = !next));
+      return next;
+    });
+  }, []);
 
   const toggleCamera = useCallback(() => {
-    const stream = localStreamRef.current;
-    if (!stream) return;
-    const off = !isCameraOff;
-    stream.getVideoTracks().forEach((t) => (t.enabled = !off));
-    setIsCameraOff(off);
-  }, [isCameraOff]);
+    setIsCameraOff((prev) => {
+      const next = !prev;
+      localStreamRef.current?.getVideoTracks().forEach((t) => (t.enabled = !next));
+      return next;
+    });
+  }, []);
 
-  return {
-    localStream,
-    peerStreams,
-    isMuted,
-    isCameraOff,
-    isReady,
-    markAsInitiator,
-    cleanup,
-    toggleMute,
-    toggleCamera,
-  };
+  return { localStream, peerStreams, isMuted, isCameraOff, isReady, cleanup, toggleMute, toggleCamera };
 }

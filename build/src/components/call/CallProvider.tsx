@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Call, getIncomingCalls } from "@/services/call-service";
+import { Call, getIncomingCalls, sendHeartbeat } from "@/services/call-service";
 import { useAuthStore } from "@/store/auth-store";
+import { startRingtone, stopRingtone } from "@/lib/ringtone";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { ActiveCallWindow } from "./ActiveCallWindow";
 
 interface CallContextValue {
   activeCall: Call | null;
-  startCall: (call: Call, asInitiator: boolean) => void;
+  /** Call startCall when the local user initiates or answers a call. */
+  startCall: (call: Call) => void;
 }
 
 const CallContext = createContext<CallContextValue>({ activeCall: null, startCall: () => {} });
@@ -19,53 +21,72 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuthStore();
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [activeCall, setActiveCall] = useState<Call | null>(null);
-  const [isInitiator, setIsInitiator] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const seenCallIds = useRef<Set<number>>(new Set());
+  const incomingRingRef = useRef(false);
 
-  const startCall = useCallback((call: Call, asInitiator: boolean) => {
-    setActiveCall(call);
-    setIsInitiator(asInitiator);
-    seenCallIds.current.add(call.id);
-  }, []);
+  // ── Heartbeat: keep last_seen_at fresh every 30 s ──────────────────────────
+  useEffect(() => {
+    if (!token || !user) return;
 
-  // Poll for incoming calls
+    // Fire immediately on login so the user appears online right away
+    sendHeartbeat().catch(() => {});
+    const id = setInterval(() => sendHeartbeat().catch(() => {}), 30_000);
+    return () => clearInterval(id);
+  }, [token, user]);
+
+  // ── Poll for incoming calls every 3 s ──────────────────────────────────────
   useEffect(() => {
     if (!token || !user) return;
 
     const poll = async () => {
+      if (activeCall) return; // don't interrupt an ongoing call
       try {
         const calls = await getIncomingCalls();
         const newCall = calls.find((c) => !seenCallIds.current.has(c.id));
-        if (newCall && !activeCall && !incomingCall) {
+        if (newCall) {
           seenCallIds.current.add(newCall.id);
           setIncomingCall(newCall);
+          // Play ringtone (autoplay may be blocked on first page load; silently ignored)
+          if (!incomingRingRef.current) {
+            incomingRingRef.current = true;
+            startRingtone("incoming").catch(() => {});
+          }
         }
       } catch {
-        // ignore
+        // ignore network errors
       }
     };
 
     poll();
-    pollRef.current = setInterval(poll, 3000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [token, user, activeCall, incomingCall]);
+    const id = setInterval(poll, 3_000);
+    return () => clearInterval(id);
+  }, [token, user, activeCall]);
+
+  const startCall = useCallback((call: Call) => {
+    stopRingtone();
+    incomingRingRef.current = false;
+    setIncomingCall(null);
+    setActiveCall(call);
+    seenCallIds.current.add(call.id);
+  }, []);
 
   const handleAnswer = useCallback((answeredCall: Call) => {
+    stopRingtone();
+    incomingRingRef.current = false;
     setIncomingCall(null);
     setActiveCall(answeredCall);
-    setIsInitiator(false);
   }, []);
 
   const handleReject = useCallback(() => {
+    stopRingtone();
+    incomingRingRef.current = false;
     setIncomingCall(null);
   }, []);
 
   const handleCallEnded = useCallback(() => {
+    stopRingtone();
     setActiveCall(null);
-    setIsInitiator(false);
   }, []);
 
   return (
@@ -84,7 +105,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         <ActiveCallWindow
           call={activeCall}
           currentUserId={user.id}
-          isInitiator={isInitiator}
           onEnded={handleCallEnded}
         />
       )}

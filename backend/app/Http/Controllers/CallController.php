@@ -13,6 +13,40 @@ use Illuminate\Support\Facades\DB;
 class CallController extends Controller
 {
     /**
+     * Update the authenticated user's last_seen_at timestamp.
+     */
+    public function heartbeat(Request $request)
+    {
+        $request->user()->update(['last_seen_at' => now()]);
+        return $this->ok(null);
+    }
+
+    /**
+     * Return online status for a list of user IDs within the same company.
+     */
+    public function onlineStatus(Request $request)
+    {
+        $validated = $request->validate([
+            'user_ids' => 'required|array|max:50',
+            'user_ids.*' => 'integer',
+        ]);
+
+        $threshold = now()->subMinutes(2);
+        $user = $request->user();
+
+        $statuses = \App\Models\User::query()
+            ->whereIn('id', $validated['user_ids'])
+            ->where('company_id', $user->company_id)
+            ->select(['id', 'last_seen_at'])
+            ->get()
+            ->mapWithKeys(fn ($u) => [
+                $u->id => $u->last_seen_at && $u->last_seen_at->gt($threshold),
+            ]);
+
+        return $this->ok($statuses);
+    }
+
+    /**
      * Initiate a new call. Body: { conversation_id?, participant_ids[], type: audio|video }
      */
     public function initiate(Request $request)

@@ -19,14 +19,23 @@ class ChatMessageController extends Controller
         $user = $request->user()->loadMissing('company');
 
         $query = User::query()
-            ->select(['id', 'name', 'email'])
+            ->select(['id', 'name', 'email', 'last_seen_at'])
             ->orderBy('name');
 
         if ($user->company_id) {
             $query->where('company_id', $user->company_id);
         }
 
-        return $this->ok($query->get());
+        $onlineThreshold = now()->subMinutes(2);
+
+        return $this->ok(
+            $query->get()->map(fn ($u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'is_online' => $u->last_seen_at && $u->last_seen_at->gt($onlineThreshold),
+            ])
+        );
     }
 
     public function index(Request $request)

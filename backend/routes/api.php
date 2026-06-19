@@ -334,6 +334,10 @@ $registerRoutes = function (): void {
                 Route::post('chat-conversations/{id}/participants', [ChatConversationController::class, 'addParticipant']);
                 Route::delete('chat-conversations/{id}/participants/{userId}', [ChatConversationController::class, 'removeParticipant']);
 
+                // Presence
+                Route::post('heartbeat', [CallController::class, 'heartbeat']);
+                Route::post('users/online-status', [CallController::class, 'onlineStatus']);
+
                 // Calling
                 Route::get('calls/incoming', [CallController::class, 'incoming']);
                 Route::get('calls/history', [CallController::class, 'history']);

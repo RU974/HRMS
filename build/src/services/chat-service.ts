@@ -5,6 +5,7 @@ export interface ChatUser {
   id: number;
   name: string;
   email: string;
+  is_online?: boolean;
 }
 
 export interface ChatMessage {

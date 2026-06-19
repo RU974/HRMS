@@ -1,5 +1,16 @@
 import { apiClient } from "@/services/api-client";
 
+export function sendHeartbeat() {
+  return apiClient<null>("/heartbeat", { method: "POST" });
+}
+
+export function getOnlineStatus(userIds: number[]): Promise<Record<number, boolean>> {
+  return apiClient<Record<number, boolean>>("/users/online-status", {
+    method: "POST",
+    body: JSON.stringify({ user_ids: userIds }),
+  });
+}
+
 export interface CallUser {
   id: number;
   name: string;

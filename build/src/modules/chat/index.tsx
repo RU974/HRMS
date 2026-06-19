@@ -32,7 +32,7 @@ import {
 } from "@/services/chat-service";
 import { useAuthStore } from "@/store/auth-store";
 
-type ChatUser = { id: number; name: string; email: string };
+type ChatUser = { id: number; name: string; email: string; is_online?: boolean };
 
 const AVATAR_COLORS = [
   "bg-violet-500",
@@ -456,6 +456,14 @@ export function ChatPage() {
                 >
                   <div className="relative shrink-0">
                     {conversation.type === "group" ? <GroupAvatar /> : <Avatar name={label} />}
+                    {/* Online indicator for direct chats */}
+                    {conversation.type === "direct" && (() => {
+                      const other = conversation.participants.find((p) => p.id !== currentUserId);
+                      const chatUser = (usersQuery.data ?? []).find((u) => u.id === other?.id);
+                      return chatUser?.is_online ? (
+                        <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[var(--card)] bg-green-500" />
+                      ) : null;
+                    })()}
                     {conversation.unread_count > 0 && (
                       <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[9px] font-bold text-white">
                         {conversation.unread_count > 9 ? "9+" : conversation.unread_count}

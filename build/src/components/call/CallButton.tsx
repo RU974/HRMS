@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Phone, Video } from "lucide-react";
 import { ChatConversation } from "@/services/chat-service";
 import { initiateCall } from "@/services/call-service";
+import { startRingtone } from "@/lib/ringtone";
 import { useCallContext } from "./CallProvider";
 
 interface CallButtonProps {
@@ -28,9 +29,11 @@ export function CallButton({ conversation, currentUserId }: CallButtonProps) {
         participant_ids: participantIds,
         type,
       });
-      startCall(call, true);
+      // Play outgoing ringback so the caller knows it's ringing
+      startRingtone("outgoing").catch(() => {});
+      startCall(call);
     } catch {
-      // ignore — could show toast here
+      // could show a toast here
     } finally {
       setLoading(null);
     }
