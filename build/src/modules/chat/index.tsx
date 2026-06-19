@@ -15,6 +15,7 @@ import {
   Download,
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
+import { CallButton } from "@/components/call/CallButton";
 import { apiClient } from "@/services/api-client";
 import {
   ChatConversation,
@@ -514,6 +515,7 @@ export function ChatPage() {
                       : selectedConversation.participants.find((p) => p.id !== currentUserId)?.email ?? ""}
                   </p>
                 </div>
+                <CallButton conversation={selectedConversation} currentUserId={currentUserId} />
                 <button
                   onClick={() => setThreadSearchOpen((v) => !v)}
                   className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${

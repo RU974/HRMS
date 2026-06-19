@@ -4,6 +4,7 @@ import { getTheme } from "@/services/theme-service";
 import { useAuthStore } from "@/store/auth-store";
 import { getResolvedTheme, useThemeStore } from "@/store/theme-store";
 import { ToastContainer } from "@/components/notifications/toast";
+import { CallProvider } from "@/components/call/CallProvider";
 
 const queryClient = new QueryClient();
 
@@ -92,8 +93,10 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
-      <ToastContainer />
+      <CallProvider>
+        {children}
+        <ToastContainer />
+      </CallProvider>
     </QueryClientProvider>
   );
 }

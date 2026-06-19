@@ -41,6 +41,7 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\ApprovalDelegationController;
 use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\CallController;
 use App\Http\Controllers\ChatConversationController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\Recruitment\CandidateController as RecruitmentCandidateController;
@@ -332,6 +333,17 @@ $registerRoutes = function (): void {
                 Route::post('chat-conversations/{id}/read', [ChatConversationController::class, 'markRead']);
                 Route::post('chat-conversations/{id}/participants', [ChatConversationController::class, 'addParticipant']);
                 Route::delete('chat-conversations/{id}/participants/{userId}', [ChatConversationController::class, 'removeParticipant']);
+
+                // Calling
+                Route::get('calls/incoming', [CallController::class, 'incoming']);
+                Route::get('calls/history', [CallController::class, 'history']);
+                Route::post('calls', [CallController::class, 'initiate']);
+                Route::get('calls/{id}', [CallController::class, 'show']);
+                Route::post('calls/{id}/answer', [CallController::class, 'answer']);
+                Route::post('calls/{id}/reject', [CallController::class, 'reject']);
+                Route::post('calls/{id}/end', [CallController::class, 'end']);
+                Route::post('calls/{id}/signals', [CallController::class, 'sendSignal']);
+                Route::get('calls/{id}/signals', [CallController::class, 'getSignals']);
             });
         });
 
