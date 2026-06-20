@@ -95,7 +95,7 @@ const EDITION_DEFAULTS: Record<LicenseEdition, {
   max_users: string;
   features: string[];
 }> = {
-  Starter:      { max_employees: "25",  max_users: "5",  features: ["attendance", "leaves"] },
+  Starter:      { max_employees: "20",  max_users: "3",  features: ["attendance", "leaves"] },
   Professional: { max_employees: "200", max_users: "50", features: ["attendance", "leaves", "payroll", "performance", "communication"] },
   Enterprise:   { max_employees: "",    max_users: "",   features: ["attendance", "leaves", "payroll", "performance", "communication", "recruitment"] },
 };
@@ -147,7 +147,7 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
 
   const daysColor = license.days_remaining == null ? "#10b981"
     : license.days_remaining < 30  ? "#ef4444"
-    : license.days_remaining < 90  ? "#f59e0b"
+    : license.days_remaining < 90  ? "#ef4444"
     : "#10b981";
 
   const features: string[] = Array.isArray(license.features)
@@ -260,7 +260,10 @@ const TIER_RANK: Record<LicenseEdition, number> = { Starter: 0, Professional: 1,
 const PLANS: Array<{
   edition: LicenseEdition;
   price: string;
+  yearlyPrice: string;
   period: string;
+  yearlyPeriod: string;
+  yearlyMonthly: string;
   tagline: string;
   limits: string;
   trial: string;
@@ -269,17 +272,23 @@ const PLANS: Array<{
 }> = [
   {
     edition: "Starter",
-    price: "$3",
-    period: "/ user / month",
+    price: "$7",
+    yearlyPrice: "$67.20",
+    period: "/ employee / month",
+    yearlyPeriod: "/ employee / year",
+    yearlyMonthly: "$5.60",
     tagline: "For small teams getting started",
-    limits: "Up to 25 employees · 5 users",
+    limits: "Up to 20 employees · 3 users",
     trial: "14-day free trial",
     features: ["Employee records", "Basic attendance", "Leave management", "Email support"],
   },
   {
     edition: "Professional",
-    price: "$15",
-    period: "/ user / month",
+    price: "$14",
+    yearlyPrice: "$134.40",
+    period: "/ employee / month",
+    yearlyPeriod: "/ employee / year",
+    yearlyMonthly: "$11.20",
     tagline: "For growing organizations",
     limits: "Up to 200 employees · 50 users",
     trial: "14-day free trial",
@@ -289,7 +298,10 @@ const PLANS: Array<{
   {
     edition: "Enterprise",
     price: "Custom",
+    yearlyPrice: "Custom",
     period: "",
+    yearlyPeriod: "",
+    yearlyMonthly: "",
     tagline: "For large enterprises",
     limits: "Unlimited employees & users",
     trial: "Custom onboarding",
@@ -297,16 +309,21 @@ const PLANS: Array<{
   },
 ];
 
-function PlanCard({ plan, current, onSelect, ctaLabel }: {
+function PlanCard({ plan, current, onSelect, ctaLabel, yearly }: {
   plan: typeof PLANS[0];
   current: boolean;
   onSelect?: () => void;
   ctaLabel?: string;
+  yearly?: boolean;
 }) {
   const cfg = EDITION_CFG[plan.edition];
   const Icon = cfg.icon;
   const defaultCta = plan.edition === "Enterprise" ? "Contact Sales" : "Start Free Trial";
   const cta = ctaLabel ?? defaultCta;
+
+  const displayPrice  = yearly ? plan.yearlyPrice  : plan.price;
+  const displayPeriod = yearly ? plan.yearlyPeriod : plan.period;
+  const savingsLabel  = yearly && plan.yearlyMonthly ? `${plan.yearlyMonthly} / employee / month` : null;
 
   return (
     <div className={`relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
@@ -334,10 +351,18 @@ function PlanCard({ plan, current, onSelect, ctaLabel }: {
         </div>
 
         <div className="mb-1.5">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-black text-[var(--text)]">{plan.price}</span>
-            {plan.period && <span className="text-xs text-[var(--muted)]">{plan.period}</span>}
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-3xl font-black text-[var(--text)]">{displayPrice}</span>
+            {displayPeriod && <span className="text-xs text-[var(--muted)]">{displayPeriod}</span>}
+            {yearly && plan.edition !== "Enterprise" && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                Save 20%
+              </span>
+            )}
           </div>
+          {savingsLabel && (
+            <p className="mt-0.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">≈ {savingsLabel}</p>
+          )}
           <p className="mt-0.5 text-xs text-[var(--muted)]">{plan.limits}</p>
         </div>
 
@@ -982,7 +1007,7 @@ function CompanyLicenseRow({
               : <span className="inline-flex items-center gap-1 rounded-full bg-[var(--border)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)]">No License</span>
             }
             {license?.days_remaining != null && license.days_remaining <= 30 && license.status === "active" && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-900/30 dark:text-red-400">
                 <AlertTriangle className="h-2.5 w-2.5" /> {license.days_remaining}d left
               </span>
             )}
@@ -1337,6 +1362,7 @@ export function LicensingTab() {
   const [suspendOpen, setSuspendOpen]   = useState(false);
   const [revokeOpen, setRevokeOpen]     = useState(false);
   const [showPlans, setShowPlans]       = useState(false);
+  const [billingYearly, setBillingYearly] = useState(false);
 
   // Pre-filled company when SA clicks "Issue" from a specific company row
   const [prefillCompanyId,   setPrefillCompanyId]   = useState<string>("");
@@ -1506,12 +1532,29 @@ export function LicensingTab() {
           </button>
           {showPlans && (
             <div className="border-t border-[var(--border)] p-5">
+              {/* Billing period toggle */}
+              <div className="mb-5 flex items-center justify-center gap-3">
+                <span className={`text-sm font-semibold ${!billingYearly ? "text-[var(--text)]" : "text-[var(--muted)]"}`}>Monthly</span>
+                <button
+                  onClick={() => setBillingYearly((v) => !v)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${billingYearly ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${billingYearly ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+                <span className={`text-sm font-semibold ${billingYearly ? "text-[var(--text)]" : "text-[var(--muted)]"}`}>
+                  Yearly
+                  <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                    Save 20%
+                  </span>
+                </span>
+              </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 {PLANS.map((p) => (
                   <PlanCard
                     key={p.edition}
                     plan={p}
                     current={false}
+                    yearly={billingYearly}
                     ctaLabel="Issue License"
                     onSelect={() => {
                       setPrefillEdition(p.edition);
@@ -1728,6 +1771,22 @@ export function LicensingTab() {
         </button>
         {showPlans && (
           <div className="border-t border-[var(--border)] p-5">
+            {/* Billing period toggle */}
+            <div className="mb-5 flex items-center justify-center gap-3">
+              <span className={`text-sm font-semibold ${!billingYearly ? "text-[var(--text)]" : "text-[var(--muted)]"}`}>Monthly</span>
+              <button
+                onClick={() => setBillingYearly((v) => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${billingYearly ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${billingYearly ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+              <span className={`text-sm font-semibold ${billingYearly ? "text-[var(--text)]" : "text-[var(--muted)]"}`}>
+                Yearly
+                <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                  Save 20%
+                </span>
+              </span>
+            </div>
             <div className="grid gap-4 sm:grid-cols-3">
               {PLANS.map((p) => {
                 const isCurrent = p.edition === license?.edition;
@@ -1754,6 +1813,7 @@ export function LicensingTab() {
                     key={p.edition}
                     plan={p}
                     current={isCurrent}
+                    yearly={billingYearly}
                     ctaLabel={ctaLabel}
                     onSelect={onSelect}
                   />

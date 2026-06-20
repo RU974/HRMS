@@ -31,6 +31,7 @@ class License extends Model
         'support_email',
         'features',
         'metadata',
+        'currency',
         'is_active',
     ];
 

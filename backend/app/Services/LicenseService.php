@@ -351,6 +351,7 @@ class LicenseService
 
     public function unsuspend(License $license): License
     {
+        $license->status = null; // clear suspended so recalculateStatus is not blocked
         $license->recalculateStatus();
         $license->save();
         return $license->fresh(['company']);
