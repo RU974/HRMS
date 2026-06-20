@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Designation;
 use App\Models\Employee;
-use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class DesignationController extends Controller
 {
@@ -26,29 +26,53 @@ class DesignationController extends Controller
     public function store(Request $request)
     {
         $this->authorizePermission($request, 'settings:manage_settings');
-        $validated = $request->validate(['name' => 'required|string|max:255|unique:designations,name']);
+
+        $companyId = $request->user()->company_id;
+
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('designations', 'name')->where('company_id', $companyId),
+            ],
+        ]);
+
+        $validated['company_id'] = $companyId;
+
         return $this->ok(Designation::create($validated), 'Designation created successfully', 201);
     }
 
     public function update(Request $request, $id)
     {
         $this->authorizePermission($request, 'settings:manage_settings');
+
+        $companyId = $request->user()->company_id;
         $designation = Designation::findOrFail($id);
-        $validated = $request->validate(['name' => 'required|string|max:255|unique:designations,name,' . $id]);
+
+        $validated = $request->validate([
+            'name' => [
+                'required', 'string', 'max:255',
+                Rule::unique('designations', 'name')->ignore($id)->where('company_id', $companyId),
+            ],
+        ]);
+
         $designation->update($validated);
+
         return $this->ok($designation, 'Designation updated successfully');
     }
 
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'settings:manage_settings');
+
         $designation = Designation::findOrFail($id);
         $inUse = Employee::where('designation_id', $designation->id)->count();
+
         if ($inUse > 0) {
             return $this->fail('Designation cannot be deleted because it is assigned to employees.', 422, ['employee_count' => $inUse]);
         }
 
         $designation->delete();
+
         return $this->ok(null, 'Designation deleted successfully');
     }
 }
