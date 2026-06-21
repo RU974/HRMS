@@ -10,9 +10,8 @@ return new class extends Migration
     {
         Schema::create('inventory_items', function (Blueprint $table) {
             $table->id();
-            $table->uuid('company_id')->index();
-            $table->foreign('company_id')->references('id')->on('companies')->cascadeOnDelete();
-            $table->foreignId('category_id')->nullable()->constrained('inventory_categories')->nullOnDelete();
+            $table->uuid('company_id')->nullable()->index();
+            $table->unsignedBigInteger('category_id')->nullable()->index();
             $table->string('name');
             $table->string('sku')->nullable();
             $table->integer('quantity')->default(0);
