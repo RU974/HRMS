@@ -86,6 +86,10 @@ export function ProfilePage() {
 
   const profileMutation = useMutation({
     mutationFn: async () => {
+      const employeeId = user?.employee?.id;
+      if (!employeeId) {
+        throw new Error("Your account does not have a linked employee profile. Contact an administrator to update your details.");
+      }
       const fd = new FormData();
       if (profileForm.name.trim()) fd.append("name", profileForm.name.trim());
       if (profileForm.phone) fd.append("phone", profileForm.phone);
@@ -94,7 +98,7 @@ export function ProfilePage() {
       if (profileForm.gender) fd.append("gender", profileForm.gender);
       if (photoFile) fd.append("profile_image", photoFile);
       fd.append("_method", "PUT");
-      return apiClient<typeof user>(`/employees/${user?.employee?.id}`, {
+      return apiClient<typeof user>(`/employees/${employeeId}`, {
         method: "POST",
         body: fd,
       });
