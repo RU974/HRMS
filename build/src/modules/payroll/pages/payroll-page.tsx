@@ -61,13 +61,14 @@ import {
   updateTaxBracket,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
+import { useCurrencyStore } from "@/store/currency-store";
 import { toast } from "@/components/notifications/toast";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const sel = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
 
 function fmt(v: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(v);
+  return useCurrencyStore.getState().formatAmount(v);
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
@@ -151,6 +152,8 @@ export function PayrollPage() {
   const queryClient = useQueryClient();
   const canManage   = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
   const canView     = useAuthStore(s => s.hasPermission("payroll:view"));
+  // Subscribe to currency so the component re-renders on currency change
+  useCurrencyStore(s => s.currency);
 
   const initialTab = TAB_PARAM_MAP[searchParams.get("tab") ?? ""] ?? "payroll-records";
   const [tab, setTab]     = useState<Tab>(initialTab);

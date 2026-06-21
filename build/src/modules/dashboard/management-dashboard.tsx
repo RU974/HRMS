@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
+import { useCurrencyStore } from "@/store/currency-store";
 import { getDashboardInsights, getDashboardSummary } from "@/services/dashboard-service";
 import { apiClient } from "@/services/api-client";
 import { SummaryCard, ChartCard, TableWidget } from "./dashboard-widgets";
@@ -12,22 +13,7 @@ import {
   AlertCircle, TrendingDown, Activity, Award,
 } from "lucide-react";
 
-// ─── Currency ────────────────────────────────────────────────────────────────
-const CURRENCY_OPTIONS = [
-  { code: "USD", symbol: "$",   label: "USD – US Dollar" },
-  { code: "PKR", symbol: "Rs",  label: "PKR – Pakistani Rupee" },
-  { code: "EUR", symbol: "€",   label: "EUR – Euro" },
-  { code: "GBP", symbol: "£",   label: "GBP – British Pound" },
-  { code: "SAR", symbol: "﷼",   label: "SAR – Saudi Riyal" },
-  { code: "AED", symbol: "د.إ", label: "AED – UAE Dirham" },
-  { code: "INR", symbol: "₹",   label: "INR – Indian Rupee" },
-] as const;
-type CurrencyCode = (typeof CURRENCY_OPTIONS)[number]["code"];
-
-function formatPayroll(amount: number, currency: CurrencyCode) {
-  const sym = CURRENCY_OPTIONS.find((c) => c.code === currency)?.symbol ?? currency;
-  return `${sym} ${Number(amount).toLocaleString()}`;
-}
+// ─── Currency handled globally via useCurrencyStore ──────────────────────────
 
 // ─── Chart.js loader ─────────────────────────────────────────────────────────
 declare global { interface Window { Chart: any; } }
@@ -359,10 +345,7 @@ function QuickAction({ label, to, icon: Icon, color }: { label: string; to: stri
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function ManagementDashboard({ roleName }: { roleName: string }) {
   const user = useAuthStore(s => s.user);
-  const [currency, setCurrency] = useState<CurrencyCode>(() => {
-    const s = localStorage.getItem("dashboard-currency");
-    return CURRENCY_OPTIONS.some(c => c.code === s) ? (s as CurrencyCode) : "PKR";
-  });
+  const { formatAmount } = useCurrencyStore();
 
   const { data: summary, isLoading, error } = useQuery({
     queryKey: ["dashboard-summary"],
@@ -425,7 +408,7 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
     },
     {
       title: "Monthly Payroll",
-      value: isLoading ? "…" : formatPayroll(Number(summary?.monthly_payroll ?? 0), currency),
+      value: isLoading ? "…" : formatAmount(Number(summary?.monthly_payroll ?? 0)),
       hint: `${summary?.month ?? "—"} / ${summary?.year ?? "—"}`,
       icon: <Wallet className="h-5 w-5" />,
       accent: "emerald" as const,
@@ -460,16 +443,6 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-blue-200">Currency</label>
-            <select
-              value={currency}
-              onChange={e => { setCurrency(e.target.value as CurrencyCode); localStorage.setItem("dashboard-currency", e.target.value); }}
-              className="rounded-lg border border-white/25 bg-white/15 px-3 py-1.5 text-xs text-white backdrop-blur focus:outline-none focus:ring-2 focus:ring-white/30"
-            >
-              {CURRENCY_OPTIONS.map(c => <option key={c.code} value={c.code} className="text-slate-800">{c.label}</option>)}
-            </select>
-          </div>
         </div>
       </div>
 

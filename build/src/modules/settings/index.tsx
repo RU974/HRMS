@@ -19,6 +19,8 @@ import {
   updateTheme, updateUser, LogItem,
 } from "@/services/settings-service";
 import { useThemeStore } from "@/store/theme-store";
+import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
+import type { CurrencyCode } from "@/store/currency-store";
 import { hasAllPermissions, hasAnyPermission, hasPermission } from "@/utils/permissions";
 import { LicensingTab } from "./licensing-tab";
 
@@ -914,6 +916,7 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
   const [form, setForm] = useState({ theme: "light", company_scope: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { currency, setCurrency } = useCurrencyStore();
 
   const canCompanyScope = Boolean(user?.company_id);
   const options = [
@@ -974,6 +977,31 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
         <Button className="mt-4" disabled={saving || busy} onClick={() => void handleSave()}>
           {saving ? "Saving…" : "Save Preference"}
         </Button>
+      </div>
+
+      {/* ── Currency ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+        <p className="mb-1 text-sm font-semibold text-[var(--text)]">Currency</p>
+        <p className="mb-4 text-xs text-[var(--muted)]">Monetary values across Payroll, Employees, and Dashboard will be converted and displayed in the selected currency.</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {CURRENCY_OPTIONS.map(opt => (
+            <button
+              key={opt.code}
+              type="button"
+              onClick={() => setCurrency(opt.code as CurrencyCode)}
+              className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition ${currency === opt.code ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:border-[var(--primary)]/40"}`}
+            >
+              <span className="text-lg font-bold text-[var(--text)]">{opt.symbol}</span>
+              <div>
+                <p className="text-xs font-semibold text-[var(--text)]">{opt.code}</p>
+                <p className="text-xs text-[var(--muted)]">{opt.label.split(" – ")[1]}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-[var(--muted)]">
+          Exchange rates are approximate. Stored values remain in PKR; display is converted automatically.
+        </p>
       </div>
 
       {themes.length > 0 && (

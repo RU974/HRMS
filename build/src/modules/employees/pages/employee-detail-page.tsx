@@ -11,6 +11,7 @@ import { apiClient } from "@/services/api-client";
 import { listDepartments, listDesignations, listShifts, listLeaves, listAttendance } from "@/services/hr-management-service";
 import { getEmployees, type Employee } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
+import { useCurrencyStore } from "@/store/currency-store";
 import { toast } from "@/components/notifications/toast";
 
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30";
@@ -89,6 +90,9 @@ function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: n
     queryKey: ["payslips", "employee", employeeId],
     queryFn: () => apiClient<{ data: Payslip[] }>(`/payslips?employee_id=${employeeId}`),
   });
+  const { formatAmount } = useCurrencyStore();
+  // Subscribe to currency changes so the component re-renders
+  useCurrencyStore(s => s.currency);
   const payslips = (data as { data?: Payslip[] } | undefined)?.data ?? [];
   const base   = Number(employee.basic_salary ?? 0);
   const allow  = Number(employee.allowances ?? 0);
@@ -100,9 +104,9 @@ function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: n
         <h3 className="mb-4 text-base font-semibold">Compensation Breakdown</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           {[
-            { label: "Basic Salary",  value: base.toLocaleString() },
-            { label: "Allowances",    value: allow.toLocaleString() },
-            { label: "Gross Salary",  value: gross.toLocaleString() },
+            { label: "Basic Salary",  value: formatAmount(base) },
+            { label: "Allowances",    value: formatAmount(allow) },
+            { label: "Gross Salary",  value: formatAmount(gross) },
           ].map(s => (
             <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">{s.label}</p>
@@ -134,7 +138,7 @@ function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: n
                   <tr key={p.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
                     <td className="p-3 font-mono text-xs">{p.slip_number}</td>
                     <td className="p-3">{p.payroll ? `${p.payroll.year}-${String(p.payroll.month).padStart(2, "0")}` : "—"}</td>
-                    <td className="p-3 font-semibold">{p.payroll ? Number(p.payroll.net_salary).toLocaleString() : "—"}</td>
+                    <td className="p-3 font-semibold">{p.payroll ? formatAmount(Number(p.payroll.net_salary)) : "—"}</td>
                     <td className="p-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${p.status === "issued" ? "bg-emerald-50 text-emerald-700" : p.status === "cancelled" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{p.status}</span>
                     </td>
@@ -346,6 +350,8 @@ function OrgTab({ employee, employeeId }: { employee: Employee; employeeId: numb
 // ── History (Emergency + Promotions) tab ──────────────────────────────────────
 function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; employeeId: number; canManage: boolean }) {
   const queryClient = useQueryClient();
+  const { formatAmount } = useCurrencyStore();
+  useCurrencyStore(s => s.currency);
 
   // Emergency contacts
   const contacts: EmergencyContact[] = (employee as Employee & { emergency_contacts?: EmergencyContact[] }).emergency_contacts ?? [];
@@ -457,7 +463,7 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
                   <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
                     {(p.from_designation || p.to_designation) && <p className="text-[var(--muted)]">Designation: <span className="font-medium text-[var(--text)]">{p.from_designation ?? "—"} → {p.to_designation ?? "—"}</span></p>}
                     {(p.from_department || p.to_department) && <p className="text-[var(--muted)]">Department: <span className="font-medium text-[var(--text)]">{p.from_department ?? "—"} → {p.to_department ?? "—"}</span></p>}
-                    {(p.from_salary != null || p.to_salary != null) && <p className="text-[var(--muted)]">Salary: <span className="font-medium text-[var(--text)]">{p.from_salary ? Number(p.from_salary).toLocaleString() : "—"} → {p.to_salary ? Number(p.to_salary).toLocaleString() : "—"}</span></p>}
+                    {(p.from_salary != null || p.to_salary != null) && <p className="text-[var(--muted)]">Salary: <span className="font-medium text-[var(--text)]">{p.from_salary ? formatAmount(Number(p.from_salary)) : "—"} → {p.to_salary ? formatAmount(Number(p.to_salary)) : "—"}</span></p>}
                   </div>
                   {p.notes && <p className="mt-2 text-xs text-[var(--muted)]">{p.notes}</p>}
                 </div>
@@ -524,6 +530,9 @@ export function EmployeeDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
+  const { formatAmount } = useCurrencyStore();
+  // Subscribe so re-render fires on currency change
+  useCurrencyStore(s => s.currency);
 
   const [tab, setTab] = useState<Tab>("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -689,8 +698,8 @@ export function EmployeeDetailPage() {
             <InfoRow label="Date of birth"   value={employee.date_of_birth} />
             <InfoRow label="Shift"           value={employee.shift?.name} />
             <InfoRow label="Manager"         value={employee.manager?.name} />
-            <InfoRow label="Basic salary"    value={employee.basic_salary ? Number(employee.basic_salary).toLocaleString() : undefined} />
-            <InfoRow label="Allowances"      value={employee.allowances ? Number(employee.allowances).toLocaleString() : undefined} />
+            <InfoRow label="Basic salary"    value={employee.basic_salary ? formatAmount(Number(employee.basic_salary)) : undefined} />
+            <InfoRow label="Allowances"      value={employee.allowances ? formatAmount(Number(employee.allowances)) : undefined} />
             <InfoRow label="Address"         value={employee.address} />
           </div>
         </Card>
