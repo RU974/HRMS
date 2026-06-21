@@ -11,7 +11,7 @@ class PermissionSeeder extends Seeder
     public function run(): void
     {
         $modules = [
-            'dashboard','users','employees','leaves','attendance','payroll','recruitment','documents','approvals','audit_logs','settings','reports','notification','announcement','performance','chat','licenses'
+            'dashboard','users','employees','leaves','attendance','payroll','recruitment','documents','approvals','audit_logs','settings','reports','notification','announcement','performance','chat','licenses','inventory'
         ];
 
         $actions = ['view','create','edit','delete','approve','export','import','assign','manage_settings'];

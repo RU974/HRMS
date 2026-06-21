@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   MessageCircleMore,
   Megaphone,
+  Package,
   ShieldCheck,
   Settings2,
   Users2,
@@ -161,6 +162,12 @@ export const sidebarSections: SidebarSectionConfig[] = [
   {
     title: "Administration",
     items: [
+      {
+        label: "Inventory",
+        path: "/inventory",
+        icon: Package,
+        permissions: ["inventory.view", "inventory.create", "inventory.edit", "inventory.manage_settings"],
+      },
       {
         label: "Departments",
         path: "/departments",

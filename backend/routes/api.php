@@ -53,6 +53,9 @@ use App\Http\Controllers\TaxBracketController;
 use App\Http\Controllers\SalaryGradeController;
 use App\Http\Controllers\SalaryIncrementController;
 use App\Http\Controllers\LoanAdvanceController;
+use App\Http\Controllers\InventoryCategoryController;
+use App\Http\Controllers\InventoryItemController;
+use App\Http\Controllers\InventoryAssignmentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -349,6 +352,15 @@ $registerRoutes = function (): void {
                 Route::post('calls/{id}/signals', [CallController::class, 'sendSignal']);
                 Route::get('calls/{id}/signals', [CallController::class, 'getSignals']);
             });
+        });
+
+        // Inventory routes
+        Route::middleware('permission:inventory:view|inventory:create|inventory:edit|inventory:delete|inventory:manage_settings')->group(function () {
+            Route::apiResource('inventory/categories', InventoryCategoryController::class)->except(['show', 'create', 'edit']);
+            Route::post('inventory/items/{id}/restore', [InventoryItemController::class, 'restore']);
+            Route::apiResource('inventory/items', InventoryItemController::class)->except(['create', 'edit']);
+            Route::post('inventory/assignments/{id}/return', [InventoryAssignmentController::class, 'return']);
+            Route::apiResource('inventory/assignments', InventoryAssignmentController::class)->only(['index', 'store']);
         });
 
         // Performance routes — Professional+ feature
