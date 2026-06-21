@@ -67,7 +67,7 @@ export function WorkflowsPage() {
           approver_type: step.approvers[0]?.approver_type ?? "role",
           approver_identifier: step.approvers[0]?.approver_identifier ?? "",
           approvers: step.approvers,
-          conditions: step.conditions.map((c) => ({ ...c, value: isNaN(Number(c.value)) ? c.value : Number(c.value) })),
+          conditions: (Array.isArray(step.conditions) ? step.conditions : []).map((c) => ({ ...c, value: isNaN(Number(c.value)) ? c.value : Number(c.value) })),
           required_approvals: step.required_approvals,
           approval_mode: step.approval_mode,
           escalation_hours: step.escalation_hours,
@@ -153,16 +153,18 @@ export function WorkflowsPage() {
   }
 
   function addCondition(stepIndex: number) {
-    updateStep(stepIndex, { conditions: [...steps[stepIndex].conditions, { field: CONDITION_FIELDS[0], operator: ">", value: "" }] });
+    const existing = Array.isArray(steps[stepIndex].conditions) ? steps[stepIndex].conditions : [];
+    updateStep(stepIndex, { conditions: [...existing, { field: CONDITION_FIELDS[0], operator: ">", value: "" }] });
   }
 
   function updateCondition(stepIndex: number, condIndex: number, patch: Partial<{ field: string; operator: ConditionOperator; value: string }>) {
-    const conditions = steps[stepIndex].conditions.map((c, i) => (i === condIndex ? { ...c, ...patch } : c));
+    const conditions = (Array.isArray(steps[stepIndex].conditions) ? steps[stepIndex].conditions : []).map((c, i) => (i === condIndex ? { ...c, ...patch } : c));
     updateStep(stepIndex, { conditions });
   }
 
   function removeCondition(stepIndex: number, condIndex: number) {
-    updateStep(stepIndex, { conditions: steps[stepIndex].conditions.filter((_, i) => i !== condIndex) });
+    const existing = Array.isArray(steps[stepIndex].conditions) ? steps[stepIndex].conditions : [];
+    updateStep(stepIndex, { conditions: existing.filter((_, i) => i !== condIndex) });
   }
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -273,7 +275,7 @@ export function WorkflowsPage() {
                                 <span> ({step.approval_mode === "all" ? "all" : `${step.required_approvals}-of-N`})</span>
                               )}
                             </div>
-                            {step.conditions && step.conditions.length > 0 && (
+                            {Array.isArray(step.conditions) && step.conditions.length > 0 && (
                               <div className="text-[10px] text-indigo-600">
                                 if {step.conditions.map((c) => `${c.field} ${c.operator} ${c.value}`).join(" and ")}
                               </div>

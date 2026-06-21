@@ -23,7 +23,36 @@ class ApprovalStep extends Model
         'escalation_hours',
     ];
 
-    protected $casts = ['conditions' => 'array'];
+    protected $casts = [];
+
+    public function getConditionsAttribute(mixed $value): array
+    {
+        if (is_null($value)) {
+            return [];
+        }
+        if (is_array($value)) {
+            return $value;
+        }
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+            // Handle double-encoded JSON (stored as a JSON string wrapping another JSON string)
+            if (is_string($decoded)) {
+                $decoded2 = json_decode($decoded, true);
+                if (is_array($decoded2)) {
+                    return $decoded2;
+                }
+            }
+        }
+        return [];
+    }
+
+    public function setConditionsAttribute(mixed $value): void
+    {
+        $this->attributes['conditions'] = is_array($value) ? json_encode($value) : json_encode([]);
+    }
 
     public function workflow(): BelongsTo
     {
