@@ -34,7 +34,7 @@ class SystemLogController extends Controller
             });
         }
 
-        return $this->ok($q->get());
+        return $this->ok($q->paginate(25));
     }
 
     public function show(Request $request, int $id)

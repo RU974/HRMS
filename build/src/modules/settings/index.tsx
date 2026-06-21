@@ -1012,7 +1012,8 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
 }
 
 // ═══════════════════ AUDIT LOGS ═══════════════════
-function LogsTab({ logs, page, totalPages, onPageChange }: { logs: LogItem[]; page: number; totalPages: number; onPageChange: (p: number) => void }) {
+function LogsTab({ logs: rawLogs, page, totalPages, onPageChange }: { logs: LogItem[]; page: number; totalPages: number; onPageChange: (p: number) => void }) {
+  const logs = Array.isArray(rawLogs) ? rawLogs : [];
   const [q, setQ] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
   const [selected, setSelected] = useState<LogItem | null>(logs[0] ?? null);
@@ -1188,7 +1189,7 @@ export function SettingsPage() {
         canViewLogs       ? listLogs(logsPage) : Promise.resolve({ data: [] as LogItem[], current_page: 1, last_page: 1, total: 0 }),
       ]);
       setUsers(Array.isArray(u) ? u : []); setRoles(Array.isArray(r) ? r : []); setPermissions(Array.isArray(p) ? p : []); setCompanies(Array.isArray(c) ? c : []); setBranches(Array.isArray(b) ? b : []); setThemes(Array.isArray(th) ? th : []);
-      setLogs(lg.data); setLogsTotalPages(lg.last_page);
+      setLogs(Array.isArray(lg.data) ? lg.data : Array.isArray(lg) ? (lg as unknown as LogItem[]) : []); setLogsTotalPages(lg.last_page ?? 1);
     } catch (e) { setError(e instanceof Error ? e.message : "Failed to load settings."); }
     finally { setBusy(false); }
   }
