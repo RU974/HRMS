@@ -12,6 +12,7 @@ import {
   DollarSign, Briefcase, Target, BarChart3, ArrowRight,
   AlertCircle, TrendingDown, Activity, Award,
 } from "lucide-react";
+import { TicketStatsWidget } from "@/modules/tickets/ticket-stats-widget";
 
 // ─── Currency handled globally via useCurrencyStore ──────────────────────────
 
@@ -526,6 +527,9 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
           <AttritionRiskWidget employees={insights?.attrition_risk ?? []} />
         </ChartCard>
       </section>
+
+      {/* ── Ticket stats widget ── */}
+      <TicketStatsWidget />
 
       {/* ── Bottom row ── */}
       <section className="grid gap-4 xl:grid-cols-3">

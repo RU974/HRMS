@@ -7,6 +7,7 @@ export interface NotificationItem {
   title: string;
   message: string;
   type: NotificationType;
+  link?: string | null;
   is_read: boolean;
   user_id: number | null;
   created_by: number | null;

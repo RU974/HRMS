@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, FileText, Paperclip, Send, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/loaders/loading-spinner";
@@ -12,7 +12,11 @@ import {
   assignTicket,
   changeTicketStatus,
   addTicketComment,
+  uploadTicketAttachment,
+  downloadTicketAttachment,
   type Ticket,
+  type TicketAttachment,
+  type TicketActivity,
 } from "@/services/ticket-service";
 import { listUsers } from "@/services/settings-service";
 
@@ -34,6 +38,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const ALL_STATUSES = ["open", "in_progress", "resolved", "closed", "reopened"] as const;
+const MAX_COMMENT_FILE_SIZE = 10 * 1024 * 1024;
+const ACCEPTED_EXTS = [".pdf", ".jpg", ".jpeg", ".png", ".docx", ".xlsx"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +80,60 @@ function initials(name: string) {
   return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ─── Attachments Section ──────────────────────────────────────────────────────
+
+function AttachmentsSection({ attachments, ticketId }: { attachments: TicketAttachment[]; ticketId: string }) {
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  async function handleDownload(a: TicketAttachment) {
+    setDownloading(a.id);
+    try {
+      await downloadTicketAttachment(ticketId, a.id, a.file_name);
+    } catch {
+      toast.error("Download failed", "Could not download the file.");
+    } finally {
+      setDownloading(null);
+    }
+  }
+
+  if (attachments.length === 0) return null;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+      <h3 className="mb-3 text-sm font-semibold text-[var(--muted)]">Attachments ({attachments.length})</h3>
+      <div className="flex flex-col gap-2">
+        {attachments.map(a => (
+          <div
+            key={a.id}
+            className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+          >
+            <FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-[var(--text)]">{a.file_name}</p>
+              <p className="text-xs text-[var(--muted)]">{formatFileSize(a.file_size)} · {a.user?.name ?? "Unknown"}</p>
+            </div>
+            <Button
+              variant="outline"
+              className="h-8 shrink-0 px-3 text-xs"
+              onClick={() => void handleDownload(a)}
+              disabled={downloading === a.id}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              {downloading === a.id ? "…" : "Download"}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Ticket Metadata Panel ────────────────────────────────────────────────────
 
 function TicketMeta({
@@ -98,7 +158,14 @@ function TicketMeta({
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-1">
       <MetaRow label="Status">
-        <Badge label={ticket.status.replace("_", " ")} colorClass={STATUS_COLORS[ticket.status] ?? ""} />
+        <span className="flex items-center gap-1.5 flex-wrap justify-end">
+          <Badge label={ticket.status.replace("_", " ")} colorClass={STATUS_COLORS[ticket.status] ?? ""} />
+          {ticket.status === "closed" && ticket.closed_by === null && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+              Auto-closed
+            </span>
+          )}
+        </span>
       </MetaRow>
       <MetaRow label="Priority">
         <Badge label={ticket.priority} colorClass={PRIORITY_COLORS[ticket.priority] ?? ""} />
@@ -162,12 +229,23 @@ function CommentThread({
 }) {
   const [body, setBody]           = useState("");
   const [isInternal, setInternal] = useState(false);
+  const [commentFile, setCommentFile] = useState<File | null>(null);
+  const [fileErr, setFileErr]         = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const mutation = useMutation({
-    mutationFn: () => addTicketComment(ticket.id, { body, is_internal: isInternal }),
+    mutationFn: async () => {
+      const comment = await addTicketComment(ticket.id, { body, is_internal: isInternal });
+      if (commentFile) {
+        await uploadTicketAttachment(ticket.id, commentFile);
+      }
+      return comment;
+    },
     onSuccess: () => {
       setBody("");
       setInternal(false);
+      setCommentFile(null);
+      setFileErr(null);
       toast.success("Comment added", "Your reply has been posted.");
       onCommentAdded();
     },
@@ -175,6 +253,23 @@ function CommentThread({
       toast.error("Failed to post comment", e.message);
     },
   });
+
+  function handleCommentFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > MAX_COMMENT_FILE_SIZE) {
+      setFileErr("File exceeds 10 MB limit.");
+      return;
+    }
+    const ext = "." + (f.name.split(".").pop() ?? "").toLowerCase();
+    if (!ACCEPTED_EXTS.includes(ext)) {
+      setFileErr("File type not accepted.");
+      return;
+    }
+    setFileErr(null);
+    setCommentFile(f);
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   const visibleComments = canSeeInternal
     ? ticket.comments
@@ -225,6 +320,44 @@ function CommentThread({
             placeholder="Write a reply…"
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none"
           />
+
+          {/* Comment file attachment */}
+          <div className="mt-2">
+            {commentFile ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1 text-xs text-[var(--text)]">
+                  <Paperclip className="h-3 w-3 text-[var(--muted)]" />
+                  <span className="max-w-[160px] truncate">{commentFile.name}</span>
+                  <span className="text-[var(--muted)]">({(commentFile.size / 1024).toFixed(1)} KB)</span>
+                  <button
+                    type="button"
+                    onClick={() => setCommentFile(null)}
+                    className="ml-1 text-[var(--muted)] hover:text-red-500"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-1.5 text-xs text-[var(--muted)] hover:text-[var(--primary)] transition-colors"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                Attach file
+              </button>
+            )}
+            {fileErr && <p className="mt-1 text-xs text-red-500">{fileErr}</p>}
+            <input
+              ref={fileRef}
+              type="file"
+              accept={ACCEPTED_EXTS.join(",")}
+              onChange={handleCommentFile}
+              className="hidden"
+            />
+          </div>
+
           <div className="mt-3 flex items-center justify-between gap-3">
             {canSeeInternal && (
               <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--muted)]">
@@ -254,6 +387,55 @@ function CommentThread({
   );
 }
 
+// ─── Activity Log ─────────────────────────────────────────────────────────────
+
+function activityLabel(a: TicketActivity): string {
+  const actor = a.user?.name ?? "Unknown";
+  switch (a.action) {
+    case "created":
+      return `Ticket raised by ${actor}`;
+    case "status_changed": {
+      const from = String(a.meta?.from ?? "?").replace("_", " ");
+      const to   = String(a.meta?.to   ?? "?").replace("_", " ");
+      return `Status changed from ${from} to ${to} by ${actor}`;
+    }
+    case "assigned":
+      return `Assigned to ${String(a.meta?.to_name ?? "Unknown")} by ${actor}`;
+    case "commented":
+      return a.meta?.is_internal === true
+        ? `Internal note added by ${actor}`
+        : `Comment added by ${actor}`;
+    default:
+      return `${a.action} by ${actor}`;
+  }
+}
+
+function ActivityLog({ activities }: { activities: TicketActivity[] }) {
+  if (!activities || activities.length === 0) return null;
+
+  return (
+    <div className="mt-6">
+      <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Activity Log</h3>
+      <div className="relative flex flex-col">
+        {activities.map((a, i) => (
+          <div key={a.id} className="relative flex gap-3 pb-4 last:pb-0">
+            {i < activities.length - 1 && (
+              <div className="absolute left-[9px] top-5 h-full w-px bg-[var(--border)]" />
+            )}
+            <div className="relative mt-1 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+              <div className="h-2.5 w-2.5 rounded-full border-2 border-[var(--primary)] bg-[var(--card)]" />
+            </div>
+            <div>
+              <p className="text-sm text-[var(--text)]">{activityLabel(a)}</p>
+              <p className="text-xs text-[var(--muted)]">{fmtDateShort(a.created_at)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Detail Page ─────────────────────────────────────────────────────────
 
 export function TicketDetailPage() {
@@ -261,9 +443,9 @@ export function TicketDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const canManage     = useAuthStore(s => s.hasPermission("tickets.manage_settings"));
-  const canAssign     = useAuthStore(s => s.hasPermission("tickets.assign") || s.hasPermission("tickets.manage_settings"));
-  const canReply      = useAuthStore(s => s.hasPermission("tickets.reply") || s.hasPermission("tickets.create") || s.hasPermission("tickets.manage_settings"));
+  const canManage      = useAuthStore(s => s.hasPermission("tickets.manage_settings"));
+  const canAssign      = useAuthStore(s => s.hasPermission("tickets.assign") || s.hasPermission("tickets.manage_settings"));
+  const canReply       = useAuthStore(s => s.hasPermission("tickets.reply") || s.hasPermission("tickets.create") || s.hasPermission("tickets.manage_settings"));
   const canSeeInternal = useAuthStore(s => s.hasPermission("tickets.manage_settings") || s.hasPermission("tickets.assign"));
 
   const ticketQuery = useQuery({
@@ -298,10 +480,18 @@ export function TicketDetailPage() {
   });
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (ticketQuery.data) setTicket(ticketQuery.data);
   }, [ticketQuery.data]);
+
+  function copyLink() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   if (ticketQuery.isLoading) {
     return <div className="flex justify-center py-24"><LoadingSpinner /></div>;
@@ -328,6 +518,13 @@ export function TicketDetailPage() {
           Back
         </button>
         <PageHeader title={ticket.title} subtitle={`#${ticket.id.slice(0, 8)} · ${ticket.category}`} />
+        <button
+          onClick={copyLink}
+          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--muted)] hover:text-[var(--text)] transition-colors"
+        >
+          {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+          {copied ? "Copied!" : "Copy Link"}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
@@ -337,12 +534,19 @@ export function TicketDetailPage() {
             <p className="whitespace-pre-wrap text-sm text-[var(--text)]">{ticket.description}</p>
           </div>
 
+          <AttachmentsSection
+            attachments={ticket.attachments ?? []}
+            ticketId={ticket.id}
+          />
+
           <CommentThread
             ticket={ticket}
             canReply={canReply}
             canSeeInternal={canSeeInternal}
             onCommentAdded={() => queryClient.invalidateQueries({ queryKey: ["tickets", id] })}
           />
+
+          <ActivityLog activities={ticket.activities ?? []} />
         </div>
 
         <div className="lg:sticky lg:top-6 self-start">

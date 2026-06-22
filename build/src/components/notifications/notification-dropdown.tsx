@@ -148,7 +148,17 @@ export function NotificationDropdown() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold">{item.title}</p>
+                              {item.link ? (
+                                <Link
+                                  to={item.link}
+                                  className="truncate text-sm font-semibold hover:underline"
+                                  onClick={() => setOpen(false)}
+                                >
+                                  {item.title}
+                                </Link>
+                              ) : (
+                                <p className="truncate text-sm font-semibold">{item.title}</p>
+                              )}
                               <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.message}</p>
                             </div>
                             <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">

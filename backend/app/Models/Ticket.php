@@ -25,6 +25,7 @@ class Ticket extends Model
         'description',
         'resolved_at',
         'closed_at',
+        'closed_by',
     ];
 
     protected $casts = [
@@ -50,5 +51,15 @@ class Ticket extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(TicketComment::class);
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TicketAttachment::class);
+    }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(TicketActivity::class)->orderBy('created_at');
     }
 }

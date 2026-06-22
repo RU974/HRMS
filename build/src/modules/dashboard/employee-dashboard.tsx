@@ -14,6 +14,7 @@ import {
   TrendingUp, CalendarDays, ArrowRight, AlertCircle,
   Wallet,
 } from "lucide-react";
+import { TicketStatsWidget } from "@/modules/tickets/ticket-stats-widget";
 
 function fmt(v?: string | null) { return v?.slice(11, 16) ?? "—"; }
 function fmtCurrency(v?: number | string | null) {
@@ -368,6 +369,9 @@ export function EmployeeDashboard() {
           ])}
         />
       </section>
+
+      {/* ── Ticket stats widget ── */}
+      <TicketStatsWidget />
 
       {/* ── Announcements + notifications + tasks ── */}
       <section className="grid gap-4 xl:grid-cols-3">

@@ -14,6 +14,7 @@ class NotificationItem extends Model
         'title',
         'message',
         'type',
+        'link',
         'is_read',
         'user_id',
         'created_by',

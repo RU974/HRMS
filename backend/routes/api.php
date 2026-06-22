@@ -58,6 +58,7 @@ use App\Http\Controllers\InventoryItemController;
 use App\Http\Controllers\InventoryAssignmentController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketCommentController;
+use App\Http\Controllers\TicketStatsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -367,9 +368,13 @@ $registerRoutes = function (): void {
 
         // Ticketing routes
         Route::middleware('permission:tickets:view|tickets:create|tickets:edit|tickets:delete|tickets:assign|tickets:manage_settings')->group(function () {
+            // Stats must be declared before apiResource to avoid matching 'stats' as {id}
+            Route::get('tickets/stats', [TicketStatsController::class, 'index']);
             Route::post('tickets/{id}/assign', [TicketController::class, 'assign']);
             Route::post('tickets/{id}/status', [TicketController::class, 'changeStatus']);
             Route::post('tickets/{ticketId}/comments', [TicketCommentController::class, 'store']);
+            Route::post('tickets/{ticketId}/attachments', [TicketController::class, 'uploadAttachment']);
+            Route::get('tickets/{ticketId}/attachments/{attachmentId}/download', [TicketController::class, 'downloadAttachment']);
             Route::apiResource('tickets', TicketController::class);
         });
 

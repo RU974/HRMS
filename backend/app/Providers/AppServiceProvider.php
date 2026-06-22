@@ -8,6 +8,10 @@ use App\Listeners\NotifyLeaveRequested;
 use App\Listeners\NotifyLeaveStatusChanged;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
+use App\Models\Ticket;
+use App\Models\TicketComment;
+use App\Observers\TicketCommentObserver;
+use App\Observers\TicketObserver;
 use App\Policies\ChatConversationPolicy;
 use App\Policies\ChatMessagePolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -60,6 +64,10 @@ class AppServiceProvider extends ServiceProvider
         // Leave request notifications
         Event::listen(LeaveRequested::class, NotifyLeaveRequested::class);
         Event::listen(LeaveStatusChanged::class, NotifyLeaveStatusChanged::class);
+
+        // Ticket notifications
+        Ticket::observe(TicketObserver::class);
+        TicketComment::observe(TicketCommentObserver::class);
 
         // Explicitly register policies to avoid implicit resolution surprises
         Gate::policy(ChatMessage::class, ChatMessagePolicy::class);

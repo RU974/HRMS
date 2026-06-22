@@ -36,3 +36,8 @@ Schedule::call([ApprovalEscalationService::class, 'escalateOverdueApprovals'])->
 
 // Publish announcements whose scheduled published_at has arrived.
 Schedule::command('announcements:publish-scheduled')->everyFiveMinutes();
+
+// ─── Ticketing ──────────────────────────────────────────────────────────────
+
+// Close tickets that have been resolved for more than 7 days.
+Schedule::command('tickets:auto-close')->daily();
