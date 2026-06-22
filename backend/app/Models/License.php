@@ -59,15 +59,31 @@ class License extends Model
 
     /**
      * How many calendar days remain before the license expires.
-     * Returns null when there is no expiry date (perpetual).
+     *
+     * For active/expired licenses: counts down from expires_at.
+     * For trial licenses:          counts down from issued_at + trial_days so the
+     *                              admin can see the trial window ticking before
+     *                              the licenses:expire-trials command fires.
+     * Returns null for perpetual licenses (no expiry date and not a trial).
+     *
+     * Uses ->copy() before calling startOfDay() to avoid mutating the cached
+     * Carbon instance, which would corrupt expires_at throughout the request.
      */
     public function getDaysRemainingAttribute(): ?int
     {
         if (! $this->expires_at) {
+            if ($this->status === 'trial' && $this->issued_at) {
+                $trialDays   = (int) config('licenses.trial_days', 14);
+                $trialExpiry = $this->issued_at->copy()->addDays($trialDays)->startOfDay();
+                $diff        = (int) now()->startOfDay()->diffInDays($trialExpiry, false);
+
+                return max(0, $diff);
+            }
+
             return null;
         }
 
-        $diff = (int) now()->startOfDay()->diffInDays($this->expires_at->startOfDay(), false);
+        $diff = (int) now()->startOfDay()->diffInDays($this->expires_at->copy()->startOfDay(), false);
 
         return max(0, $diff);
     }

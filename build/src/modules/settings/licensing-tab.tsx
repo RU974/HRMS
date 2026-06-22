@@ -145,6 +145,9 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
   const empPct  = usagePct(usage.active_employees, license.max_employees);
   const userPct = usagePct(usage.active_users, license.max_users);
 
+  const TRIAL_DAYS = 14;
+  const maxDays = license.status === "trial" ? TRIAL_DAYS : 365;
+
   const daysColor = license.days_remaining == null ? "#10b981"
     : license.days_remaining < 30  ? "#ef4444"
     : license.days_remaining < 90  ? "#ef4444"
@@ -181,7 +184,9 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
               <StatusBadge status={license.status} />
               {license.days_remaining != null && (
                 <span className="rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-xs font-medium text-white/80">
-                  {license.days_remaining} days remaining
+                  {license.status === "trial"
+                    ? `${license.days_remaining} trial day${license.days_remaining !== 1 ? "s" : ""} remaining`
+                    : `${license.days_remaining} days remaining`}
                 </span>
               )}
             </div>
@@ -214,10 +219,10 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
             <div className="relative h-20 w-20">
               <svg width="80" height="80" viewBox="0 0 80 80" className="-rotate-90">
                 <circle cx="40" cy="40" r="30" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="7" />
-                {license.days_remaining != null && license.expires_at && (
+                {license.days_remaining != null && (
                   <circle cx="40" cy="40" r="30" fill="none" strokeWidth="7"
                     stroke={daysColor} strokeLinecap="round"
-                    strokeDasharray={`${(Math.min(license.days_remaining, 365) / 365) * (2 * Math.PI * 30)} ${2 * Math.PI * 30}`}
+                    strokeDasharray={`${(Math.min(license.days_remaining, maxDays) / maxDays) * (2 * Math.PI * 30)} ${2 * Math.PI * 30}`}
                     style={{ transition: "stroke-dasharray 0.8s ease" }}
                   />
                 )}
@@ -1713,20 +1718,29 @@ export function LicensingTab() {
                 );
               })}
 
-              {license.expires_at && (
+              {license.days_remaining != null && (
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
                   <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
                     <Calendar className="h-3.5 w-3.5" />
                     <span>
-                      License expires in{" "}
-                      <strong className="text-[var(--text)]">{license.days_remaining ?? "?"} days</strong>{" "}
-                      — {fmtDate(license.expires_at)}
+                      {license.status === "trial" ? (
+                        <>
+                          Trial period ends in{" "}
+                          <strong className="text-[var(--text)]">{license.days_remaining} day{license.days_remaining !== 1 ? "s" : ""}</strong>
+                        </>
+                      ) : (
+                        <>
+                          License expires in{" "}
+                          <strong className="text-[var(--text)]">{license.days_remaining} days</strong>{" "}
+                          {license.expires_at && <>— {fmtDate(license.expires_at)}</>}
+                        </>
+                      )}
                     </span>
                   </div>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-blue-500 transition-all duration-700"
-                      style={{ width: `${Math.min(100, ((license.days_remaining ?? 0) / 365) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (license.days_remaining / (license.status === "trial" ? 14 : 365)) * 100)}%` }}
                     />
                   </div>
                 </div>
