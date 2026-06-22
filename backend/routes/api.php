@@ -56,6 +56,8 @@ use App\Http\Controllers\LoanAdvanceController;
 use App\Http\Controllers\InventoryCategoryController;
 use App\Http\Controllers\InventoryItemController;
 use App\Http\Controllers\InventoryAssignmentController;
+use App\Http\Controllers\TicketController;
+use App\Http\Controllers\TicketCommentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -361,6 +363,14 @@ $registerRoutes = function (): void {
             Route::apiResource('inventory/items', InventoryItemController::class)->except(['create', 'edit']);
             Route::post('inventory/assignments/{id}/return', [InventoryAssignmentController::class, 'return']);
             Route::apiResource('inventory/assignments', InventoryAssignmentController::class)->only(['index', 'store']);
+        });
+
+        // Ticketing routes
+        Route::middleware('permission:tickets:view|tickets:create|tickets:edit|tickets:delete|tickets:assign|tickets:manage_settings')->group(function () {
+            Route::post('tickets/{id}/assign', [TicketController::class, 'assign']);
+            Route::post('tickets/{id}/status', [TicketController::class, 'changeStatus']);
+            Route::post('tickets/{ticketId}/comments', [TicketCommentController::class, 'store']);
+            Route::apiResource('tickets', TicketController::class);
         });
 
         // Performance routes — Professional+ feature

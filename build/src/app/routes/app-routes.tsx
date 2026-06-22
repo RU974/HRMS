@@ -43,6 +43,8 @@ import { SearchPage } from "@/modules/search";
 import { ProfilePage } from "@/modules/profile";
 import { SettingsPage } from "@/modules/settings";
 import { InventoryPage } from "@/modules/inventory";
+import { TicketsPage } from "@/modules/tickets";
+import { TicketDetailPage } from "@/modules/tickets/ticket-detail";
 import { AuthLayout } from "@/modules/auth/auth-layout";
 import { LoginPage } from "@/modules/auth/login-page";
 import { RegisterPage } from "@/modules/auth/register-page";
@@ -102,6 +104,8 @@ export const appRouter = createBrowserRouter([
       { path: "reports/analytics",         element: withPermission(<AnalyticsReportsPage />,      ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "search",                    element: <SearchPage /> },
       { path: "inventory",                  element: withPermission(<InventoryPage />,             ["inventory:view", "inventory:create", "inventory:edit", "inventory:manage_settings"]) },
+      { path: "tickets",                   element: withPermission(<TicketsPage />,               ["tickets:view", "tickets:create", "tickets:manage_settings"]) },
+      { path: "tickets/:id",               element: withPermission(<TicketDetailPage />,          ["tickets:view", "tickets:create", "tickets:manage_settings"]) },
       { path: "settings",                  element: withPermission(<SettingsPage />,              ["users:view", "settings:manage_settings"]) },
 
       // ── Catch-all 404 inside authenticated layout ──

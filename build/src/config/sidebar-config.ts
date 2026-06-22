@@ -15,6 +15,7 @@ import {
   Package,
   ShieldCheck,
   Settings2,
+  Ticket,
   Users2,
   WalletCards,
   type LucideIcon,
@@ -162,6 +163,12 @@ export const sidebarSections: SidebarSectionConfig[] = [
   {
     title: "Administration",
     items: [
+      {
+        label: "Tickets",
+        path: "/tickets",
+        icon: Ticket,
+        permissions: ["tickets.view", "tickets.create", "tickets.manage_settings"],
+      },
       {
         label: "Inventory",
         path: "/inventory",
