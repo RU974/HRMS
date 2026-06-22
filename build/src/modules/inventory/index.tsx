@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
@@ -183,6 +184,8 @@ interface ItemForm {
 
 function ItemsTab() {
   const qc = useQueryClient();
+  const { formatAmount, currency } = useCurrencyStore();
+  const currencySymbol = CURRENCY_OPTIONS.find((c) => c.code === currency)?.symbol ?? currency;
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -302,7 +305,7 @@ function ItemsTab() {
                       {item.quantity_available}
                     </span>
                   </td>
-                  <td className="p-3">${Number(item.unit_cost).toFixed(2)}</td>
+                  <td className="p-3">{formatAmount(Number(item.unit_cost))}</td>
                   <td className="p-3 text-[var(--muted)]">{item.location ?? "—"}</td>
                   <td className="p-3">
                     <Badge label={CONDITION_LABELS[item.condition] ?? item.condition} colorClass={CONDITION_COLORS[item.condition] ?? ""} />
@@ -353,7 +356,7 @@ function ItemsTab() {
                 <FormInput type="number" min={0} value={form.quantity} onChange={f("quantity")} required />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Unit Cost ($)</label>
+                <label className="mb-1 block text-sm font-medium">Unit Cost ({currencySymbol})</label>
                 <FormInput type="number" min={0} step="0.01" value={form.unit_cost} onChange={f("unit_cost")} />
               </div>
               <div>
@@ -392,7 +395,7 @@ function ItemsTab() {
                 <div><span className="text-[var(--muted)]">Condition</span><p><Badge label={CONDITION_LABELS[detailQ.data.condition]} colorClass={CONDITION_COLORS[detailQ.data.condition]} /></p></div>
                 <div><span className="text-[var(--muted)]">Total Qty</span><p className="font-medium">{detailQ.data.quantity}</p></div>
                 <div><span className="text-[var(--muted)]">Available</span><p className="font-medium">{detailQ.data.quantity_available}</p></div>
-                <div><span className="text-[var(--muted)]">Unit Cost</span><p className="font-medium">${Number(detailQ.data.unit_cost).toFixed(2)}</p></div>
+                <div><span className="text-[var(--muted)]">Unit Cost</span><p className="font-medium">{formatAmount(Number(detailQ.data.unit_cost))}</p></div>
                 <div><span className="text-[var(--muted)]">Location</span><p className="font-medium">{detailQ.data.location ?? "—"}</p></div>
                 {detailQ.data.description && <div className="col-span-2"><span className="text-[var(--muted)]">Description</span><p>{detailQ.data.description}</p></div>}
               </div>
@@ -620,6 +623,7 @@ function AssignmentsTab() {
 // ─── Summary Cards ────────────────────────────────────────────────────────────
 
 function SummaryCards() {
+  const { formatAmount } = useCurrencyStore();
   const itemsQ = useQuery({ queryKey: ["inventory", "items", false], queryFn: () => listInventoryItems() });
   const assignmentsQ = useQuery({ queryKey: ["inventory", "assignments", "all"], queryFn: () => listInventoryAssignments() });
 
@@ -634,7 +638,7 @@ function SummaryCards() {
     { label: "Total Items", value: totalItems, icon: Package, color: "text-blue-500" },
     { label: "Total Units", value: totalQty, icon: ClipboardList, color: "text-emerald-500" },
     { label: "Active Assignments", value: activeAssignments, icon: Tag, color: "text-amber-500" },
-    { label: "Inventory Value", value: `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: Package, color: "text-purple-500" },
+    { label: "Inventory Value", value: formatAmount(totalValue), icon: Package, color: "text-purple-500" },
   ];
 
   return (
