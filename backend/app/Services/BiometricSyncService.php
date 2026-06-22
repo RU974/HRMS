@@ -187,14 +187,72 @@ class BiometricSyncService
 
     protected function fetchPunchesFromTcpDevice(BiometricDevice $device): array
     {
-        // Integration point for TCP/IP biometric devices (ZKTeco, eSSL,
-        // Hikvision, etc.). These typically require a vendor SDK that is
-        // not directly callable from PHP. The recommended approach is a
-        // small companion service/daemon that talks to the device over
-        // $device->ip_address:$device->port using the vendor SDK and
-        // exposes the resulting punches via a local API that this method
-        // then calls.
-        return [];
+        if (empty($device->ip_address) || empty($device->port)) {
+            throw new \RuntimeException('Device IP address and port must be configured.');
+        }
+
+        $zk = new \Rats\Zkteco\Lib\ZKTeco($device->ip_address, (int) $device->port);
+
+        $connected = $zk->connect();
+        if (!$connected) {
+            throw new \RuntimeException(
+                "Failed to connect to ZKTeco device at {$device->ip_address}:{$device->port}."
+            );
+        }
+
+        // Authenticate with comm_key when set.
+        // ZKTeco protocol CMD_AUTH (1102): payload = pack('I', comm_key XOR session_id).
+        if (!empty($device->comm_key)) {
+            $authPayload = pack('I', (int) $device->comm_key ^ $zk->_session_id);
+            $authResult  = $zk->_command(1102, $authPayload);
+            if ($authResult === false) {
+                $zk->disconnect();
+                throw new \RuntimeException(
+                    "Authentication failed for device at {$device->ip_address}:{$device->port}. Check the comm_key."
+                );
+            }
+        }
+
+        $deviceDisabled = false;
+        try {
+            $zk->disableDevice();
+            $deviceDisabled = true;
+
+            $rawLogs = $zk->getAttendance();
+
+            if (!is_array($rawLogs)) {
+                throw new \RuntimeException('Device returned invalid attendance data.');
+            }
+
+            $since = $device->last_sync_at ?? now()->subDay();
+
+            $punches = [];
+            foreach ($rawLogs as $log) {
+                $timestamp = Carbon::createFromFormat('Y-m-d H:i:s', $log['timestamp']);
+                if (!$timestamp || $timestamp->lt($since)) {
+                    continue;
+                }
+
+                // state: 0=check-in, 1=check-out, 4=overtime-in, 5=overtime-out
+                $type = in_array((int) $log['state'], [1, 5], true) ? 'out' : 'in';
+
+                $punches[] = [
+                    'device_user_id' => (string) $log['id'],
+                    'timestamp'      => $timestamp,
+                    'type'           => $type,
+                ];
+            }
+
+            // Clear logs from device only after a successful fetch
+            $zk->clearAttendance();
+
+            return $punches;
+        } finally {
+            if ($deviceDisabled) {
+                $zk->enableDevice();
+            }
+            $zk->disconnect();
+        }
     }
 
     protected function applyPunch(BiometricDevice $device, int $employeeId, array $punch): void

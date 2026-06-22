@@ -226,9 +226,7 @@ class DashboardController extends Controller
         $payrollQuery = Payroll::query();
 
         if ($companyId) {
-            $employeeQuery->whereHas('user', function ($query) use ($companyId): void {
-                $query->where('company_id', $companyId);
-            });
+            $employeeQuery->where('company_id', $companyId);
             $attendanceQuery->whereHas('employee.user', function ($query) use ($companyId): void {
                 $query->where('company_id', $companyId);
             });
@@ -464,7 +462,7 @@ class DashboardController extends Controller
             $query = Employee::query()
                 ->where('status', 'active')
                 ->where('created_at', '<=', $endOfMonth)
-                ->when($companyId, fn ($q) => $q->whereHas('user', fn ($uq) => $uq->where('company_id', $companyId)));
+                ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
 
             $this->applyManagedEmployeeScope($request, $query);
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\ChatMessageSent;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
@@ -149,6 +150,8 @@ class ChatMessageController extends Controller
         }
 
         $message = ChatMessage::create($payload);
+
+        ChatMessageSent::dispatch($message);
 
         return $this->ok($message->load(['sender:id,name,email,company_id', 'receiver:id,name,email,company_id']), 'Message sent successfully', 201);
     }

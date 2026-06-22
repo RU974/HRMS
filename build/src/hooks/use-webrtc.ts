@@ -4,18 +4,14 @@ import { sendSignal, getSignals, getCall, CallSignal } from "@/services/call-ser
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
-  // Free public TURN relay — handles symmetric NAT and firewall scenarios.
-  // Replace with your own coturn / Twilio / Xirsys credentials for production.
-  {
-    urls: [
-      "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443",
-      "turn:openrelay.metered.ca:443?transport=tcp",
-    ],
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
+  // TURN server required for symmetric NAT / enterprise firewalls.
+  // Set these env vars before deploying to production.
+  // Recommended: self-hosted coturn OR Twilio TURN (https://www.twilio.com/stun-turn)
+  ...(import.meta.env.VITE_TURN_URL ? [{
+    urls: import.meta.env.VITE_TURN_URL,
+    username: import.meta.env.VITE_TURN_USERNAME ?? "",
+    credential: import.meta.env.VITE_TURN_CREDENTIAL ?? "",
+  }] : []),
 ];
 
 export type PeerStream = { userId: number; stream: MediaStream };

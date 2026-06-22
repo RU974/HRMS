@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { echo } from "@/lib/echo";
 import {
   MessageCircle,
   Search,
@@ -182,8 +183,18 @@ export function ChatPage() {
     queryKey: ["chat-messages-thread", selectedConversationId],
     queryFn: () => listChatMessages({ conversation_id: selectedConversationId! }),
     enabled: Boolean(selectedConversationId),
-    refetchInterval: 5000,
   });
+
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    const channel = echo.private(`chat.${selectedConversationId}`);
+    channel.listen('ChatMessageSent', () => {
+      void queryClient.invalidateQueries({ queryKey: ["chat-messages-thread", selectedConversationId] });
+    });
+    return () => {
+      echo.leave(`chat.${selectedConversationId}`);
+    };
+  }, [selectedConversationId, queryClient]);
 
   const thread: ChatMessage[] = (threadQuery.data ?? [])
     .slice()

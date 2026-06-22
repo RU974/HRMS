@@ -17,7 +17,7 @@ class SalaryIncrementController extends Controller
 
         $companyId = $request->user()?->company_id;
         if ($companyId) {
-            $query->whereHas('employee.user', fn ($q) => $q->where('company_id', $companyId));
+            $query->whereHas('employee', fn ($q) => $q->where('company_id', $companyId));
         }
 
         if ($request->filled('employee_id')) {
@@ -81,7 +81,7 @@ class SalaryIncrementController extends Controller
         if (!$companyId) return;
 
         $exists = Employee::whereKey($employeeId)
-            ->whereHas('user', fn ($q) => $q->where('company_id', $companyId))
+            ->where('company_id', $companyId)
             ->exists();
 
         if (!$exists) abort(403, 'Employee not in your company.');

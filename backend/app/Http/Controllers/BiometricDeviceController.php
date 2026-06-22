@@ -229,7 +229,7 @@ class BiometricDeviceController extends Controller
 
         $companyId = $request->user()?->company_id;
         if ($companyId) {
-            $employeesQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+            $employeesQuery->where('company_id', $companyId);
         }
 
         $suggestions = $employeesQuery->get()->map(function (Employee $employee) {
@@ -289,7 +289,7 @@ class BiometricDeviceController extends Controller
             $employeeQuery = Employee::query()->where('employee_number', $employeeCode);
             $companyId = $request->user()?->company_id;
             if ($companyId) {
-                $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+                $employeeQuery->where('company_id', $companyId);
             }
             $employee = $employeeQuery->first();
 

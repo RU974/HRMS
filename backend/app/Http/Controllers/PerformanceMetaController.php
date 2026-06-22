@@ -17,7 +17,7 @@ class PerformanceMetaController extends Controller
 
         $employeeQuery = Employee::query()->whereKey($employeeId);
         if ($companyId) {
-            $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+            $employeeQuery->where('company_id', $companyId);
         }
         if (!$employeeQuery->exists()) {
             abort(403, 'You are not authorized to access this employee.');

@@ -96,7 +96,7 @@ class LoanAdvanceController extends Controller
         if (!$companyId) return;
 
         $exists = Employee::whereKey($employeeId)
-            ->whereHas('user', fn ($q) => $q->where('company_id', $companyId))
+            ->where('company_id', $companyId)
             ->exists();
 
         if (!$exists) abort(403, 'Employee not in your company.');

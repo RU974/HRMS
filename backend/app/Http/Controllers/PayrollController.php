@@ -237,7 +237,7 @@ class PayrollController extends Controller
         // Scope to company
         $companyId = $request->user()?->company_id;
         if ($companyId) {
-            $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+            $employeeQuery->where('company_id', $companyId);
         }
 
         if (!empty($validated['department_id'])) {
@@ -414,7 +414,7 @@ class PayrollController extends Controller
     {
         $companyId = $request->user()?->company_id;
         if ($companyId) {
-            $query->whereHas('employee.user', fn ($q) => $q->where('company_id', $companyId));
+            $query->whereHas('employee', fn ($q) => $q->where('company_id', $companyId));
         }
     }
 
@@ -439,7 +439,7 @@ class PayrollController extends Controller
 
         $allowed = Employee::query()
             ->whereKey($employeeId)
-            ->whereHas('user', fn ($q) => $q->where('company_id', $companyId))
+            ->where('company_id', $companyId)
             ->exists();
 
         if (!$allowed) {

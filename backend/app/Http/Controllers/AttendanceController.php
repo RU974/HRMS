@@ -357,7 +357,7 @@ class AttendanceController extends Controller
             ->where('status', 'active');
 
         if ($companyId) {
-            $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+            $employeeQuery->where('company_id', $companyId);
         }
 
         // Department managers: scope to their own department

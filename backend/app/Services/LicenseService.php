@@ -152,7 +152,7 @@ class LicenseService
         }
 
         $count = Employee::where('status', 'active')
-            ->when($companyId, fn ($q) => $q->whereHas('user', fn ($u) => $u->where('company_id', $companyId)))
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->count();
 
         return $count < $license->max_employees;
@@ -176,7 +176,6 @@ class LicenseService
         $count = User::query()
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN))
-            ->whereDoesntHave('employee')
             ->count();
 
         return $count < $license->max_users;
@@ -188,11 +187,10 @@ class LicenseService
     {
         $employeeQuery = Employee::query()->where('status', 'active');
         $userQuery     = User::query()
-            ->whereDoesntHave('employee')
             ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN));
 
         if ($companyId) {
-            $employeeQuery->whereHas('user', fn ($q) => $q->where('company_id', $companyId));
+            $employeeQuery->where('company_id', $companyId);
             $userQuery->where('company_id', $companyId);
         }
 
@@ -292,10 +290,9 @@ class LicenseService
         // Active employee counts restricted to this page's companies only
         $employeeCounts = Employee::query()
             ->where('status', 'active')
-            ->whereHas('user', fn ($q) => $q->whereIn('company_id', $companyIds))
-            ->join('users', 'employees.user_id', '=', 'users.id')
-            ->selectRaw('users.company_id, COUNT(employees.id) as total')
-            ->groupBy('users.company_id')
+            ->whereIn('company_id', $companyIds)
+            ->selectRaw('company_id, COUNT(id) as total')
+            ->groupBy('company_id')
             ->pluck('total', 'company_id');
 
         $rows = [];

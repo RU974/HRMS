@@ -27,11 +27,6 @@ class BiometricDevice extends Model
         'company_id',
     ];
 
-    protected $hidden = [
-        'comm_key',
-        'api_key',
-    ];
-
     protected $casts = [
         'last_sync_at' => 'datetime',
         'port' => 'integer',

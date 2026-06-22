@@ -192,6 +192,9 @@ $registerRoutes = function (): void {
             Route::post('departments/{id}/restore', [DepartmentController::class, 'restore']);
             Route::delete('departments/{id}/force', [DepartmentController::class, 'forceDelete']);
         });
+        // Bulk employee reassignment: dedicated employees:manage_settings permission (see migration 2026_06_23_000002).
+        // settings:manage_settings was considered but it grants IT Support access, which is incorrect for this HR action.
+        // HR Manager needs this and does not hold settings:manage_settings.
         Route::middleware('permission:employees:manage_settings')->post('departments/{id}/reassign-employees', [DepartmentController::class, 'reassignEmployees']);
         Route::apiResource('departments', DepartmentController::class);
 

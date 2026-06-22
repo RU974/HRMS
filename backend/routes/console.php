@@ -41,3 +41,8 @@ Schedule::command('announcements:publish-scheduled')->everyFiveMinutes();
 
 // Close tickets that have been resolved for more than 7 days.
 Schedule::command('tickets:auto-close')->daily();
+
+// ─── Biometric ──────────────────────────────────────────────────────────────
+
+// Sync biometric devices whose scheduled interval is due.
+Schedule::command('biometric:sync-scheduled')->everyFiveMinutes();

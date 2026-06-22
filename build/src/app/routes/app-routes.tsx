@@ -81,7 +81,7 @@ export const appRouter = createBrowserRouter([
       { path: "approvals/delegations",     element: withPermission(<DelegationsPage />,           ["approvals:approve"]) },
       { path: "approvals/:id",             element: withPermission(<ApprovalDetailPage />,        ["approvals:view", "approvals:manage_settings", "approvals:approve"]) },
       { path: "workflows",                 element: withPermission(<WorkflowsPage />,             ["approvals:manage_settings"]) },
-      { path: "employee-documents",        element: <EmployeeDocumentsPage /> },
+      { path: "employee-documents",        element: withPermission(<EmployeeDocumentsPage />, ["documents.view", "documents.edit"]) },
       { path: "departments",               element: withPermission(<DepartmentsPage />,           ["settings:manage_settings"]) },
       { path: "designations",              element: withPermission(<DesignationsPage />,          ["settings:manage_settings"]) },
       { path: "shifts",                    element: withPermission(<ShiftsPage />,                ["attendance:edit"]) },

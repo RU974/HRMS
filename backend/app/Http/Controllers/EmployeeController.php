@@ -148,6 +148,7 @@ class EmployeeController extends Controller
 
             return Employee::create([
                 'user_id' => $linkedUserId,
+                'company_id' => $request->user()?->company_id,
                 'name' => $name,
                 'email' => $validated['email'],
                 'phone' => $validated['phone'] ?? null,
@@ -371,9 +372,7 @@ class EmployeeController extends Controller
     {
         $companyId = $request->user()?->company_id;
         if ($companyId) {
-            $query->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
+            $query->where('company_id', $companyId);
         }
     }
 
