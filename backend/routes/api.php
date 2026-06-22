@@ -74,6 +74,9 @@ use App\Http\Controllers\TicketStatsController;
 $registerRoutes = function (): void {
     // Public authentication routes
     Route::prefix('auth')->group(function () {
+        // Local biometric agent — authenticated by shared secret, no session required
+        Route::post('/biometric-agent/push', [BiometricDeviceController::class, 'agentPush']);
+
         Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
         Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth');

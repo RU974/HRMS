@@ -316,6 +316,68 @@ class BiometricDeviceController extends Controller
         ], 'Import completed.');
     }
 
+    public function agentPush(Request $request)
+    {
+        $secret = config('services.biometric_agent.secret');
+        if (empty($secret) || $request->bearerToken() !== $secret) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $validated = $request->validate([
+            'device_id' => 'required|integer|exists:biometric_devices,id',
+            'punches'   => 'required|array|min:1',
+            'punches.*.device_user_id' => 'required|string',
+            'punches.*.timestamp'      => 'required|date_format:Y-m-d H:i:s',
+            'punches.*.type'           => 'required|in:in,out',
+        ]);
+
+        $device = BiometricDevice::findOrFail($validated['device_id']);
+
+        $matched   = 0;
+        $unmatched = 0;
+
+        foreach ($validated['punches'] as $raw) {
+            $punch = [
+                'device_user_id' => $raw['device_user_id'],
+                'timestamp'      => \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $raw['timestamp']),
+                'type'           => $raw['type'],
+            ];
+
+            $mapping = \App\Models\EmployeeDeviceMapping::where('device_id', $device->id)
+                ->where('device_user_id', $punch['device_user_id'])
+                ->first();
+
+            if (!$mapping) {
+                $unmatched++;
+                continue;
+            }
+
+            $this->syncService->applyPunchPublic($device, $mapping->employee_id, $punch);
+            $matched++;
+        }
+
+        $device->update([
+            'status'       => 'online',
+            'last_sync_at' => now(),
+        ]);
+
+        \App\Models\BiometricSyncLog::create([
+            'device_id'         => $device->id,
+            'company_id'        => $device->company_id,
+            'started_at'        => now(),
+            'finished_at'       => now(),
+            'status'            => $unmatched > 0 && $matched === 0 ? 'failed' : ($unmatched > 0 ? 'partial' : 'success'),
+            'records_fetched'   => count($validated['punches']),
+            'records_matched'   => $matched,
+            'records_unmatched' => $unmatched,
+        ]);
+
+        return response()->json([
+            'matched'   => $matched,
+            'unmatched' => $unmatched,
+        ]);
+    }
+
     private function scopeToCompany(Request $request, $query): void
     {
         $companyId = $request->user()?->company_id;

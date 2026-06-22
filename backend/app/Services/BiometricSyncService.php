@@ -40,21 +40,12 @@ class BiometricSyncService
             ];
         }
 
-        $connection = @fsockopen($device->ip_address, (int) $device->port, $errno, $errstr, 3);
-
-        if (!$connection) {
-            return [
-                'success' => false,
-                'message' => "Unable to reach device at {$device->ip_address}:{$device->port} ({$errstr}).",
-                'device_time' => null,
-            ];
-        }
-
-        fclose($connection);
-
+        // ZKTeco devices communicate over UDP — a TCP socket test from a
+        // cloud server will always time out even when the device is healthy.
+        // Connection is verified by the local agent when it successfully pushes.
         return [
             'success' => true,
-            'message' => 'Device responded successfully.',
+            'message' => 'Device is managed by the local agent. Check Sync Logs for live status.',
             'device_time' => now()->toIso8601String(),
         ];
     }
@@ -253,6 +244,11 @@ class BiometricSyncService
             }
             $zk->disconnect();
         }
+    }
+
+    public function applyPunchPublic(BiometricDevice $device, int $employeeId, array $punch): void
+    {
+        $this->applyPunch($device, $employeeId, $punch);
     }
 
     protected function applyPunch(BiometricDevice $device, int $employeeId, array $punch): void

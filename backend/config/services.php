@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'biometric_agent' => [
+        'secret' => env('BIOMETRIC_AGENT_SECRET'),
+    ],
+
 ];
