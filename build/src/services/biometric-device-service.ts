@@ -180,3 +180,14 @@ export const bulkImportEmployeeMappings = (deviceId: number, file: File) => {
     { method: "POST", body: formData }
   );
 };
+
+export interface DeviceUser {
+  device_user_id: string;
+  name: string | null;
+  mapped: boolean;
+  employee_id: number | null;
+  employee_name: string | null;
+}
+
+export const listDeviceUsers = (deviceId: number) =>
+  apiClient<DeviceUser[]>(`/biometric-devices/${deviceId}/device-users`);

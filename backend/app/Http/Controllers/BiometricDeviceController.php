@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BiometricDevice;
 use App\Models\BiometricSyncLog;
 use App\Models\Employee;
+use App\Models\BiometricDeviceUser;
 use App\Models\EmployeeDeviceMapping;
 use App\Services\BiometricSyncService;
 use Illuminate\Http\Request;
@@ -324,14 +325,19 @@ class BiometricDeviceController extends Controller
         }
 
         $validated = $request->validate([
-            'device_id' => 'required|integer|exists:biometric_devices,id',
-            'punches'   => 'required|array|min:1',
+            'device_id'   => 'nullable|integer',
+            'device_ip'   => 'nullable|string',
+            'device_port' => 'nullable|integer',
+            'punches'     => 'required|array|min:1',
             'punches.*.device_user_id' => 'required|string',
             'punches.*.timestamp'      => 'required|date_format:Y-m-d H:i:s',
             'punches.*.type'           => 'required|in:in,out',
         ]);
 
-        $device = BiometricDevice::findOrFail($validated['device_id']);
+        $device = $this->resolveAgentDevice($validated);
+        if (!$device) {
+            return response()->json(['message' => 'Device not found.'], 422);
+        }
 
         $matched   = 0;
         $unmatched = 0;
@@ -376,6 +382,91 @@ class BiometricDeviceController extends Controller
             'matched'   => $matched,
             'unmatched' => $unmatched,
         ]);
+    }
+
+    public function agentSyncUsers(Request $request)
+    {
+        $secret = config('services.biometric_agent.secret');
+        if (empty($secret) || $request->bearerToken() !== $secret) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $validated = $request->validate([
+            'device_id'              => 'nullable|integer',
+            'device_ip'              => 'nullable|string',
+            'device_port'            => 'nullable|integer',
+            'users'                  => 'required|array|min:1',
+            'users.*.device_user_id' => 'required|string|max:100',
+            'users.*.name'           => 'nullable|string|max:255',
+        ]);
+
+        $device = $this->resolveAgentDevice($validated);
+        if (!$device) {
+            return response()->json(['message' => 'Device not found.'], 422);
+        }
+
+        $upserted = 0;
+        foreach ($validated['users'] as $u) {
+            BiometricDeviceUser::updateOrCreate(
+                [
+                    'device_id'      => $device->id,
+                    'device_user_id' => $u['device_user_id'],
+                ],
+                [
+                    'name'       => $u['name'] ?? null,
+                    'company_id' => $device->company_id,
+                ]
+            );
+            $upserted++;
+        }
+
+        return response()->json(['upserted' => $upserted]);
+    }
+
+    public function listDeviceUsers(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'biometric:manage_mapping');
+
+        $deviceQuery = BiometricDevice::query()->whereKey($id);
+        $this->scopeToCompany($request, $deviceQuery);
+        $device = $deviceQuery->firstOrFail();
+
+        $deviceUsers = BiometricDeviceUser::where('device_id', $device->id)
+            ->get()
+            ->map(function (BiometricDeviceUser $du) use ($device) {
+                $mapping = EmployeeDeviceMapping::where('device_id', $device->id)
+                    ->where('device_user_id', $du->device_user_id)
+                    ->with('employee')
+                    ->first();
+
+                return [
+                    'device_user_id' => $du->device_user_id,
+                    'name'           => $du->name,
+                    'mapped'         => (bool) $mapping,
+                    'employee_id'    => $mapping?->employee_id,
+                    'employee_name'  => $mapping?->employee
+                        ? trim($mapping->employee->first_name . ' ' . $mapping->employee->last_name)
+                        : null,
+                ];
+            });
+
+        return $this->ok($deviceUsers);
+    }
+
+    private function resolveAgentDevice(array $data): ?BiometricDevice
+    {
+        if (!empty($data['device_id'])) {
+            return BiometricDevice::find($data['device_id']);
+        }
+
+        if (!empty($data['device_ip'])) {
+            $port = $data['device_port'] ?? 4370;
+            return BiometricDevice::where('ip_address', $data['device_ip'])
+                ->where('port', $port)
+                ->first();
+        }
+
+        return null;
     }
 
     private function scopeToCompany(Request $request, $query): void

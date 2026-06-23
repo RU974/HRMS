@@ -11,6 +11,7 @@ import {
   deleteEmployeeMapping,
   getAutoMatchSuggestions,
   getBiometricDevice,
+  listDeviceUsers,
   listEmployeeMappings,
   saveEmployeeMapping,
 } from "@/services/biometric-device-service";
@@ -100,6 +101,29 @@ export function DeviceMappingPage() {
     onError: (e: Error) => { toast.error("Import failed", e.message); setError(e.message); },
   });
 
+  const fetchFromDeviceMutation = useMutation({
+    mutationFn: () => listDeviceUsers(deviceId),
+    onSuccess: (deviceUsers) => {
+      const edits: Record<number, { device_user_id: string; card_number: string }> = {};
+      deviceUsers.forEach((du) => {
+        if (du.employee_id) {
+          edits[du.employee_id] = { device_user_id: du.device_user_id, card_number: "" };
+        }
+      });
+      setLocalEdits((prev) => ({ ...prev, ...edits }));
+      const already = deviceUsers.filter((d) => d.mapped).length;
+      const filled = Object.keys(edits).length;
+      toast.info(
+        "Device users loaded",
+        `${deviceUsers.length} user(s) on device. ${already} already mapped, ${filled} pre-filled. Review and save.`
+      );
+    },
+    onError: (e: Error) => {
+      toast.error("Fetch failed", e.message);
+      setError(e.message);
+    },
+  });
+
   const employees = employeesQuery.data?.data ?? [];
   const mappings = mappingsQuery.data ?? [];
 
@@ -181,6 +205,13 @@ export function DeviceMappingPage() {
             Mapping progress: {mappedCount}/{rows.length} employees mapped
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => fetchFromDeviceMutation.mutate()}
+              disabled={fetchFromDeviceMutation.isPending}
+            >
+              {fetchFromDeviceMutation.isPending ? "Fetching..." : "Fetch from Device"}
+            </Button>
             <Button
               variant="outline"
               onClick={() => autoMatchMutation.mutate()}

@@ -88,6 +88,7 @@ export function DevicesListPage() {
     try {
       const result = await testBiometricDeviceConnection(id);
       if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
         setSuccessMsg(result.message || "Connection successful.");
       } else {
         setError(result.message || "Connection failed.");
