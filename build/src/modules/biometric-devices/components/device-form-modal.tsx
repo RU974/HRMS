@@ -44,6 +44,15 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  // UX-2: switching to TCP while realtime was selected → auto-correct to scheduled
+  function handleConnectionTypeChange(type: ConnectionType) {
+    setForm((prev) => ({
+      ...prev,
+      connection_type: type,
+      sync_mode: type === "tcp" && prev.sync_mode === "realtime" ? "scheduled" : prev.sync_mode,
+    }));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSubmit(form);
@@ -69,12 +78,17 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
                   type="radio"
                   name="connection_type"
                   checked={form.connection_type === type}
-                  onChange={() => update("connection_type", type)}
+                  onChange={() => handleConnectionTypeChange(type)}
                 />
-                {type === "tcp" ? "TCP/IP Device" : "Cloud API"}
+                {type === "tcp" ? "TCP/IP Device (ZKTeco K50 / local LAN)" : "Cloud API"}
               </label>
             ))}
           </div>
+          {isTcp && (
+            <p className="mt-1.5 text-xs text-[var(--muted)]">
+              TCP/IP devices require the local biometric agent running on a PC in the same network as the device.
+            </p>
+          )}
         </FormField>
 
         {isTcp ? (
@@ -103,7 +117,7 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
                 className={inputClass}
                 value={form.comm_key ?? ""}
                 onChange={(e) => update("comm_key", e.target.value)}
-                placeholder="Optional comm key / password"
+                placeholder="Leave blank if device has no password (comm key 0)"
               />
             </FormField>
             <FormField label="Device Model">
@@ -148,8 +162,11 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
               value={form.sync_mode}
               onChange={(e) => update("sync_mode", e.target.value as SyncMode)}
             >
-              <option value="realtime">Real-time</option>
-              <option value="scheduled">Scheduled</option>
+              {/* UX-2: realtime hidden for TCP — K50 is passive, cannot push in real time */}
+              {!isTcp && <option value="realtime">Real-time</option>}
+              <option value="scheduled">
+                {isTcp ? "Scheduled (agent pushes every N minutes)" : "Scheduled"}
+              </option>
             </select>
           </FormField>
           {form.sync_mode === "scheduled" && (

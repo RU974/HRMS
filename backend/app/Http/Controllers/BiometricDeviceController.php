@@ -453,6 +453,98 @@ class BiometricDeviceController extends Controller
         return $this->ok($deviceUsers);
     }
 
+    public function agentDiscoverDevices(Request $request)
+    {
+        $secret = config('services.biometric_agent.secret');
+        if (empty($secret) || $request->bearerToken() !== $secret) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $validated = $request->validate([
+            'devices'                 => 'required|array|min:1',
+            'devices.*.ip_address'    => 'required|string|max:100',
+            'devices.*.port'          => 'required|integer',
+            'devices.*.serial_number' => 'nullable|string|max:100',
+            'devices.*.platform'      => 'nullable|string|max:100',
+            'devices.*.firmware'      => 'nullable|string|max:100',
+            'devices.*.device_name'   => 'nullable|string|max:150',
+        ]);
+
+        $created  = 0;
+        $existing = 0;
+
+        foreach ($validated['devices'] as $d) {
+            $already = BiometricDevice::where('ip_address', $d['ip_address'])
+                ->where('port', (int) $d['port'])
+                ->exists();
+
+            if ($already) {
+                $existing++;
+                continue;
+            }
+
+            $autoName = trim($d['device_name'] ?? '') ?: trim($d['platform'] ?? '');
+            if (!$autoName) {
+                $autoName = 'ZKTeco @ ' . $d['ip_address'];
+            }
+
+            BiometricDevice::create([
+                'name'                  => $autoName,
+                'connection_type'       => 'tcp',
+                'ip_address'            => $d['ip_address'],
+                'port'                  => (int) $d['port'],
+                'comm_key'              => '0',
+                'device_model'          => trim($d['platform'] ?? 'ZKTeco') ?: 'ZKTeco',
+                'sync_mode'             => 'scheduled',
+                'sync_interval_minutes' => 15,
+                'timezone'              => 'Asia/Karachi',
+                'status'                => 'never_synced',
+                'company_id'            => null,
+            ]);
+
+            $created++;
+        }
+
+        return response()->json(['created' => $created, 'existing' => $existing]);
+    }
+
+    public function listUnconfigured(Request $request)
+    {
+        $this->authorizePermission($request, 'biometric:create');
+
+        $devices = BiometricDevice::whereNull('company_id')
+            ->where('status', 'never_synced')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return $this->ok($devices);
+    }
+
+    public function claimDevice(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'biometric:create');
+
+        $device = BiometricDevice::whereKey($id)->whereNull('company_id')->firstOrFail();
+
+        $validated = $request->validate([
+            'name'                  => 'required|string|max:150',
+            'timezone'              => 'required|string|max:64',
+            'comm_key'              => 'nullable|string|max:255',
+            'sync_interval_minutes' => 'nullable|integer|min:1|max:1440',
+        ]);
+
+        $device->fill([
+            'name'                  => $validated['name'],
+            'timezone'              => $validated['timezone'],
+            'comm_key'              => $validated['comm_key'] ?? '0',
+            'sync_interval_minutes' => $validated['sync_interval_minutes'] ?? 15,
+            'company_id'            => $request->user()?->company_id,
+        ]);
+        $device->save();
+
+        return $this->ok($device, 'Device claimed successfully.');
+    }
+
     private function resolveAgentDevice(array $data): ?BiometricDevice
     {
         if (!empty($data['device_id'])) {

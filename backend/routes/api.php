@@ -77,6 +77,7 @@ $registerRoutes = function (): void {
         // Local biometric agent — authenticated by shared secret, no session required
         Route::post('/biometric-agent/push', [BiometricDeviceController::class, 'agentPush']);
         Route::post('/biometric-agent/sync-users', [BiometricDeviceController::class, 'agentSyncUsers']);
+        Route::post('/biometric-agent/discovered-devices', [BiometricDeviceController::class, 'agentDiscoverDevices']);
 
         Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
         Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
@@ -227,6 +228,8 @@ $registerRoutes = function (): void {
         Route::middleware('permission:biometric:view')->group(function () {
         Route::get('biometric-devices', [BiometricDeviceController::class, 'index']);
         Route::get('biometric-devices/sync-logs', [BiometricDeviceController::class, 'syncLogs']);
+        Route::get('biometric-devices/unconfigured', [BiometricDeviceController::class, 'listUnconfigured']);
+        Route::post('biometric-devices/{id}/claim', [BiometricDeviceController::class, 'claimDevice']);
         Route::get('biometric-devices/{id}', [BiometricDeviceController::class, 'show']);
         });
         Route::middleware('permission:biometric:create')->post('biometric-devices', [BiometricDeviceController::class, 'store']);

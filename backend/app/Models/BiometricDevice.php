@@ -47,4 +47,9 @@ class BiometricDevice extends Model
     {
         return $this->hasMany(Attendance::class, 'biometric_device_id');
     }
+
+    public function company()
+    {
+        return $this->belongsTo(\App\Models\Company::class, 'company_id', 'id');
+    }
 }

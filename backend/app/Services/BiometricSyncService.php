@@ -81,6 +81,27 @@ class BiometricSyncService
 
     public function sync(BiometricDevice $device): BiometricSyncLog
     {
+        // TCP/IP devices (e.g. ZKTeco K50) are on the company LAN and cannot be
+        // reached from the cloud server. Attendance is pushed by the local agent.
+        // Triggering a server-side sync for TCP devices would always fail and
+        // incorrectly mark the device offline.
+        if ($device->connection_type === 'tcp') {
+            $log = BiometricSyncLog::create([
+                'device_id'   => $device->id,
+                'company_id'  => $device->company_id,
+                'started_at'  => now(),
+                'finished_at' => now(),
+                'status'      => 'failed',
+                'records_fetched'   => 0,
+                'records_matched'   => 0,
+                'records_unmatched' => 0,
+                'error_message' => 'TCP/IP devices are managed by the local biometric agent. '
+                    . 'Use the agent to push attendance. "Sync Now" is only available for Cloud API devices.',
+            ]);
+
+            return $log->fresh();
+        }
+
         $log = BiometricSyncLog::create([
             'device_id' => $device->id,
             'started_at' => now(),
@@ -234,9 +255,10 @@ class BiometricSyncService
                 ];
             }
 
-            // Clear logs from device only after a successful fetch
-            $zk->clearAttendance();
-
+            // NOTE: Do NOT call clearAttendance() here. The local agent
+            // (agent.py, CLEAR_AFTER_SYNC=true) is responsible for clearing
+            // device logs after a successful push. Clearing here would race
+            // with the agent and cause data loss.
             return $punches;
         } finally {
             if ($deviceDisabled) {

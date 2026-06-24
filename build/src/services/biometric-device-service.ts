@@ -191,3 +191,31 @@ export interface DeviceUser {
 
 export const listDeviceUsers = (deviceId: number) =>
   apiClient<DeviceUser[]>(`/biometric-devices/${deviceId}/device-users`);
+
+// Auto-discovery
+export interface DiscoveredDevice {
+  id: number;
+  name: string;
+  ip_address: string;
+  port: number;
+  device_model: string | null;
+  status: DeviceStatus;
+  company_id: string | null;
+}
+
+export const listUnconfiguredDevices = () =>
+  apiClient<DiscoveredDevice[]>("/biometric-devices/unconfigured");
+
+export const claimDiscoveredDevice = (
+  id: number,
+  payload: {
+    name: string;
+    timezone: string;
+    comm_key?: string | null;
+    sync_interval_minutes?: number;
+  }
+) =>
+  apiClient<BiometricDevice>(`/biometric-devices/${id}/claim`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });

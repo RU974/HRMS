@@ -14,7 +14,7 @@ return new class extends Migration
                 $table->foreignId('device_id')->constrained('biometric_devices')->cascadeOnDelete();
                 $table->string('device_user_id');
                 $table->string('name')->nullable();
-                $table->unsignedBigInteger('company_id')->nullable()->index();
+                $table->string('company_id')->nullable()->index();
                 $table->timestamps();
 
                 $table->unique(['device_id', 'device_user_id'], 'bio_device_user_unique');
