@@ -29,16 +29,16 @@ class LicenseService
             'Professional' => [
                 'max_employees' => 200,
                 'max_users'     => 50,
-                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication'],
+                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication', 'approvals'],
             ],
             'Enterprise' => [
                 'max_employees' => null,
                 'max_users'     => null,
-                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication', 'recruitment'],
+                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication', 'approvals', 'recruitment'],
             ],
             default => [ // Starter
-                'max_employees' => 25,
-                'max_users'     => 5,
+                'max_employees' => 20,
+                'max_users'     => 3,
                 'features'      => ['attendance', 'leaves'],
             ],
         };

@@ -42,8 +42,8 @@ function fmtDate(s?: string | null) {
 // stale seat counts after a plan downgrade) stays visible instead of reading
 // as a deceptively-healthy 100%. Callers that draw a fixed-size ring should
 // clamp the drawn arc separately while still showing the true percentage.
-function usagePct(used: number, max: number) {
-  return max > 0 ? Math.round((used / max) * 100) : 0;
+function usagePct(used: number, max: number | null) {
+  return max != null && max > 0 ? Math.round((used / max) * 100) : 0;
 }
 
 // ─── Copy button ──────────────────────────────────────────────────────────────
@@ -96,21 +96,25 @@ const EDITION_DEFAULTS: Record<LicenseEdition, {
   features: string[];
 }> = {
   Starter:      { max_employees: "20",  max_users: "3",  features: ["attendance", "leaves"] },
-  Professional: { max_employees: "200", max_users: "50", features: ["attendance", "leaves", "payroll", "performance", "communication"] },
-  Enterprise:   { max_employees: "",    max_users: "",   features: ["attendance", "leaves", "payroll", "performance", "communication", "recruitment"] },
+  Professional: { max_employees: "200", max_users: "50", features: ["attendance", "leaves", "payroll", "performance", "communication", "approvals"] },
+  Enterprise:   { max_employees: "",    max_users: "",   features: ["attendance", "leaves", "payroll", "performance", "communication", "approvals", "recruitment"] },
 };
 
+const FEATURE_LABEL: Record<string, string> = {};
 const FEATURE_OPTIONS: { value: string; label: string; minEdition: LicenseEdition }[] = [
   { value: "attendance",    label: "Attendance",          minEdition: "Starter"      },
   { value: "leaves",        label: "Leave Management",    minEdition: "Starter"      },
   { value: "payroll",       label: "Payroll",             minEdition: "Professional" },
   { value: "performance",   label: "Performance Reviews", minEdition: "Professional" },
   { value: "communication", label: "Communication",       minEdition: "Professional" },
+  { value: "approvals",     label: "Approvals & Workflows", minEdition: "Professional" },
   { value: "recruitment",   label: "Recruitment",         minEdition: "Enterprise"   },
 ];
+FEATURE_OPTIONS.forEach(({ value, label }) => { FEATURE_LABEL[value] = label; });
 
 // ─── Usage ring SVG ───────────────────────────────────────────────────────────
-function UsageRing({ used, max, label, color }: { used: number; max: number; label: string; color: string }) {
+function UsageRing({ used, max, label, color }: { used: number; max: number | null; label: string; color: string }) {
+  const unlimited = max == null;
   const pct   = usagePct(used, max);
   const r     = 30;
   const circ  = 2 * Math.PI * r;
@@ -120,18 +124,20 @@ function UsageRing({ used, max, label, color }: { used: number; max: number; lab
       <div className="relative h-20 w-20">
         <svg width="80" height="80" viewBox="0 0 80 80" className="-rotate-90">
           <circle cx="40" cy="40" r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="7" />
-          <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7"
-            stroke={color} strokeLinecap="round"
-            strokeDasharray={`${dash} ${circ}`}
-            style={{ transition: "stroke-dasharray 0.8s ease" }}
-          />
+          {!unlimited && (
+            <circle cx="40" cy="40" r={r} fill="none" strokeWidth="7"
+              stroke={color} strokeLinecap="round"
+              strokeDasharray={`${dash} ${circ}`}
+              style={{ transition: "stroke-dasharray 0.8s ease" }}
+            />
+          )}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <p className="text-base font-black text-white">{pct}%</p>
+          <p className="text-base font-black text-white">{unlimited ? "∞" : `${pct}%`}</p>
         </div>
       </div>
       <div className="text-center">
-        <p className="text-sm font-bold text-white">{used.toLocaleString()} / {max.toLocaleString()}</p>
+        <p className="text-sm font-bold text-white">{used.toLocaleString()} / {unlimited ? "∞" : max!.toLocaleString()}</p>
         <p className="text-[10px] font-medium uppercase tracking-widest text-white/50">{label}</p>
       </div>
     </div>
@@ -150,7 +156,7 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
 
   const daysColor = license.days_remaining == null ? "#10b981"
     : license.days_remaining < 30  ? "#ef4444"
-    : license.days_remaining < 90  ? "#ef4444"
+    : license.days_remaining < 90  ? "#f59e0b"
     : "#10b981";
 
   const features: string[] = Array.isArray(license.features)
@@ -246,8 +252,8 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
             <div className="flex flex-wrap gap-1.5">
               {features.map((f) => (
                 <span key={f}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs font-medium capitalize text-white/80 backdrop-blur-sm">
-                  <Check className="h-2.5 w-2.5 text-emerald-400" /> {f}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80 backdrop-blur-sm">
+                  <Check className="h-2.5 w-2.5 text-emerald-400" /> {FEATURE_LABEL[f] ?? f}
                 </span>
               ))}
             </div>
@@ -1757,8 +1763,8 @@ export function LicensingTab() {
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">Licensed Modules</p>
                     <div className="grid grid-cols-2 gap-1.5">
                       {features.map((f) => (
-                        <div key={f} className="flex items-center gap-2 rounded-lg bg-[var(--background)] px-2.5 py-1.5 text-xs font-medium capitalize text-[var(--text)]">
-                          <Check className="h-3 w-3 text-emerald-500 shrink-0" /> {f}
+                        <div key={f} className="flex items-center gap-2 rounded-lg bg-[var(--background)] px-2.5 py-1.5 text-xs font-medium text-[var(--text)]">
+                          <Check className="h-3 w-3 text-emerald-500 shrink-0" /> {FEATURE_LABEL[f] ?? f}
                         </div>
                       ))}
                     </div>

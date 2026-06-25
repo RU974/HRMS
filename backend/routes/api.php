@@ -160,22 +160,25 @@ $registerRoutes = function (): void {
             Route::apiResource('settings/licenses',            LicenseController::class);
         });
 
-        Route::middleware('permission:approvals:view')->group(function () {
-            Route::get('approvals', [ApprovalController::class, 'index']);
-            Route::get('approvals/{id}', [ApprovalController::class, 'show']);
-        });
+        // Approvals & workflows — Professional+ feature
+        Route::middleware('license.feature:approvals')->group(function () {
+            Route::middleware('permission:approvals:view')->group(function () {
+                Route::get('approvals', [ApprovalController::class, 'index']);
+                Route::get('approvals/{id}', [ApprovalController::class, 'show']);
+            });
 
-        Route::middleware('permission:approvals:approve')->group(function () {
-            Route::post('approvals/{id}/approve', [ApprovalController::class, 'approve']);
-            Route::post('approvals/{id}/reject', [ApprovalController::class, 'reject']);
-            Route::get('approval-delegations', [ApprovalDelegationController::class, 'index']);
-            Route::post('approval-delegations', [ApprovalDelegationController::class, 'store']);
-            Route::delete('approval-delegations/{id}', [ApprovalDelegationController::class, 'destroy']);
-        });
+            Route::middleware('permission:approvals:approve')->group(function () {
+                Route::post('approvals/{id}/approve', [ApprovalController::class, 'approve']);
+                Route::post('approvals/{id}/reject', [ApprovalController::class, 'reject']);
+                Route::get('approval-delegations', [ApprovalDelegationController::class, 'index']);
+                Route::post('approval-delegations', [ApprovalDelegationController::class, 'store']);
+                Route::delete('approval-delegations/{id}', [ApprovalDelegationController::class, 'destroy']);
+            });
 
-        Route::middleware('permission:approvals:manage_settings')->group(function () {
-            Route::post('approvals', [ApprovalController::class, 'store']);
-            Route::apiResource('workflows', WorkflowController::class)->except(['create', 'edit']);
+            Route::middleware('permission:approvals:manage_settings')->group(function () {
+                Route::post('approvals', [ApprovalController::class, 'store']);
+                Route::apiResource('workflows', WorkflowController::class)->except(['create', 'edit']);
+            });
         });
 
         // Employee routes

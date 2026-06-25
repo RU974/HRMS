@@ -36,7 +36,8 @@ abstract class Controller
         if ($user && $user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
             return;
         }
-        if (!$user || !$user->can($permission)) {
+        $permissions = str_contains($permission, '|') ? explode('|', $permission) : [$permission];
+        if (!$user || !$user->hasAnyPermission($permissions)) {
             abort(403, $message);
         }
     }
