@@ -429,7 +429,7 @@ class DashboardController extends Controller
             ->all();
     }
 
-    private function getMonthlyPayrollTrend(?int $companyId, Request $request): array
+    private function getMonthlyPayrollTrend(?string $companyId, Request $request): array
     {
         $today = Carbon::today();
 
@@ -452,7 +452,7 @@ class DashboardController extends Controller
         })->values()->all();
     }
 
-    private function getHeadcountTrend(?int $companyId, Request $request): array
+    private function getHeadcountTrend(?string $companyId, Request $request): array
     {
         $today = Carbon::today();
 
@@ -473,7 +473,7 @@ class DashboardController extends Controller
         })->values()->all();
     }
 
-    private function getPerformanceSummary(?int $companyId): array
+    private function getPerformanceSummary(?string $companyId): array
     {
         $companyScope = function ($query) use ($companyId): void {
             if ($companyId) {
@@ -502,7 +502,7 @@ class DashboardController extends Controller
         ];
     }
 
-    private function getAttritionRisk(?int $companyId): array
+    private function getAttritionRisk(?string $companyId): array
     {
         $cutoff = Carbon::today()->subDays(30)->toDateString();
 
