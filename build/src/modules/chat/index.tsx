@@ -196,7 +196,7 @@ export function ChatPage() {
     };
   }, [selectedConversationId, queryClient]);
 
-  const thread: ChatMessage[] = (threadQuery.data ?? [])
+  const thread: ChatMessage[] = (threadQuery.data?.data ?? [])
     .slice()
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 

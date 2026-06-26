@@ -39,6 +39,13 @@ export interface ChatConversation {
   created_at: string;
 }
 
+interface PaginatedResponse<T> {
+  data: T[];
+  current_page: number;
+  last_page: number;
+  total: number;
+}
+
 export function listChatMessages(query?: {
   q?: string;
   sender_id?: number;
@@ -53,8 +60,9 @@ export function listChatMessages(query?: {
   if (query?.conversation_id) params.set("conversation_id", String(query.conversation_id));
   if (query?.read === "read") params.set("read", "true");
   if (query?.read === "unread") params.set("read", "false");
+  params.set("per_page", "200");
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return apiClient<ChatMessage[]>(`/chat-messages${suffix}`);
+  return apiClient<PaginatedResponse<ChatMessage>>(`/chat-messages${suffix}`);
 }
 
 export function createChatMessage(payload: { conversation_id: number; message?: string; file?: File | null }) {
