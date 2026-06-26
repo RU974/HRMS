@@ -86,6 +86,8 @@ class RolePermissionSeeder extends Seeder
                 'attendance:view',
                 'approvals:view', 'approvals:approve',
                 'performance:view', 'performance:edit',
+                'announcement:view',
+                'notification:view',
             ],
             'IT Support' => [
                 'dashboard:view',
