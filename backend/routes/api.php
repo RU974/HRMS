@@ -415,4 +415,10 @@ Route::get('/', function () {
     ]);
 });
 
+// Broadcasting auth for private WebSocket channels (Reverb).
+// Must live at /api/broadcasting/auth (no v1 prefix) to match echo.ts authorizer.
+Route::post('/broadcasting/auth', function (Request $request) {
+    return \Illuminate\Support\Facades\Broadcast::auth($request);
+})->middleware('auth:sanctum');
+
 Route::prefix('v1')->group($registerRoutes);
