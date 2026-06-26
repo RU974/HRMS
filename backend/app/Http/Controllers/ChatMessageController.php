@@ -103,7 +103,8 @@ class ChatMessageController extends Controller
             $query->where('is_read', $readValue);
         }
 
-        return $this->ok($query->latest()->limit(300)->get());
+        $perPage = min((int) $request->query('per_page', 50), 200);
+        return $this->ok($query->latest()->paginate($perPage));
     }
 
     public function store(Request $request)

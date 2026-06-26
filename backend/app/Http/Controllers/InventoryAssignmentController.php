@@ -72,6 +72,8 @@ class InventoryAssignmentController extends Controller
 
         $assignment = InventoryAssignment::with('item')->findOrFail($id);
 
+        $this->assertEmployeeInCompany($request, (int) $assignment->employee_id);
+
         if ($assignment->status === 'returned') {
             return $this->fail('This assignment has already been returned.', 422);
         }

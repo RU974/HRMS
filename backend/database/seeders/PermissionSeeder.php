@@ -11,7 +11,7 @@ class PermissionSeeder extends Seeder
     public function run(): void
     {
         $modules = [
-            'dashboard','users','employees','leaves','attendance','payroll','recruitment','documents','approvals','audit_logs','settings','reports','notification','announcement','performance','chat','licenses','inventory'
+            'dashboard','users','employees','leaves','attendance','payroll','recruitment','documents','approvals','audit_logs','settings','reports','notification','announcement','performance','chat','licenses','inventory','tickets'
         ];
 
         $actions = ['view','create','edit','delete','approve','export','import','assign','manage_settings'];
@@ -81,6 +81,11 @@ class PermissionSeeder extends Seeder
             ['module' => 'user', 'action' => 'assign', 'name' => 'user:assign'],
             ['module' => 'employee', 'action' => 'document.manage', 'name' => 'employee:document.manage'],
             ['module' => 'system', 'action' => 'settings.view', 'name' => 'system:settings.view'],
+            // biometric — seeded here so db:seed alone is sufficient without running individual migrations
+            ['module' => 'biometric', 'action' => 'view', 'name' => 'biometric:view'],
+            ['module' => 'biometric', 'action' => 'manage_mapping', 'name' => 'biometric:manage_mapping'],
+            // reports:view_own used by Employee role and route guards
+            ['module' => 'reports', 'action' => 'view_own', 'name' => 'reports:view_own'],
             ['module' => '*', 'action' => '*', 'name' => '*.*'],
         ];
 

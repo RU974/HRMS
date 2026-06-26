@@ -86,7 +86,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
         label: "Employee Documents",
         path: "/employee-documents",
         icon: FileText,
-        permissions: ["documents.view", "documents.create", "documents.edit", "documents.delete"],
+        permissions: ["documents:view", "documents:create", "documents:edit", "documents:delete"],
       },
       {
         label: "Attendance",
@@ -103,7 +103,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
         label: "Leaves",
         path: "/leaves",
         icon: CalendarRange,
-        permissions: ["leaves.view", "leaves.approve", "leaves.manage_settings"],
+        permissions: ["leaves.view", "leaves.create", "leaves.approve", "leaves.manage_settings"],
       },
       {
         label: "Approvals",
@@ -146,11 +146,13 @@ export const sidebarSections: SidebarSectionConfig[] = [
         icon: ChartColumn,
         permissions: ["performance.view", "performance.edit", "performance.manage_settings"],
         children: [
-          { label: "Overview",    path: "/performance",             icon: ChartColumn,  permissions: ["performance.view", "performance.edit"] },
-          { label: "Reviews",     path: "/performance/reviews",     icon: FileText,     permissions: ["performance.view", "performance.edit"] },
-          { label: "KPIs",        path: "/performance/kpis",        icon: BadgeInfo,    permissions: ["performance.view", "performance.edit"] },
-          { label: "Goals",       path: "/performance/goals",       icon: ShieldCheck,  permissions: ["performance.view", "performance.edit"] },
+          { label: "Overview",    path: "/performance",             icon: ChartColumn,       permissions: ["performance.view", "performance.edit"] },
+          { label: "Reviews",     path: "/performance/reviews",     icon: FileText,          permissions: ["performance.view", "performance.edit"] },
+          { label: "KPIs",        path: "/performance/kpis",        icon: BadgeInfo,         permissions: ["performance.view", "performance.edit"] },
+          { label: "Goals",       path: "/performance/goals",       icon: ShieldCheck,       permissions: ["performance.view", "performance.edit"] },
           { label: "Appraisals",  path: "/performance/appraisals",  icon: BriefcaseBusiness, permissions: ["performance.view", "performance.edit"] },
+          { label: "Templates",   path: "/performance/templates",   icon: ScrollText,        permissions: ["performance.view", "performance.manage_settings"] },
+          { label: "Trends",      path: "/performance/trend",       icon: CalendarClock,     permissions: ["performance.view", "performance.edit"] },
         ],
       },
       {

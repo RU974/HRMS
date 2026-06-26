@@ -13,7 +13,7 @@ class PerformanceGoalController extends Controller
     {
         $this->authorizePermission($request, 'performance:view');
         $query = PerformanceGoal::query()->with('employee:id,first_name,last_name,employee_number');
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -97,32 +97,4 @@ class PerformanceGoalController extends Controller
         return $this->ok(null, 'Performance goal deleted successfully');
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
-    }
-
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to access this performance goal.');
-        }
-    }
 }

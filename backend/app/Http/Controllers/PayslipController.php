@@ -16,7 +16,7 @@ class PayslipController extends Controller
         $this->authorizeRead($request);
         $user = $request->user();
         $query = Payslip::with(['employee', 'payroll']);
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         $ownEmployeeId = $this->ownEmployeeId($user);
@@ -180,15 +180,6 @@ class PayslipController extends Controller
         abort(403, 'You are not authorized to access this payslip.');
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
-    }
 
     private function ownEmployeeId(?User $user): ?int
     {
@@ -205,25 +196,6 @@ class PayslipController extends Controller
         return (bool) $user?->can('payroll:view')
             && !$user?->can('payroll:view')
             && !$user?->can('payroll:manage_settings');
-    }
-
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to access this payslip.');
-        }
     }
 
     private function assertPayrollInCompany(Request $request, Payroll $payroll): void

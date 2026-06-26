@@ -50,7 +50,14 @@ class SalaryGradeController extends Controller
         $validated = $request->validate([
             'name'                => 'sometimes|string|max:120',
             'min_salary'          => 'sometimes|numeric|min:0',
-            'max_salary'          => 'sometimes|numeric|min:0',
+            'max_salary'          => ['sometimes', 'numeric', 'min:0', function ($attr, $value, $fail) use ($request, $grade) {
+                $effectiveMin = $request->has('min_salary')
+                    ? (float) $request->input('min_salary')
+                    : (float) $grade->min_salary;
+                if ((float) $value < $effectiveMin) {
+                    $fail('The maximum salary must be greater than or equal to the minimum salary.');
+                }
+            }],
             'basic_percent'       => 'nullable|numeric|min:0|max:100',
             'hra_percent'         => 'nullable|numeric|min:0|max:100',
             'transport_allowance' => 'nullable|numeric|min:0',

@@ -17,7 +17,7 @@ class AttendanceController extends Controller
     {
         $user = $request->user();
         $query = Attendance::with('employee');
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         if ($request->has('employee_id')) {
@@ -504,32 +504,4 @@ class AttendanceController extends Controller
         }
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
-    }
-
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to perform this action for this employee.');
-        }
-    }
 }

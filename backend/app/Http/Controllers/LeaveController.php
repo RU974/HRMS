@@ -19,7 +19,7 @@ class LeaveController extends Controller
     {
         $query = Leave::query()->with('employee:id,name');
         $user = $request->user();
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         if ($user?->can('leaves:view') || $user?->can('leaves:approve')) {
@@ -226,7 +226,7 @@ class LeaveController extends Controller
             ->where('from_date', '<=', $lastDay->toDateString())
             ->where('to_date', '>=', $firstDay->toDateString());
 
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
 
         return $this->ok($query->get());
@@ -330,32 +330,4 @@ class LeaveController extends Controller
         abort(403, 'You can only create leave requests for your own profile.');
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
-    }
-
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to access this leave request.');
-        }
-    }
 }

@@ -12,7 +12,7 @@ class PerformanceAppraisalController extends Controller
     {
         $this->authorizePermission($request, 'performance:view');
         $query = PerformanceAppraisal::query()->with(['employee:id,first_name,last_name,employee_number', 'reviewer:id,name,email', 'template']);
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
 
         if ($request->filled('q')) {
             $search = trim((string) $request->query('q'));
@@ -101,7 +101,7 @@ class PerformanceAppraisalController extends Controller
         ]);
 
         $query = PerformanceAppraisal::query()->whereIn('id', $validated['ids']);
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
         $count = $query->update(['status' => 'approved']);
 
         return $this->ok(['approved' => $count], "{$count} appraisal(s) approved.");
@@ -111,7 +111,7 @@ class PerformanceAppraisalController extends Controller
     {
         $this->authorizePermission($request, 'performance:view');
         $query = PerformanceAppraisal::query()->with('employee:id,first_name,last_name,employee_number,name');
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
 
         if ($request->filled('employee_id')) {
             $query->where('employee_id', (int) $request->query('employee_id'));
@@ -157,32 +157,4 @@ class PerformanceAppraisalController extends Controller
         return $this->ok(null, 'Performance appraisal deleted successfully');
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
-    }
-
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to access this performance appraisal.');
-        }
-    }
 }

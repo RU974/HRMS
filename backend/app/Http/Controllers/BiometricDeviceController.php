@@ -561,14 +561,6 @@ class BiometricDeviceController extends Controller
         return null;
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->where('company_id', $companyId);
-        }
-    }
-
     private function validateDevicePayload(Request $request, bool $isCreate): array
     {
         $required = $isCreate ? 'required' : 'sometimes|required';

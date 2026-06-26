@@ -26,6 +26,8 @@ class RolePermissionSeeder extends Seeder
                 'announcement:view', 'announcement:create', 'announcement:edit', 'announcement:delete',
                 'notification:view', 'notification:create', 'notification:edit', 'notification:delete',
                 'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete', 'inventory:manage_settings',
+                'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:delete', 'tickets:assign', 'tickets:manage_settings',
+                'biometric:view', 'biometric:manage_mapping',
             ],
             'HR Manager' => [
                 'dashboard:view',
@@ -39,6 +41,7 @@ class RolePermissionSeeder extends Seeder
                 'reports:view', 'reports:export', 'announcement:view', 'announcement:create', 'announcement:edit',
                 'performance:view', 'performance:edit',
                 'chat:view', 'chat:create',
+                'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:delete', 'tickets:assign',
             ],
             'HR Executive' => [
                 'dashboard:view',
@@ -63,6 +66,7 @@ class RolePermissionSeeder extends Seeder
             'Attendance Manager' => [
                 'dashboard:view',
                 'attendance:view', 'attendance:create', 'attendance:edit', 'attendance:manage_settings',
+                'biometric:view',
                 'employees:view',
                 'approvals:view',
                 'reports:view',
@@ -71,6 +75,7 @@ class RolePermissionSeeder extends Seeder
                 'dashboard:view',
                 'recruitment:view', 'recruitment:create', 'recruitment:edit', 'recruitment:delete', 'recruitment:manage_settings',
                 'employees:view',
+                'leaves:view', 'leaves:create',
                 'approvals:view',
                 'chat:view', 'chat:create',
             ],
@@ -88,6 +93,8 @@ class RolePermissionSeeder extends Seeder
                 'documents:view',
                 'settings:manage_settings',
                 'reports:view',
+                'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:assign',
+                'biometric:view', 'biometric:manage_mapping',
             ],
             'Employee' => [
                 'dashboard:view',
@@ -97,6 +104,8 @@ class RolePermissionSeeder extends Seeder
                 'announcement:view',
                 'notification:view',
                 'chat:view', 'chat:create',
+                'tickets:view', 'tickets:create',
+                'reports:view_own',
             ],
         ];
 

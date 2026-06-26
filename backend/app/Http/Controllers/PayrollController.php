@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance;
+use App\Models\Bonus;
+use App\Models\Deduction;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\User;
@@ -29,7 +32,7 @@ class PayrollController extends Controller
             ->orderByDesc('month');
 
         // Multi-tenant scope
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee');
 
         // Department-manager / HR scoping from base Controller
         $this->applyManagedEmployeeScope($request, $query, 'employee');
@@ -192,7 +195,7 @@ class PayrollController extends Controller
             ->where('month', $month)
             ->where('year', $year);
 
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee');
 
         $summary = $query
             ->selectRaw('
@@ -252,12 +255,36 @@ class PayrollController extends Controller
             ->pluck('employee_id')
             ->flip();
 
+        // Bulk-load all three datasets for the period — eliminates N+1
+        $employeeIds = $employees->pluck('id')->all();
+
+        $allBonuses = Bonus::whereIn('employee_id', $employeeIds)
+            ->whereYear('effective_date', $year)
+            ->whereMonth('effective_date', $month)
+            ->get()
+            ->groupBy('employee_id');
+
+        $allDeductions = Deduction::whereIn('employee_id', $employeeIds)
+            ->whereYear('effective_date', $year)
+            ->whereMonth('effective_date', $month)
+            ->get()
+            ->groupBy('employee_id');
+
+        $allAttendances = Attendance::whereIn('employee_id', $employeeIds)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->whereNotNull('check_out')
+            ->get()
+            ->groupBy('employee_id');
+
         $created = 0;
         $skipped = 0;
         $failed  = 0;
 
         DB::transaction(function () use (
-            $employees, $existingEmployeeIds, $month, $year, &$created, &$skipped, &$failed
+            $employees, $existingEmployeeIds, $month, $year,
+            $allBonuses, $allDeductions, $allAttendances,
+            &$created, &$skipped, &$failed
         ) {
             foreach ($employees as $employee) {
                 // Skip if already generated
@@ -267,7 +294,12 @@ class PayrollController extends Controller
                 }
 
                 try {
-                    $components = $this->calculator->calculateForEmployee($employee, $month, $year);
+                    $components = $this->calculator->calculateForEmployee(
+                        $employee, $month, $year,
+                        $allBonuses->get($employee->id, collect()),
+                        $allDeductions->get($employee->id, collect()),
+                        $allAttendances->get($employee->id, collect()),
+                    );
 
                     Payroll::create([
                         'employee_id'  => $employee->id,
@@ -350,7 +382,7 @@ class PayrollController extends Controller
             ->where('year', $year)
             ->whereIn('status', [Payroll::STATUS_APPROVED, Payroll::STATUS_PAID]);
 
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee');
 
         $records = $query->get();
 
@@ -407,44 +439,11 @@ class PayrollController extends Controller
     // ──────────────────────────────────────────────────────────────
 
     /**
-     * Scope a Payroll query to the authenticated user's company.
-     * We go through employee → user because payrolls have no direct company_id.
-     */
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee', fn ($q) => $q->where('company_id', $companyId));
-        }
-    }
-
-    /**
      * Ensure the payroll's employee belongs to the requester's company.
      */
     private function assertPayrollInCompany(Request $request, Payroll $payroll): void
     {
         $this->assertEmployeeInCompany($request, (int) $payroll->employee_id);
-    }
-
-    /**
-     * Ensure an employee belongs to the requester's company.
-     * Super-admins and users without a company_id are always allowed.
-     */
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Employee::query()
-            ->whereKey($employeeId)
-            ->where('company_id', $companyId)
-            ->exists();
-
-        if (!$allowed) {
-            abort(403, 'You are not authorized to access this payroll record.');
-        }
     }
 
     /**

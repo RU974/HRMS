@@ -29,7 +29,7 @@ class ReportController extends Controller
         ]);
 
         $query = Report::query()->with(['creator:id,name,email', 'updater:id,name,email']);
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'creator');
 
         if (!empty($validated['q'])) {
             $query->where(function ($q) use ($validated) {
@@ -331,18 +331,6 @@ class ReportController extends Controller
         }
 
         return $format;
-    }
-
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $query->whereHas('creator', function ($creatorQuery) use ($companyId): void {
-            $creatorQuery->where('company_id', $companyId);
-        });
     }
 
     private function assertCompanyAccess(Request $request, Report $report): void

@@ -15,8 +15,14 @@ import {
   updateEmployeeDocument,
   type EmployeeDocumentItem,
 } from "@/services/hr-management-service";
+import { API_BASE_URL } from "@/services/api-client";
 import { useAuthStore } from "@/store/auth-store";
 import { toast } from "@/components/notifications/toast";
+
+function getStorageUrl(filePath: string) {
+  const base = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
+  return `${base}/storage/${filePath}`;
+}
 
 const documentCategories = ["CNIC", "Contract", "Certificate", "ID", "Other"] as const;
 const visibilityOptions = [
@@ -77,6 +83,8 @@ export function EmployeeDocumentsPage() {
     notes: "",
     file: null,
   });
+
+  const [versionDoc, setVersionDoc] = useState<EmployeeDocumentItem | null>(null);
 
   const showEmployeeFilter = canManageDocuments || canViewEmployees;
 
@@ -239,6 +247,11 @@ export function EmployeeDocumentsPage() {
                     <Button variant="outline" onClick={() => void downloadEmployeeDocument(document.id)}>
                       Download
                     </Button>
+                    {document.versions && document.versions.length > 0 && (
+                      <Button variant="outline" onClick={() => setVersionDoc(document)}>
+                        History ({document.versions!.length})
+                      </Button>
+                    )}
                     {canManageDocuments && (
                       <>
                         <Button variant="outline" onClick={() => openModal(document)}>
@@ -335,6 +348,61 @@ export function EmployeeDocumentsPage() {
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center text-sm text-[var(--muted)]">
           {documentsQuery.isLoading ? "Loading documents..." : "No documents found for the selected filters."}
         </section>
+      )}
+
+      {versionDoc && (
+        <Modal title={`Version History — ${versionDoc.title}`} onClose={() => setVersionDoc(null)}>
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--muted)]">
+              Each row is a previous file that was replaced when the document was updated.
+              The current file is available via Download on the main list.
+            </p>
+            {(versionDoc.versions ?? []).length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">No previous versions recorded.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+                      <th className="p-3">Version</th>
+                      <th className="p-3">Replaced On</th>
+                      <th className="p-3">Changed By</th>
+                      <th className="p-3 text-right">File</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...(versionDoc.versions ?? [])].reverse().map((version, index) => (
+                      <tr key={version.id} className="border-b border-[var(--border)]/60">
+                        <td className="p-3 font-medium">
+                          v{(versionDoc.versions ?? []).length - index}
+                        </td>
+                        <td className="p-3 text-[var(--muted)]">
+                          {version.created_at ? new Date(version.created_at).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="p-3 text-[var(--muted)]">
+                          {version.changed_by ? `User #${version.changed_by}` : "—"}
+                        </td>
+                        <td className="p-3 text-right">
+                          <a
+                            href={getStorageUrl(version.file_path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-[var(--primary)] underline hover:opacity-80"
+                          >
+                            Download
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setVersionDoc(null)}>Close</Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {modalOpen && (

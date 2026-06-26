@@ -75,15 +75,4 @@ class SalaryIncrementController extends Controller
         return $this->ok(null, 'Salary increment deleted.');
     }
 
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) return;
-
-        $exists = Employee::whereKey($employeeId)
-            ->where('company_id', $companyId)
-            ->exists();
-
-        if (!$exists) abort(403, 'Employee not in your company.');
-    }
 }

@@ -44,6 +44,10 @@ class AttendanceCalculator
         return Carbon::parse($checkIn->toDateString() . ' ' . $policy->late_after_time);
     }
 
+    // Hard cap prevents corrupted check_out timestamps (e.g. midnight fallback) from
+    // producing implausibly large overtime values that inflate payroll.
+    private const MAX_OVERTIME_HOURS = 4.0;
+
     public function calculateOvertimeHours(Attendance $attendance, ?Shift $shift): float
     {
         if (!$attendance->check_out || !$shift || !$shift->end_time) {
@@ -53,7 +57,12 @@ class AttendanceCalculator
         try {
             $actualOut = Carbon::parse($attendance->check_out);
             $scheduledEnd = Carbon::parse($attendance->date . ' ' . $shift->end_time);
-            return max(0.0, $actualOut->floatDiffInHours($scheduledEnd));
+            $overtime = $actualOut->floatDiffInHours($scheduledEnd);
+            // floatDiffInHours returns absolute value; negative when actualOut < scheduledEnd (early departure)
+            if ($actualOut->lessThan($scheduledEnd)) {
+                return 0.0;
+            }
+            return min($overtime, self::MAX_OVERTIME_HOURS);
         } catch (\Exception $e) {
             return 0.0;
         }

@@ -226,4 +226,45 @@ abstract class Controller
 
         abort(403, "You are not authorized to access this {$context}.");
     }
+
+    protected function assertEmployeeInCompany(Request $request, int $employeeId): void
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return;
+        }
+
+        $allowed = Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($q) use ($companyId): void {
+                $q->where('company_id', $companyId);
+            })
+            ->exists();
+
+        if (!$allowed) {
+            abort(403, 'You are not authorized to perform this action for this employee.');
+        }
+    }
+
+    protected function scopeToCompany(Request $request, $query, string $relation = ''): void
+    {
+        $user = $request->user();
+        $companyId = $user?->company_id;
+        if (!$companyId) {
+            // Super admins have no company_id and are allowed to query across all companies.
+            // Any other authenticated user missing company_id indicates a data-integrity problem
+            // that must not silently grant cross-company access.
+            if ($user && !$user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+                abort(403, 'Your account is not associated with a company.');
+            }
+            return;
+        }
+        if ($relation === '') {
+            $query->where('company_id', $companyId);
+        } else {
+            $query->whereHas($relation, function ($q) use ($companyId): void {
+                $q->where('company_id', $companyId);
+            });
+        }
+    }
 }

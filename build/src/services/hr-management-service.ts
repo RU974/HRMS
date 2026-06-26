@@ -203,7 +203,7 @@ export interface EmployeeDocumentItem {
   notes?: string | null;
   file_path?: string | null;
   employee?: { id: number; name: string } | null;
-  versions?: Array<{ id: number; file_path: string; changed_by?: number | null }>;
+  versions?: Array<{ id: number; file_path: string; changed_by?: number | null; created_at?: string }>;
   created_at?: string;
   updated_at?: string;
 }

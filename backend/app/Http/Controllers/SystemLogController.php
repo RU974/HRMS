@@ -15,7 +15,7 @@ class SystemLogController extends Controller
         $this->authorizeAnyPermission($request, ['audit_logs:view', 'settings:manage_settings']);
 
         $q = AuditLog::query()->with('user')->latest();
-        $this->scopeToCompany($request, $q);
+        $this->scopeToCompany($request, $q, 'user');
 
         if ($request->filled('method')) {
             $q->where('http_method', strtoupper((string) $request->input('method')));
@@ -42,7 +42,7 @@ class SystemLogController extends Controller
         // Fixed: same permission mismatch as index
         $this->authorizeAnyPermission($request, ['audit_logs:view', 'settings:manage_settings']);
         $q = AuditLog::query()->with('user');
-        $this->scopeToCompany($request, $q);
+        $this->scopeToCompany($request, $q, 'user');
 
         return $this->ok($q->findOrFail($id));
     }
@@ -54,15 +54,4 @@ class SystemLogController extends Controller
         abort(422, 'Audit logs are immutable and cannot be deleted.');
     }
 
-    private function scopeToCompany(Request $request, Builder $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $query->whereHas('user', function (Builder $userQuery) use ($companyId): void {
-            $userQuery->where('company_id', $companyId);
-        });
-    }
 }

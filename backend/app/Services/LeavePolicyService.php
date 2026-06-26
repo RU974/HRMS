@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Employee;
+use App\Models\Holiday;
 use App\Models\Leave;
 use App\Models\LeaveBalance;
 use App\Models\LeaveBlackout;
@@ -15,7 +16,35 @@ class LeavePolicyService
 {
     public function calculateRequestedDays(string $fromDate, string $toDate): int
     {
-        return Carbon::parse($fromDate)->diffInDays(Carbon::parse($toDate)) + 1;
+        return $this->countWorkingDays(Carbon::parse($fromDate), Carbon::parse($toDate));
+    }
+
+    private function countWorkingDays(Carbon $start, Carbon $end): int
+    {
+        if ($end->lt($start)) {
+            return 0;
+        }
+
+        $mandatoryHolidays = Holiday::query()
+            ->where('is_optional', false)
+            ->whereBetween('holiday_date', [$start->toDateString(), $end->toDateString()])
+            ->pluck('holiday_date')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->all();
+        $holidaySet = array_flip($mandatoryHolidays);
+
+        $count = 0;
+        $current = $start->copy()->startOfDay();
+        $endDay = $end->copy()->startOfDay();
+
+        while ($current->lte($endDay)) {
+            if (!$current->isWeekend() && !isset($holidaySet[$current->toDateString()])) {
+                $count++;
+            }
+            $current->addDay();
+        }
+
+        return $count;
     }
 
     public function findLeaveTypeByName(string $type): ?LeaveType
@@ -77,7 +106,7 @@ class LeavePolicyService
             return 0;
         }
 
-        return $fromDate->diffInDays($toDate) + 1;
+        return $this->countWorkingDays($fromDate, $toDate);
     }
 
     public function segmentsForLeave(Leave $leave): array
@@ -101,7 +130,7 @@ class LeavePolicyService
                 'period_type' => $this->resolveAccrualFrequency($leaveType),
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
-                'days' => $current->diffInDays($segmentEnd) + 1,
+                'days' => $this->countWorkingDays($current, $segmentEnd),
             ];
             $current = $segmentEnd->copy()->addDay();
         }

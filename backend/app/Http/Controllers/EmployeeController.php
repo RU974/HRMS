@@ -368,14 +368,6 @@ class EmployeeController extends Controller
         abort(403, 'You are not authorized to access this employee.');
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->where('company_id', $companyId);
-        }
-    }
-
     private function assertEmployeeInCompany(Request $request, Employee $employee): void
     {
         $companyId = $request->user()?->company_id;

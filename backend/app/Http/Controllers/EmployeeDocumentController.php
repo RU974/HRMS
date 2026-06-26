@@ -14,7 +14,7 @@ class EmployeeDocumentController extends Controller
     public function index(Request $request)
     {
         $query = EmployeeDocument::with(['employee', 'versions']);
-        $this->scopeToCompany($request, $query);
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
         if ($request->has('employee_id')) {
             $this->assertEmployeeInCompany($request, (int) $request->employee_id);
@@ -174,37 +174,5 @@ class EmployeeDocumentController extends Controller
         return false;
     }
 
-    private function scopeToCompany(Request $request, $query): void
-    {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
-    }
 
-    private function assertEmployeeInCompany(Request $request, int $employeeId): void
-    {
-        if (!$this->isInCompany($request, $employeeId)) {
-            abort(403, 'You are not authorized to access this document.');
-        }
-    }
-
-    private function isInCompany(Request $request, int $employeeId): bool
-    {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return true;
-        }
-
-        return EmployeeDocument::query()
-            ->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            })
-            ->whereHas('employee', function ($employeeQuery) use ($employeeId): void {
-                $employeeQuery->whereKey($employeeId);
-            })
-            ->exists();
-    }
 }

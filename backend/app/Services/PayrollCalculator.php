@@ -22,13 +22,18 @@ class PayrollCalculator
      * Returns associative array: base_salary, allowances, bonuses_total, overtime_pay,
      * deductions_total, tax, net_salary
      */
-    public function calculateForEmployee($employee, int $month, int $year): array
-    {
+    public function calculateForEmployee(
+        $employee,
+        int $month,
+        int $year,
+        ?\Illuminate\Support\Collection $preloadedBonuses = null,
+        ?\Illuminate\Support\Collection $preloadedDeductions = null,
+        ?\Illuminate\Support\Collection $preloadedAttendances = null
+    ): array {
         $baseSalary = (float) ($employee->basic_salary ?? $employee->salary ?? 0);
         $allowances = (float) ($employee->allowances ?? 0);
 
-        // bonuses effective in the month
-        $bonuses = Bonus::where('employee_id', $employee->id)
+        $bonuses = $preloadedBonuses ?? Bonus::where('employee_id', $employee->id)
             ->whereYear('effective_date', $year)
             ->whereMonth('effective_date', $month)
             ->get();
@@ -36,8 +41,7 @@ class PayrollCalculator
         $bonusesTotal = (float) $bonuses->sum('amount');
         $taxableBonuses = (float) $bonuses->where('taxable', true)->sum('amount');
 
-        // deductions effective in the month
-        $deductions = Deduction::where('employee_id', $employee->id)
+        $deductions = $preloadedDeductions ?? Deduction::where('employee_id', $employee->id)
             ->whereYear('effective_date', $year)
             ->whereMonth('effective_date', $month)
             ->get();
@@ -45,8 +49,7 @@ class PayrollCalculator
         $deductionsTotal = (float) $deductions->sum('amount');
         $loanDeductions = (float) $deductions->where('type', 'loan')->sum('amount');
 
-        // Overtime: compute from attendance records
-        $attendances = Attendance::where('employee_id', $employee->id)
+        $attendances = $preloadedAttendances ?? Attendance::where('employee_id', $employee->id)
             ->whereYear('date', $year)
             ->whereMonth('date', $month)
             ->whereNotNull('check_out')
