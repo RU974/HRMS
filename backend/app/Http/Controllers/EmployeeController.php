@@ -56,7 +56,7 @@ class EmployeeController extends Controller
     {
         $employee = Employee::with(['department', 'designationRef', 'user'])->findOrFail($id);
         $this->authorizeEmployeeRead($request, $employee);
-        $this->assertEmployeeInCompany($request, $employee);
+        $this->assertThisEmployeeInCompany($request, $employee);
 
         return $this->ok($employee);
     }
@@ -181,7 +181,7 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:edit');
         $employee = Employee::findOrFail($id);
-        $this->assertEmployeeInCompany($request, $employee);
+        $this->assertThisEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $validated = $request->validate([
             'user_id' => ['sometimes', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($id)],
@@ -240,7 +240,7 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:delete');
         $employee = Employee::findOrFail($id);
-        $this->assertEmployeeInCompany($request, $employee);
+        $this->assertThisEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $employee->delete();
         return $this->ok(null, 'Employee deleted successfully');
@@ -279,7 +279,7 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:edit');
         $employee = Employee::with('user')->findOrFail($id);
-        $this->assertEmployeeInCompany($request, $employee);
+        $this->assertThisEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
         $validated = $request->validate(['password' => 'required|string|min:8|confirmed']);
 
@@ -368,7 +368,7 @@ class EmployeeController extends Controller
         abort(403, 'You are not authorized to access this employee.');
     }
 
-    private function assertEmployeeInCompany(Request $request, Employee $employee): void
+    private function assertThisEmployeeInCompany(Request $request, Employee $employee): void
     {
         $companyId = $request->user()?->company_id;
         if (!$companyId) {
@@ -404,7 +404,7 @@ class EmployeeController extends Controller
 
         $employee = Employee::with('user')->find($employeeId);
         if ($employee) {
-            $this->assertEmployeeInCompany($request, $employee);
+            $this->assertThisEmployeeInCompany($request, $employee);
         }
     }
 

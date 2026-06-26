@@ -25,7 +25,7 @@ class InventoryItemController extends Controller
             $query->where('category_id', $request->integer('category_id'));
         }
 
-        return $this->ok($query->paginate(15));
+        return $this->ok($query->get());
     }
 
     public function show(Request $request, $id)

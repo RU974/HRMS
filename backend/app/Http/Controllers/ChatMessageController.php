@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Events\ChatMessageSent;
+use App\Models\CallParticipant;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
@@ -29,12 +30,24 @@ class ChatMessageController extends Controller
 
         $onlineThreshold = now()->subMinutes(2);
 
+        $users = $query->get();
+
+        // Single query to find which users are currently on an active call
+        $inCallUserIds = CallParticipant::query()
+            ->whereIn('user_id', $users->pluck('id'))
+            ->where('status', 'joined')
+            ->whereHas('call', fn ($q) => $q->where('status', 'active'))
+            ->pluck('user_id')
+            ->flip()
+            ->toArray();
+
         return $this->ok(
-            $query->get()->map(fn ($u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-                'email' => $u->email,
-                'is_online' => $u->last_seen_at && $u->last_seen_at->gt($onlineThreshold),
+            $users->map(fn ($u) => [
+                'id'         => $u->id,
+                'name'       => $u->name,
+                'email'      => $u->email,
+                'is_online'  => $u->last_seen_at && $u->last_seen_at->gt($onlineThreshold),
+                'is_in_call' => isset($inCallUserIds[$u->id]),
             ])
         );
     }

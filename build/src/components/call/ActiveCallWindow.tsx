@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Minimize2, Maximize2 } from "lucide-react";
-import { Call, endCall, getCall } from "@/services/call-service";
+import { Call, endCall } from "@/services/call-service";
 import { useWebRTC, PeerStream } from "@/hooks/use-webrtc";
 import { VideoTile } from "./VideoTile";
 import { stopRingtone } from "@/lib/ringtone";
+import { echo } from "@/lib/echo";
 
 interface ActiveCallWindowProps {
   call: Call;
@@ -43,15 +44,29 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
   const [ending, setEnding] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "failed">("connecting");
 
-  const { localStream, peerStreams, isMuted, isCameraOff, cleanup, toggleMute, toggleCamera } =
-    useWebRTC({
-      callId: call.id,
-      localUserId: currentUserId,
-      callType: call.type,
-      enabled: true,
-      onPeerConnected: () => setConnectionStatus("connected"),
-      onPeerFailed: () => setConnectionStatus("failed"),
-    });
+  // Refs so Echo listeners always read current values without re-subscribing
+  const cleanupRef = useRef<() => void>(() => {});
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
+
+  // Derive joined participant IDs from call state — passed to useWebRTC so it
+  // can create peer connections reactively instead of polling /calls/{id}.
+  const joinedParticipantIds = call.participants
+    .filter((p) => p.user_id !== currentUserId && p.status === "joined")
+    .map((p) => p.user_id);
+
+  const webrtc = useWebRTC({
+    callId: call.id,
+    localUserId: currentUserId,
+    callType: call.type,
+    enabled: true,
+    joinedParticipantIds,
+    onPeerConnected: () => setConnectionStatus("connected"),
+    onPeerFailed: () => setConnectionStatus("failed"),
+  });
+
+  const { localStream, peerStreams, isMuted, isCameraOff, cleanup, toggleMute, toggleCamera } = webrtc;
+  cleanupRef.current = cleanup;
 
   // Stop any playing ringtone the moment we enter the call window
   useEffect(() => { stopRingtone(); }, []);
@@ -68,22 +83,32 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
     return () => clearInterval(id);
   }, [call.status]);
 
-  // Poll backend: detect remote hang-up, refresh participant statuses
+  // Real-time call state updates via WebSocket (replaces 2 s polling)
   useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const updated = await getCall(call.id);
-        setCall(updated);
-        if (updated.status === "ended" || updated.status === "missed") {
-          cleanup();
-          onEnded();
-        }
-      } catch {
-        // ignore transient errors
+    const channel = echo.private(`call.${currentUserId}`);
+
+    // Remote participant answered — update call state so the timer and UI flip to active
+    channel.listen(".CallAnswered", (data: { call: Call }) => {
+      if (data.call.id === call.id) {
+        setCall(data.call);
       }
-    }, 2000);
-    return () => clearInterval(id);
-  }, [call.id, cleanup, onEnded]);
+    });
+
+    // Any participant (or the system) ended the call
+    channel.listen(".CallEnded", (data: { call_id: number }) => {
+      if (data.call_id !== call.id) return;
+      cleanupRef.current();
+      onEndedRef.current();
+    });
+
+    return () => {
+      channel.stopListening(".CallAnswered");
+      channel.stopListening(".CallEnded");
+      // CallProvider owns the channel lifetime — only stopListening here
+    };
+  // call.id and currentUserId never change while the window is mounted
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call.id, currentUserId]);
 
   const handleEnd = useCallback(async () => {
     if (ending) return;

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sendSignal, getSignals, getCall, CallSignal } from "@/services/call-service";
+import { sendSignal, CallSignal } from "@/services/call-service";
+import { echo } from "@/lib/echo";
+import { toast } from "@/components/notifications/toast";
 
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
@@ -8,9 +10,9 @@ const ICE_SERVERS: RTCIceServer[] = [
   // Set these env vars before deploying to production.
   // Recommended: self-hosted coturn OR Twilio TURN (https://www.twilio.com/stun-turn)
   ...(import.meta.env.VITE_TURN_URL ? [{
-    urls: import.meta.env.VITE_TURN_URL,
-    username: import.meta.env.VITE_TURN_USERNAME ?? "",
-    credential: import.meta.env.VITE_TURN_CREDENTIAL ?? "",
+    urls: import.meta.env.VITE_TURN_URL as string,
+    username: (import.meta.env.VITE_TURN_USERNAME ?? "") as string,
+    credential: (import.meta.env.VITE_TURN_CREDENTIAL ?? "") as string,
   }] : []),
 ];
 
@@ -21,18 +23,29 @@ interface UseWebRTCOptions {
   localUserId: number;
   callType: "audio" | "video";
   enabled: boolean;
+  /** IDs of remote participants who have joined — passed in from parent so we
+   *  react to changes instead of polling the backend every 1.5 s. */
+  joinedParticipantIds: number[];
   onPeerConnected?: () => void;
   onPeerFailed?: () => void;
 }
 
-export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnected, onPeerFailed }: UseWebRTCOptions) {
+export function useWebRTC({
+  callId,
+  localUserId,
+  callType,
+  enabled,
+  joinedParticipantIds,
+  onPeerConnected,
+  onPeerFailed,
+}: UseWebRTCOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [peerStreams, setPeerStreams] = useState<PeerStream[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  // Refs are stable across re-renders — safe to use inside intervals
+  // Refs are stable across re-renders — safe to use inside callbacks
   const pcs = useRef<Map<number, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   // ICE candidates received before remote SDP was set
@@ -75,8 +88,11 @@ export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnec
         } else if (pc.connectionState === "failed") {
           onPeerFailed?.();
           setPeerStreams((prev) => prev.filter((p) => p.userId !== remoteUserId));
+          toast.error(
+            "Connection failed",
+            "Could not establish a peer-to-peer connection. A TURN server may be required on this network."
+          );
         } else if (pc.connectionState === "disconnected") {
-          // Briefly disconnected (network blip) — don't remove stream yet
           setTimeout(() => {
             if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
               setPeerStreams((prev) => prev.filter((p) => p.userId !== remoteUserId));
@@ -164,7 +180,7 @@ export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnec
           }
         }
       } catch {
-        // ignore signaling errors silently
+        // ignore transient signaling errors
       }
     },
     [callId, localUserId, getOrCreatePC, flushPendingICE]
@@ -186,8 +202,29 @@ export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnec
         setLocalStream(stream);
         setIsReady(true);
       })
-      .catch(() => {
-        if (!cancelled) setIsReady(true); // continue without local media
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setIsReady(true); // continue so the call can still receive remote audio
+
+        const name = err instanceof Error ? err.name : "";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          toast.error(
+            callType === "video" ? "Camera & microphone blocked" : "Microphone blocked",
+            "Allow access in your browser settings, then rejoin the call."
+          );
+        } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+          toast.error(
+            callType === "video" ? "No camera or microphone found" : "No microphone found",
+            "Check that your device is connected and not in use by another app."
+          );
+        } else if (name === "NotReadableError") {
+          toast.error(
+            "Media device unavailable",
+            "Your camera or microphone is already in use by another application."
+          );
+        } else {
+          toast.error("Could not access media devices", "Your audio/video will not be sent.");
+        }
       });
 
     return () => {
@@ -195,8 +232,7 @@ export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnec
     };
   }, [enabled, callId, callType]);
 
-  // Main polling loop: detect newly-joined peers and process signals.
-  // Runs every 1.5 s once media is ready.
+  // React to newly joined participants and initiate peer connections.
   //
   // Role assignment (prevents offer collisions):
   //   Higher user_id → sends offer (offerer)
@@ -204,22 +240,15 @@ export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnec
   useEffect(() => {
     if (!isReady || !callId || !enabled) return;
 
-    const intervalId = setInterval(async () => {
-      try {
-        // 1. Fetch call state and handle newly-joined participants
-        const callData = await getCall(callId);
+    (async () => {
+      for (const remoteId of joinedParticipantIds) {
+        if (handledPeers.current.has(remoteId)) continue;
+        handledPeers.current.add(remoteId);
 
-        const joinedIds = callData.participants
-          .filter((p) => p.user_id !== localUserId && p.status === "joined")
-          .map((p) => p.user_id);
-
-        for (const remoteId of joinedIds) {
-          if (handledPeers.current.has(remoteId)) continue;
-          handledPeers.current.add(remoteId);
-
-          if (localUserId > remoteId) {
-            // We are the offerer (higher id) — create PC and send offer
-            const pc = getOrCreatePC(remoteId);
+        if (localUserId > remoteId) {
+          // We are the offerer (higher id) — create PC and send offer
+          const pc = getOrCreatePC(remoteId);
+          try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             await sendSignal(callId, {
@@ -227,24 +256,37 @@ export function useWebRTC({ callId, localUserId, callType, enabled, onPeerConnec
               type: "offer",
               payload: { type: offer.type, sdp: offer.sdp ?? "" },
             });
-          } else {
-            // We are the answerer (lower id) — pre-create PC and wait for their offer
-            getOrCreatePC(remoteId);
+          } catch {
+            // ignore — will retry when signals arrive
           }
+        } else {
+          // We are the answerer (lower id) — pre-create PC and wait for their offer
+          getOrCreatePC(remoteId);
         }
-
-        // 2. Fetch and process pending signals for us
-        const signals = await getSignals(callId);
-        for (const signal of signals) {
-          await processSignal(signal);
-        }
-      } catch {
-        // ignore — might be network hiccup
       }
-    }, 1500);
+    })();
+  // joinedParticipantIds changes drive this effect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, callId, enabled, localUserId, JSON.stringify(joinedParticipantIds), getOrCreatePC]);
 
-    return () => clearInterval(intervalId);
-  }, [isReady, callId, enabled, localUserId, getOrCreatePC, processSignal]);
+  // Receive WebRTC signals via WebSocket (replaces 1.5 s polling).
+  useEffect(() => {
+    if (!isReady || !callId || !enabled) return;
+
+    const channel = echo.private(`call.${localUserId}`);
+
+    channel.listen(
+      ".CallSignalSent",
+      (data: { signal: CallSignal & { call_id: number } }) => {
+        if (data.signal.call_id !== callId) return;
+        processSignal(data.signal).catch(() => {});
+      }
+    );
+
+    return () => {
+      channel.stopListening(".CallSignalSent");
+    };
+  }, [isReady, callId, enabled, localUserId, processSignal]);
 
   const cleanup = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());

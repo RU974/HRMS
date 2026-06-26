@@ -31,6 +31,7 @@ import { PerformanceTrendPage } from "@/modules/performance/trend-page";
 import { AnnouncementsPage } from "@/modules/announcements";
 import { NotificationsPage } from "@/modules/notifications";
 import { ChatPage } from "@/modules/chat";
+import { CallHistoryPage } from "@/modules/call-history/call-history-page";
 import { ApprovalsPage, ApprovalDetailPage, DelegationsPage } from "@/modules/approvals";
 import { WorkflowsPage } from "@/modules/workflows";
 import { ReportsPage } from "@/modules/reports";
@@ -96,6 +97,7 @@ export const appRouter = createBrowserRouter([
       { path: "announcements",             element: withPermission(<AnnouncementsPage />,         ["announcement:view", "announcement:edit"]) },
       { path: "notifications",             element: withPermission(<NotificationsPage />,         ["notification:view", "notification:edit"]) },
       { path: "chat",                      element: <ChatPage /> },
+      { path: "call-history",              element: <CallHistoryPage /> },
       { path: "reports",                   element: withPermission(<ReportsPage />,               ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "reports/attendance",        element: withPermission(<AttendanceReportsPage />,     ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "reports/employees",         element: withPermission(<EmployeeReportsPage />,       ["reports:view", "reports:manage_settings", "reports:view_own"]) },

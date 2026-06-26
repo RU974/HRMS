@@ -33,7 +33,7 @@ import {
 } from "@/services/chat-service";
 import { useAuthStore } from "@/store/auth-store";
 
-type ChatUser = { id: number; name: string; email: string; is_online?: boolean };
+type ChatUser = { id: number; name: string; email: string; is_online?: boolean; is_in_call?: boolean };
 
 const AVATAR_COLORS = [
   "bg-violet-500",
@@ -467,10 +467,22 @@ export function ChatPage() {
                 >
                   <div className="relative shrink-0">
                     {conversation.type === "group" ? <GroupAvatar /> : <Avatar name={label} />}
-                    {/* Online indicator for direct chats */}
+                    {/* Online / in-call indicator for direct chats */}
                     {conversation.type === "direct" && (() => {
                       const other = conversation.participants.find((p) => p.id !== currentUserId);
                       const chatUser = (usersQuery.data ?? []).find((u) => u.id === other?.id);
+                      if (chatUser?.is_in_call) {
+                        return (
+                          <span
+                            title="On a call"
+                            className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[var(--card)] bg-blue-500 text-white"
+                          >
+                            <svg className="h-2 w-2" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z" />
+                            </svg>
+                          </span>
+                        );
+                      }
                       return chatUser?.is_online ? (
                         <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[var(--card)] bg-green-500" />
                       ) : null;

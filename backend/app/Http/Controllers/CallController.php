@@ -2,6 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\CallAnswered;
+use App\Events\CallEnded;
+use App\Events\CallInitiated;
+use App\Events\CallRejected;
+use App\Events\CallSignalSent;
 use App\Models\Call;
 use App\Models\CallParticipant;
 use App\Models\CallSignal;
@@ -34,14 +39,26 @@ class CallController extends Controller
         $threshold = now()->subMinutes(2);
         $user = $request->user();
 
-        $statuses = \App\Models\User::query()
+        $users = \App\Models\User::query()
             ->whereIn('id', $validated['user_ids'])
             ->where('company_id', $user->company_id)
             ->select(['id', 'last_seen_at'])
-            ->get()
-            ->mapWithKeys(fn ($u) => [
-                $u->id => $u->last_seen_at && $u->last_seen_at->gt($threshold),
-            ]);
+            ->get();
+
+        $inCallUserIds = CallParticipant::query()
+            ->whereIn('user_id', $users->pluck('id'))
+            ->where('status', 'joined')
+            ->whereHas('call', fn ($q) => $q->where('status', 'active'))
+            ->pluck('user_id')
+            ->flip()
+            ->toArray();
+
+        $statuses = $users->mapWithKeys(fn ($u) => [
+            $u->id => [
+                'online'   => $u->last_seen_at && $u->last_seen_at->gt($threshold),
+                'in_call'  => isset($inCallUserIds[$u->id]),
+            ],
+        ]);
 
         return $this->ok($statuses);
     }
@@ -114,11 +131,17 @@ class CallController extends Controller
             return $call;
         });
 
-        return $this->ok(
-            $this->formatCall($call->load(['initiator:id,name,email', 'callParticipants.user:id,name,email'])),
-            'Call initiated',
-            201
-        );
+        $formatted = $this->formatCall($call->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']));
+
+        // Notify every invited participant in real-time (no polling needed).
+        $invitedIds = $call->callParticipants
+            ->where('user_id', '!=', $user->id)
+            ->pluck('user_id')
+            ->toArray();
+
+        event(new CallInitiated($formatted, $invitedIds));
+
+        return $this->ok($formatted, 'Call initiated', 201);
     }
 
     /**
@@ -185,10 +208,12 @@ class CallController extends Controller
             }
         });
 
-        return $this->ok(
-            $this->formatCall($call->fresh()->load(['initiator:id,name,email', 'callParticipants.user:id,name,email'])),
-            'Call answered'
-        );
+        $formatted = $this->formatCall($call->fresh()->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']));
+
+        // Notify the initiator that someone answered so their UI flips to active.
+        event(new CallAnswered($formatted, $call->initiated_by));
+
+        return $this->ok($formatted, 'Call answered');
     }
 
     /**
@@ -210,6 +235,11 @@ class CallController extends Controller
 
         $participant->update(['status' => 'rejected', 'left_at' => now()]);
 
+        // Notify the initiator that this participant declined (useful in group calls).
+        if ($call->initiated_by !== $user->id) {
+            event(new CallRejected($call->id, $user->id, $call->initiated_by));
+        }
+
         // If caller rejects their own call or all participants rejected, end the call
         $activeCount = CallParticipant::query()
             ->where('call_id', $call->id)
@@ -221,6 +251,13 @@ class CallController extends Controller
                 'status' => $call->status === 'ringing' ? 'missed' : 'ended',
                 'ended_at' => now(),
             ]);
+
+            $allParticipantIds = CallParticipant::query()
+                ->where('call_id', $call->id)
+                ->pluck('user_id')
+                ->toArray();
+
+            event(new CallEnded($call->id, $allParticipantIds));
         }
 
         return $this->ok(null, 'Call rejected');
@@ -248,7 +285,9 @@ class CallController extends Controller
             return $this->fail('You are not a participant in this call.', 403);
         }
 
-        DB::transaction(function () use ($call, $user) {
+        $callEnded = false;
+
+        DB::transaction(function () use ($call, $user, &$callEnded) {
             // Mark current user as left
             CallParticipant::query()
                 ->where('call_id', $call->id)
@@ -273,8 +312,19 @@ class CallController extends Controller
                     ->where('call_id', $call->id)
                     ->whereIn('status', ['joined', 'invited'])
                     ->update(['status' => 'left', 'left_at' => now()]);
+
+                $callEnded = true;
             }
         });
+
+        if ($callEnded) {
+            $allParticipantIds = CallParticipant::query()
+                ->where('call_id', $call->id)
+                ->pluck('user_id')
+                ->toArray();
+
+            event(new CallEnded($call->id, $allParticipantIds));
+        }
 
         return $this->ok(null, 'Call ended');
     }
@@ -320,6 +370,9 @@ class CallController extends Controller
             'payload' => $validated['payload'],
             'is_consumed' => false,
         ]);
+
+        // Push signal directly to recipient via WebSocket — eliminates 1.5s polling.
+        event(new CallSignalSent($signal));
 
         return $this->ok(['id' => $signal->id], 'Signal sent', 201);
     }

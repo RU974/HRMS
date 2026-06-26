@@ -4,8 +4,13 @@ export function sendHeartbeat() {
   return apiClient<null>("/heartbeat", { method: "POST" });
 }
 
-export function getOnlineStatus(userIds: number[]): Promise<Record<number, boolean>> {
-  return apiClient<Record<number, boolean>>("/users/online-status", {
+export interface UserPresence {
+  online: boolean;
+  in_call: boolean;
+}
+
+export function getOnlineStatus(userIds: number[]): Promise<Record<number, UserPresence>> {
+  return apiClient<Record<number, UserPresence>>("/users/online-status", {
     method: "POST",
     body: JSON.stringify({ user_ids: userIds }),
   });

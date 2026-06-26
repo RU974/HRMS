@@ -13,6 +13,7 @@ import {
   MessageCircleMore,
   Megaphone,
   Package,
+  PhoneCall,
   ShieldCheck,
   Settings2,
   Ticket,
@@ -70,7 +71,8 @@ export const sidebarSections: SidebarSectionConfig[] = [
     items: [
       { label: "Announcements", path: "/announcements", icon: Megaphone, permissions: ["announcement.view"] },
       { label: "Notifications",  path: "/notifications",  icon: Bell,    permissions: ["notification.view"] },
-      { label: "Chat",           path: "/chat",           icon: MessageCircleMore },
+      { label: "Chat",         path: "/chat",           icon: MessageCircleMore },
+      { label: "Call History", path: "/call-history",   icon: PhoneCall },
     ],
   },
   {

@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
-import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, X } from "lucide-react";
+import { useAuthStore } from "@/store/auth-store";
+import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, QrCode, Printer } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
@@ -71,6 +73,186 @@ function TableHead({ cols }: { cols: string[] }) {
         ))}
       </tr>
     </thead>
+  );
+}
+
+// ─── QR Code ─────────────────────────────────────────────────────────────────
+
+function buildQRPayload(item: InventoryItem, companyId: string | null | undefined) {
+  return JSON.stringify({
+    cid: companyId ?? null,
+    iid: item.id,
+    n: item.name,
+    ...(item.sku ? { sku: item.sku } : {}),
+    ...(item.location ? { loc: item.location } : {}),
+    cond: item.condition,
+    qty: item.quantity,
+  });
+}
+
+function QRLabel({ item, companyId }: { item: InventoryItem; companyId: string | null | undefined }) {
+  return (
+    <div className="flex flex-col items-center gap-3 p-4">
+      <QRCodeSVG
+        value={buildQRPayload(item, companyId)}
+        size={180}
+        level="M"
+        includeMargin
+      />
+      <div className="w-full text-center space-y-0.5">
+        <p className="font-semibold text-sm">{item.name}</p>
+        {item.sku && <p className="text-xs text-[var(--muted)]">SKU: {item.sku}</p>}
+        {item.location && <p className="text-xs text-[var(--muted)]">Location: {item.location}</p>}
+        <p className="text-xs text-[var(--muted)] capitalize">Condition: {item.condition}</p>
+        <p className="text-xs text-[var(--muted)]">Qty: {item.quantity}</p>
+      </div>
+    </div>
+  );
+}
+
+function QRModal({ item, companyId, onClose }: { item: InventoryItem; companyId: string | null | undefined; onClose: () => void }) {
+  const printRef = useRef<HTMLDivElement>(null);
+
+  function handlePrint() {
+    const content = printRef.current?.innerHTML;
+    if (!content) return;
+    const win = window.open("", "_blank", "width=400,height=520");
+    if (!win) return;
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>QR Label – ${item.name}</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: flex-start; padding: 16px; }
+            .label { display: flex; flex-direction: column; align-items: center; gap: 10px; border: 1px solid #ddd; border-radius: 8px; padding: 16px; width: 220px; }
+            .label svg { width: 180px; height: 180px; }
+            .label-name { font-weight: 600; font-size: 13px; text-align: center; }
+            .label-meta { font-size: 11px; color: #666; text-align: center; }
+          </style>
+        </head>
+        <body>${content}</body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  }
+
+  function handleDownload() {
+    const svg = printRef.current?.querySelector("svg");
+    if (!svg) return;
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svg);
+    const blob = new Blob([svgStr], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qr-${item.sku ?? item.id}.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <Modal title={`QR Code – ${item.name}`} onClose={onClose}>
+      <div className="flex flex-col items-center gap-4">
+        <div ref={printRef} className="rounded-xl border border-[var(--border)] bg-white">
+          <QRLabel item={item} companyId={companyId} />
+        </div>
+
+        <p className="text-xs text-[var(--muted)] text-center max-w-xs">
+          Scan this QR code to identify the item. It encodes the company, item ID, name, SKU, location and condition.
+        </p>
+
+        <div className="flex gap-2 w-full">
+          <Button variant="outline" className="flex-1" onClick={handleDownload}>
+            <QrCode className="mr-1.5 h-4 w-4" /> Download SVG
+          </Button>
+          <Button className="flex-1" onClick={handlePrint}>
+            <Printer className="mr-1.5 h-4 w-4" /> Print Label
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; companyId: string | null | undefined; onClose: () => void }) {
+  const activeItems = items.filter((i) => !i.deleted_at);
+
+  function handlePrint() {
+    const labels = activeItems.map((item) => {
+      const payload = buildQRPayload(item, companyId);
+      const encoded = encodeURIComponent(payload);
+      return `
+        <div class="label">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encoded}" width="150" height="150" alt="QR" />
+          <p class="label-name">${item.name}</p>
+          ${item.sku ? `<p class="label-meta">SKU: ${item.sku}</p>` : ""}
+          ${item.location ? `<p class="label-meta">Loc: ${item.location}</p>` : ""}
+          <p class="label-meta">Qty: ${item.quantity}</p>
+        </div>
+      `;
+    }).join("");
+
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) return;
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Inventory QR Sheet</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body { font-family: system-ui, sans-serif; padding: 16px; }
+            h2 { margin-bottom: 16px; font-size: 16px; }
+            .grid { display: flex; flex-wrap: wrap; gap: 12px; }
+            .label { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px solid #ccc; border-radius: 6px; padding: 12px; width: 180px; page-break-inside: avoid; }
+            .label img { width: 150px; height: 150px; }
+            .label-name { font-weight: 600; font-size: 12px; text-align: center; word-break: break-word; }
+            .label-meta { font-size: 10px; color: #555; text-align: center; }
+            @media print { body { padding: 8px; } h2 { display: none; } }
+          </style>
+        </head>
+        <body>
+          <h2>Inventory QR Code Sheet (${activeItems.length} items)</h2>
+          <div class="grid">${labels}</div>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  }
+
+  return (
+    <Modal title={`Print All QR Codes (${activeItems.length} items)`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 max-h-64 overflow-y-auto">
+          <div className="grid grid-cols-3 gap-3">
+            {activeItems.map((item) => (
+              <div key={item.id} className="flex flex-col items-center gap-1 rounded-lg border border-[var(--border)] p-2">
+                <QRCodeSVG value={buildQRPayload(item, companyId)} size={64} level="M" />
+                <p className="text-[10px] text-center font-medium leading-tight line-clamp-2">{item.name}</p>
+                {item.sku && <p className="text-[9px] text-[var(--muted)]">{item.sku}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="text-xs text-[var(--muted)]">
+          Opens a printable sheet with all {activeItems.length} active item QR labels. Each label includes name, SKU, location, and quantity.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handlePrint}>
+            <Printer className="mr-1.5 h-4 w-4" /> Print All Labels
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -185,10 +367,14 @@ interface ItemForm {
 function ItemsTab() {
   const qc = useQueryClient();
   const { formatAmount, currency } = useCurrencyStore();
+  const { user } = useAuthStore();
+  const companyId = user?.company_id;
   const currencySymbol = CURRENCY_OPTIONS.find((c) => c.code === currency)?.symbol ?? currency;
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [qrItem, setQrItem] = useState<InventoryItem | null>(null);
+  const [showBulkQR, setShowBulkQR] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [form, setForm] = useState<ItemForm>({
     name: "", category_id: "", sku: "", quantity: "0",
@@ -272,8 +458,8 @@ function ItemsTab() {
       setForm((p) => ({ ...p, [field]: e.target.value }));
   }
 
-  const categories = categoriesQ.data ?? [];
-  const items = itemsQ.data ?? [];
+  const categories = Array.isArray(categoriesQ.data) ? categoriesQ.data : [];
+  const items = Array.isArray(itemsQ.data) ? itemsQ.data : [];
 
   return (
     <>
@@ -284,6 +470,9 @@ function ItemsTab() {
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded" />
             Show archived
           </label>
+          <Button variant="outline" onClick={() => setShowBulkQR(true)} disabled={items.length === 0}>
+            <QrCode className="mr-1.5 h-4 w-4" />Print All QR
+          </Button>
           <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Item</Button>
         </div>
         <div className="overflow-x-auto">
@@ -313,6 +502,7 @@ function ItemsTab() {
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" onClick={() => setDetailId(item.id)} title="View Details"><Eye className="h-3.5 w-3.5" /></Button>
+                      <Button variant="outline" onClick={() => setQrItem(item)} title="QR Code"><QrCode className="h-3.5 w-3.5" /></Button>
                       {item.deleted_at ? (
                         <Button variant="outline" onClick={() => void restoreMutation.mutateAsync(item.id)} title="Restore"><RotateCcw className="h-3.5 w-3.5" /></Button>
                       ) : (
@@ -424,6 +614,16 @@ function ItemsTab() {
           )}
         </Modal>
       )}
+
+      {/* QR Code Modal */}
+      {qrItem && (
+        <QRModal item={qrItem} companyId={companyId} onClose={() => setQrItem(null)} />
+      )}
+
+      {/* Bulk QR Sheet Modal */}
+      {showBulkQR && (
+        <BulkQRSheet items={items} companyId={companyId} onClose={() => setShowBulkQR(false)} />
+      )}
     </>
   );
 }
@@ -481,8 +681,8 @@ function AssignmentsTab() {
     onError: (e: Error) => toast.error("Return failed", e.message),
   });
 
-  const assignments = assignmentsQ.data ?? [];
-  const availableItems = (itemsQ.data ?? []).filter((i) => !i.deleted_at);
+  const assignments = Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [];
+  const availableItems = (Array.isArray(itemsQ.data) ? itemsQ.data : []).filter((i) => !i.deleted_at);
   const employees = employeesQ.data?.data ?? [];
 
   return (
@@ -627,8 +827,8 @@ function SummaryCards() {
   const itemsQ = useQuery({ queryKey: ["inventory", "items", false], queryFn: () => listInventoryItems() });
   const assignmentsQ = useQuery({ queryKey: ["inventory", "assignments", "all"], queryFn: () => listInventoryAssignments() });
 
-  const items = itemsQ.data ?? [];
-  const assignments = assignmentsQ.data ?? [];
+  const items = Array.isArray(itemsQ.data) ? itemsQ.data : [];
+  const assignments = Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [];
   const totalItems = items.length;
   const totalQty = items.reduce((s, i) => s + i.quantity, 0);
   const activeAssignments = assignments.filter((a) => a.status === "assigned").length;
