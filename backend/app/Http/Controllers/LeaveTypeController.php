@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\LeaveType;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class LeaveTypeController extends Controller
 {
@@ -15,8 +16,12 @@ class LeaveTypeController extends Controller
     public function store(Request $request)
     {
         $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
+        $companyId = $request->user()->company_id;
         $validated = $request->validate([
-            'name' => 'required|string|max:120|unique:leave_types,name',
+            'name' => [
+                'required', 'string', 'max:120',
+                Rule::unique('leave_types', 'name')->where('company_id', $companyId),
+            ],
             'default_days' => 'nullable|integer|min:0|max:365',
             'is_paid' => 'nullable|boolean',
             'is_active' => 'nullable|boolean',
@@ -33,6 +38,7 @@ class LeaveTypeController extends Controller
         ]);
 
         $leaveType = LeaveType::create([
+            'company_id'               => $companyId,
             'name'                     => $validated['name'],
             'default_days'             => $validated['default_days'] ?? 0,
             'is_paid'                  => $validated['is_paid'] ?? true,
@@ -62,7 +68,12 @@ class LeaveTypeController extends Controller
         $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
         $leaveType = LeaveType::findOrFail($id);
         $validated = $request->validate([
-            'name' => 'sometimes|string|max:120|unique:leave_types,name,' . $id,
+            'name' => [
+                'sometimes', 'string', 'max:120',
+                Rule::unique('leave_types', 'name')
+                    ->where('company_id', $request->user()->company_id)
+                    ->ignore($id),
+            ],
             'default_days' => 'sometimes|integer|min:0|max:365',
             'is_paid' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean',
