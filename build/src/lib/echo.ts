@@ -1,5 +1,5 @@
 import Echo from 'laravel-echo';
-import Pusher from 'pusher-js';
+import Pusher, { type ChannelAuthorizationCallback } from 'pusher-js';
 (window as any).Pusher = Pusher;
 
 export const echo = new Echo({
@@ -10,10 +10,21 @@ export const echo = new Echo({
   wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
   forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
   enabledTransports: ['ws', 'wss'],
-  authEndpoint: '/api/broadcasting/auth',
-  auth: {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('hrms_token') ?? ''}`,
+  // Read the token at auth time (not at module import time) so it is always
+  // current regardless of when the user logged in during this session.
+  authorizer: (channel: { name: string }) => ({
+    authorize: (socketId: string, callback: ChannelAuthorizationCallback) => {
+      fetch('/api/broadcasting/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('hrms_token') ?? ''}`,
+        },
+        body: JSON.stringify({ socket_id: socketId, channel_name: channel.name }),
+      })
+        .then((res) => res.json())
+        .then((data) => callback(null, data))
+        .catch((err: Error) => callback(err, null));
     },
-  },
+  }),
 });

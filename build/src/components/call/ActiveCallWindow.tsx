@@ -101,9 +101,22 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
       onEndedRef.current();
     });
 
+    // A participant declined (group calls: others still in call; direct calls get
+    // CallEnded instead, so this only fires when there are remaining participants)
+    channel.listen(".CallRejected", (data: { call_id: number; rejected_by: number }) => {
+      if (data.call_id !== call.id) return;
+      setCall((prev) => ({
+        ...prev,
+        participants: prev.participants.map((p) =>
+          p.user_id === data.rejected_by ? { ...p, status: "rejected" } : p
+        ),
+      }));
+    });
+
     return () => {
       channel.stopListening(".CallAnswered");
       channel.stopListening(".CallEnded");
+      channel.stopListening(".CallRejected");
       // CallProvider owns the channel lifetime — only stopListening here
     };
   // call.id and currentUserId never change while the window is mounted

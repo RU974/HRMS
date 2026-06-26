@@ -138,9 +138,8 @@ export function useWebRTC({
         if (signal.type === "offer") {
           const pc = getOrCreatePC(fromId);
 
-          // Perfect-negotiation: if collision, polite peer (lower id) rolls back.
-          const collision =
-            pc.signalingState !== "stable" || handledPeers.current.has(fromId);
+          // Perfect-negotiation: collision only when signaling is already in-flight.
+          const collision = pc.signalingState !== "stable";
           const isPolite = localUserId < fromId;
 
           if (collision && !isPolite) return; // impolite peer ignores colliding offer
@@ -290,6 +289,7 @@ export function useWebRTC({
 
   const cleanup = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
     pcs.current.forEach((pc) => pc.close());
     pcs.current.clear();
     icePending.current.clear();

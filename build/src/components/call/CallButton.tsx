@@ -4,6 +4,7 @@ import { ChatConversation } from "@/services/chat-service";
 import { initiateCall } from "@/services/call-service";
 import { startRingtone } from "@/lib/ringtone";
 import { useCallContext } from "./CallProvider";
+import { toast } from "@/components/notifications/toast";
 
 interface CallButtonProps {
   conversation: ChatConversation;
@@ -33,7 +34,7 @@ export function CallButton({ conversation, currentUserId }: CallButtonProps) {
       startRingtone("outgoing").catch(() => {});
       startCall(call);
     } catch {
-      // could show a toast here
+      toast.error("Could not start call", "Please try again in a moment.");
     } finally {
       setLoading(null);
     }
