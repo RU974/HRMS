@@ -1,0 +1,247 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { FormField } from "@/components/common/form-field";
+import { FormInput } from "@/components/forms/form-input";
+import { Modal } from "@/components/modals/modal";
+import { toast } from "@/components/notifications/toast";
+import { getEmployees } from "@/services/employee-service";
+import {
+  type PayrollRecord,
+  approvePayroll,
+  createPayroll,
+  deletePayroll,
+  downloadBankExport,
+  generatePayroll,
+  listPayroll,
+  markPayrollPaid,
+  updatePayroll,
+} from "@/services/payroll-service";
+import { useAuthStore } from "@/store/auth-store";
+import { Badge, SummaryCard, fmt, payrollBadge, sel } from "./payroll-shared";
+
+export function PayrollRecordsTab() {
+  const queryClient = useQueryClient();
+  const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
+
+  const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployees()).data ?? [] });
+  const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: async () => (await listPayroll()).data ?? [] });
+
+  const employees = employeesQ.data ?? [];
+  const payrolls  = payrollsQ.data ?? [];
+
+  // ── Generate modal ─────────────────────────────────────────────────────────
+  const [genModal, setGenModal] = useState(false);
+  const [genMonth, setGenMonth] = useState(new Date().getMonth() + 1);
+  const [genYear,  setGenYear]  = useState(new Date().getFullYear());
+  const genMut = useMutation({
+    mutationFn: () => generatePayroll({ month: genMonth, year: genYear }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] });
+      toast.success("Payroll generated", "Payroll records have been generated successfully.");
+      setGenModal(false);
+    },
+    onError: (e: Error) => toast.error("Generation failed", e.message),
+  });
+
+  // ── Bank export ────────────────────────────────────────────────────────────
+  const [exportMonth, setExportMonth] = useState(new Date().getMonth() + 1);
+  const [exportYear,  setExportYear]  = useState(new Date().getFullYear());
+  const [exporting,   setExporting]   = useState(false);
+  async function handleExport() {
+    setExporting(true);
+    try { await downloadBankExport(exportMonth, exportYear); }
+    catch (e) { toast.error("Export failed", (e as Error).message); }
+    finally { setExporting(false); }
+  }
+
+  // ── Payroll record form ────────────────────────────────────────────────────
+  const [payrollModal,  setPayrollModal]  = useState(false);
+  const [payrollEdit,   setPayrollEdit]   = useState<PayrollRecord | null>(null);
+  const [payrollDetail, setPayrollDetail] = useState<PayrollRecord | null>(null);
+  const [payrollForm,   setPayrollForm]   = useState({
+    employee_id: 0,
+    month:        new Date().getMonth() + 1,
+    year:         new Date().getFullYear(),
+    base_salary:  0,
+    bonus:        0,
+    deductions:   0,
+    tax:          0,
+    payment_date: "",
+    status:       "draft" as PayrollRecord["status"],
+  });
+
+  const payrollCreate = useMutation({
+    mutationFn: () => createPayroll({ ...payrollForm, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax) }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll created", "Payroll record created successfully."); setPayrollModal(false); },
+    onError: (e: Error) => toast.error("Save failed", e.message),
+  });
+
+  const payrollUpdate = useMutation({
+    mutationFn: () => updatePayroll(payrollEdit!.id, { bonus: payrollForm.bonus, deductions: payrollForm.deductions, tax: payrollForm.tax, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax), payment_date: payrollForm.payment_date, status: payrollForm.status }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll updated", "Payroll record updated successfully."); setPayrollModal(false); },
+    onError: (e: Error) => toast.error("Save failed", e.message),
+  });
+
+  const payrollDelete = useMutation({
+    mutationFn: deletePayroll,
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Deleted", "Payroll record removed."); },
+    onError: (e: Error) => toast.error("Delete failed", e.message),
+  });
+
+  const payrollPaid = useMutation({
+    mutationFn: markPayrollPaid,
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Marked as paid", "Payroll has been marked as paid."); },
+    onError: (e: Error) => toast.error("Action failed", e.message),
+  });
+
+  const payrollApprov = useMutation({
+    mutationFn: approvePayroll,
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Approved", "Payroll has been approved."); },
+    onError: (e: Error) => toast.error("Approval failed", e.message),
+  });
+
+  return (
+    <div className="space-y-4">
+      {canManage && (
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+          <div className="flex gap-2 items-end">
+            <div><label className="mb-1 block text-xs text-[var(--muted)]">Month</label><input type="number" min={1} max={12} value={exportMonth} onChange={e => setExportMonth(Number(e.target.value))} className="h-9 w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm" /></div>
+            <div><label className="mb-1 block text-xs text-[var(--muted)]">Year</label><input type="number" min={2020} value={exportYear} onChange={e => setExportYear(Number(e.target.value))} className="h-9 w-28 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm" /></div>
+            <Button variant="outline" className="text-xs" onClick={() => void handleExport()} disabled={exporting}>{exporting ? "Exporting…" : "⬇ Bank CSV Export"}</Button>
+          </div>
+          <Button variant="outline" className="text-xs" onClick={() => setGenModal(true)}>⚡ Generate Payroll</Button>
+          <Button className="ml-auto text-xs" onClick={() => { setPayrollEdit(null); setPayrollForm({ employee_id: 0, month: new Date().getMonth() + 1, year: new Date().getFullYear(), base_salary: 0, bonus: 0, deductions: 0, tax: 0, payment_date: "", status: "draft" }); setPayrollModal(true); }}>+ Manual Entry</Button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+              <th className="p-3">Employee</th>
+              <th className="p-3">Period</th>
+              <th className="p-3">Base</th>
+              <th className="p-3">Net</th>
+              <th className="p-3">Payment Date</th>
+              <th className="p-3">Status</th>
+              <th className="p-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payrollsQ.isLoading && [...Array(4)].map((_, i) => (
+              <tr key={i} className="border-b border-[var(--border)]/50">
+                {[...Array(7)].map((__, j) => <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>)}
+              </tr>
+            ))}
+            {payrolls.map(item => (
+              <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
+                <td className="p-3 font-medium">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                <td className="p-3">{item.month}/{item.year}</td>
+                <td className="p-3">{fmt(Number(item.base_salary))}</td>
+                <td className="p-3 font-semibold">{fmt(Number(item.net_salary))}</td>
+                <td className="p-3">{item.payment_date?.slice(0, 10) ?? "—"}</td>
+                <td className="p-3"><Badge label={item.status} tone={payrollBadge(item.status)} /></td>
+                <td className="p-3">
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <Button variant="outline" className="text-xs px-2 py-1" onClick={() => setPayrollDetail(item)}>View</Button>
+                    {canManage && item.status !== "paid" && item.status !== "approved" && (
+                      <Button variant="outline" className="text-xs px-2 py-1 border-blue-200 text-blue-700" onClick={() => void payrollApprov.mutateAsync(item.id)}>✓ Approve</Button>
+                    )}
+                    {canManage && item.status === "approved" && (
+                      <Button variant="outline" className="text-xs px-2 py-1 border-emerald-200 text-emerald-700" onClick={() => void payrollPaid.mutateAsync(item.id)}>✓ Mark Paid</Button>
+                    )}
+                    {canManage && (
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayrollEdit(item); setPayrollForm({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date?.slice(0, 10) ?? "", status: item.status }); setPayrollModal(true); }}>Edit</Button>
+                    )}
+                    {canManage && (
+                      <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200" onClick={() => { if (window.confirm("Delete payroll?")) void payrollDelete.mutateAsync(item.id); }}>Delete</Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!payrollsQ.isLoading && payrolls.length === 0 && (
+              <tr><td colSpan={7} className="p-8 text-center text-sm text-[var(--muted)]">No payroll records. Generate payroll or add manually.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Generate modal */}
+      {genModal && (
+        <Modal title="Generate Monthly Payroll" onClose={() => setGenModal(false)}>
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--muted)]">Auto-calculate payroll for all active employees. Existing records for the period are skipped.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Month"><FormInput type="number" min={1} max={12} value={genMonth} onChange={e => setGenMonth(Number(e.target.value))} /></FormField>
+              <FormField label="Year"><FormInput type="number" min={2020} value={genYear} onChange={e => setGenYear(Number(e.target.value))} /></FormField>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setGenModal(false)}>Cancel</Button>
+              <Button onClick={() => void genMut.mutateAsync()} disabled={genMut.isPending}>{genMut.isPending ? "Generating…" : "Generate"}</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Payroll detail modal */}
+      {payrollDetail && (
+        <Modal title={`Payroll — ${payrollDetail.employee?.name ?? `#${payrollDetail.employee_id}`}`} onClose={() => setPayrollDetail(null)}>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SummaryCard label="Period" value={`${payrollDetail.month}/${payrollDetail.year}`} />
+              <SummaryCard label="Status" value={payrollDetail.status} />
+              <SummaryCard label="Payment Date" value={payrollDetail.payment_date?.slice(0, 10) ?? "—"} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SummaryCard label="Base Salary" value={fmt(Number(payrollDetail.base_salary))} />
+              <SummaryCard label="Bonus" value={fmt(Number(payrollDetail.bonus))} />
+              <SummaryCard label="Deductions" value={fmt(Number(payrollDetail.deductions))} />
+              <SummaryCard label="Tax" value={fmt(Number(payrollDetail.tax))} />
+            </div>
+            <div className="rounded-xl border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5 p-3 text-center">
+              <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Net Salary</p>
+              <p className="text-3xl font-bold text-[var(--primary)]">{fmt(Number(payrollDetail.net_salary))}</p>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Payroll record form modal */}
+      {payrollModal && (
+        <Modal title={`${payrollEdit ? "Edit" : "New"} Payroll Record`} onClose={() => setPayrollModal(false)}>
+          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (payrollEdit ? payrollUpdate : payrollCreate).mutateAsync(); }}>
+            <FormField label="Employee">
+              <select required disabled={!!payrollEdit} className={sel} value={payrollForm.employee_id} onChange={e => setPayrollForm(p => ({ ...p, employee_id: Number(e.target.value) }))}>
+                <option value={0}>Select employee</option>
+                {employees.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </FormField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Month"><FormInput disabled={!!payrollEdit} type="number" min={1} max={12} value={payrollForm.month} onChange={e => setPayrollForm(p => ({ ...p, month: Number(e.target.value) }))} /></FormField>
+              <FormField label="Year"><FormInput disabled={!!payrollEdit} type="number" min={2020} value={payrollForm.year} onChange={e => setPayrollForm(p => ({ ...p, year: Number(e.target.value) }))} /></FormField>
+              <FormField label="Base Salary"><FormInput disabled={!!payrollEdit} type="number" min={0} step="0.01" value={payrollForm.base_salary} onChange={e => setPayrollForm(p => ({ ...p, base_salary: Number(e.target.value) }))} /></FormField>
+              <FormField label="Bonus"><FormInput type="number" min={0} step="0.01" value={payrollForm.bonus} onChange={e => setPayrollForm(p => ({ ...p, bonus: Number(e.target.value) }))} /></FormField>
+              <FormField label="Deductions"><FormInput type="number" min={0} step="0.01" value={payrollForm.deductions} onChange={e => setPayrollForm(p => ({ ...p, deductions: Number(e.target.value) }))} /></FormField>
+              <FormField label="Tax"><FormInput type="number" min={0} step="0.01" value={payrollForm.tax} onChange={e => setPayrollForm(p => ({ ...p, tax: Number(e.target.value) }))} /></FormField>
+              <FormField label="Payment Date"><FormInput type="date" value={payrollForm.payment_date} onChange={e => setPayrollForm(p => ({ ...p, payment_date: e.target.value }))} /></FormField>
+              <FormField label="Status">
+                <select className={sel} value={payrollForm.status} onChange={e => setPayrollForm(p => ({ ...p, status: e.target.value as PayrollRecord["status"] }))}>
+                  {["draft", "reviewed", "approved", "pending", "processed", "paid", "cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </FormField>
+            </div>
+            <div className="rounded-lg bg-[var(--background)] p-2 text-sm text-[var(--muted)]">
+              Net: <strong className="text-[var(--text)]">{fmt(Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax))}</strong>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPayrollModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={payrollCreate.isPending || payrollUpdate.isPending}>Save</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}

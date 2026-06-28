@@ -6,6 +6,7 @@ import {
   CalendarClock,
   CalendarRange,
   ChartColumn,
+  ClipboardCheck,
   FileText,
   FolderCog,
   FolderKanban,
@@ -96,9 +97,10 @@ export const sidebarSections: SidebarSectionConfig[] = [
         icon: Clock3,
         permissions: ["attendance:view", "attendance:edit", "attendance:manage_settings"],
         children: [
-          { label: "Attendance Records", path: "/attendance",                              icon: Clock3,    permissions: ["attendance:view", "attendance:edit", "attendance:manage_settings"] },
-          { label: "Biometric Devices",  path: "/attendance/biometric-devices",            icon: ScanFace,  permissions: ["biometric:view"] },
-          { label: "Sync Logs",          path: "/attendance/biometric-devices/sync-logs",  icon: FileText,  permissions: ["biometric:view"] },
+          { label: "Attendance Records",   path: "/attendance",                              icon: Clock3,         permissions: ["attendance:view", "attendance:edit", "attendance:manage_settings"] },
+          { label: "Correction Requests", path: "/attendance/corrections",                  icon: ClipboardCheck, permissions: ["attendance:approve", "attendance:manage_settings"] },
+          { label: "Biometric Devices",   path: "/attendance/biometric-devices",            icon: ScanFace,       permissions: ["biometric:view"] },
+          { label: "Sync Logs",           path: "/attendance/biometric-devices/sync-logs",  icon: FileText,       permissions: ["biometric:view"] },
         ],
       },
       {

@@ -45,6 +45,9 @@ export interface AttendanceItem {
   is_late_arrival?: boolean;
   correction_status?: "pending" | "approved" | "rejected" | null;
   correction_request_notes?: string | null;
+  correction_response_notes?: string | null;
+  correction_requested_at?: string | null;
+  correction_reviewed_at?: string | null;
   biometric_device_id?: number | null;
 }
 
@@ -191,6 +194,32 @@ export function requestAttendanceCorrection(id: number, note: string) {
   return apiClient(`/attendance/${id}/request-correction`, {
     method: "POST",
     body: JSON.stringify({ correction_request_notes: note }),
+  });
+}
+
+export function listAttendanceCorrections(params: {
+  status?: "pending" | "approved" | "rejected";
+  employee_id?: number;
+  month?: number;
+  year?: number;
+  page?: number;
+} = {}) {
+  const q = new URLSearchParams({ per_page: "20" });
+  if (params.status)      q.set("status",      params.status);
+  if (params.employee_id) q.set("employee_id", String(params.employee_id));
+  if (params.month)       q.set("month",       String(params.month));
+  if (params.year)        q.set("year",        String(params.year));
+  if (params.page)        q.set("page",        String(params.page));
+  return apiClient<PaginatedResponse<AttendanceItem>>(`/attendance/corrections?${q.toString()}`);
+}
+
+export function reviewAttendanceCorrection(
+  id: number,
+  payload: { correction_status: "approved" | "rejected"; correction_response_notes?: string | null }
+) {
+  return apiClient<AttendanceItem>(`/attendance/${id}/review-correction`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

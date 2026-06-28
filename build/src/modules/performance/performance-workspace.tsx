@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ import {
 } from "@/services/performance-service";
 import { createSalaryIncrement } from "@/services/payroll-service";
 import { PerformanceSectionKey, PerformanceSubnav } from "./shared";
+import { useAuthStore } from "@/store/auth-store";
 
 type EmployeeOption = { id: number; label: string };
 
@@ -113,6 +114,7 @@ const sectionMeta: Record<
 export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSectionKey }) {
   const queryClient = useQueryClient();
   const activeTab = initialTab;
+  const user = useAuthStore((s) => s.user);
   const meta = sectionMeta[activeTab];
   const [search, setSearch] = useState("");
   const [goalStatus, setGoalStatus] = useState("");
@@ -149,6 +151,13 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
       })) as EmployeeOption[];
     },
   });
+
+  useEffect(() => {
+    if (trendEmployeeId !== 0 || !employeesQuery.data?.length) return;
+    const currentUserEmpId = user?.employee?.id;
+    const validInList = employeesQuery.data.some((e) => e.id === currentUserEmpId);
+    setTrendEmployeeId(validInList ? currentUserEmpId! : employeesQuery.data[0].id);
+  }, [employeesQuery.data]);
 
   const reviewsQuery = useQuery({
     queryKey: ["performance", "reviews", search],

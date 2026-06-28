@@ -7,7 +7,7 @@ import { NotFoundPage } from "@/app/error/not-found-page";
 import { DashboardPage } from "@/modules/dashboard/dashboard-page";
 import { EmployeesPage, EmployeeFormPage } from "@/modules/employees";
 import { EmployeeDetailPage } from "@/modules/employees/pages/employee-detail-page";
-import { AttendancePage } from "@/modules/attendance";
+import { AttendancePage, CorrectionReviewPage } from "@/modules/attendance";
 import { PayrollPage } from "@/modules/payroll";
 import { RecruitmentPage } from "@/modules/recruitment";
 import { CandidatesPage } from "@/modules/recruitment/candidates-page";
@@ -68,6 +68,7 @@ export const appRouter = createBrowserRouter([
       { path: "employees/new",             element: withPermission(<EmployeeFormPage />,           ["employees:create"]) },
       { path: "employees/:id",             element: withPermission(<EmployeeDetailPage />,         ["employees:view", "employees:edit"]) },
       { path: "attendance",                element: withPermission(<AttendancePage />,             ["attendance:view", "attendance:manage_settings", "attendance:approve"]) },
+      { path: "attendance/corrections",    element: withPermission(<CorrectionReviewPage />,       ["attendance:approve", "attendance:manage_settings"]) },
       { path: "attendance/biometric-devices",                element: withPermission(<DevicesListPage />,    ["biometric:view"]) },
       { path: "attendance/biometric-devices/sync-logs",      element: withPermission(<SyncLogsPage />,       ["biometric:view"]) },
       { path: "attendance/biometric-devices/:id/mapping",    element: withPermission(<DeviceMappingPage />,  ["biometric:manage_mapping"]) },
