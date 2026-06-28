@@ -17,23 +17,22 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { CallButton } from "@/components/call/CallButton";
-import { apiClient } from "@/services/api-client";
 import {
   ChatConversation,
   ChatMessage,
+  ChatUser,
   createChatMessage,
   createConversation,
   deleteChatMessage,
   downloadChatAttachment,
   fetchChatAttachment,
   listChatMessages,
+  listChatUsers,
   listConversations,
   markConversationRead,
   updateChatMessage,
 } from "@/services/chat-service";
 import { useAuthStore } from "@/store/auth-store";
-
-type ChatUser = { id: number; name: string; email: string; is_online?: boolean; is_in_call?: boolean };
 
 const AVATAR_COLORS = [
   "bg-violet-500",
@@ -167,7 +166,7 @@ export function ChatPage() {
 
   const usersQuery = useQuery({
     queryKey: ["chat-users"],
-    queryFn: () => apiClient<ChatUser[]>("/chat-messages/users"),
+    queryFn: () => listChatUsers(),
   });
 
   const conversationsQuery = useQuery({

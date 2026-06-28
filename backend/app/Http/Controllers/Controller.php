@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Schema;
 
 abstract class Controller
 {
@@ -246,6 +247,21 @@ abstract class Controller
         }
     }
 
+    protected function isInCompany(Request $request, int $employeeId): bool
+    {
+        $companyId = $request->user()?->company_id;
+        if (!$companyId) {
+            return (bool) $request->user()?->hasAnyRole([User::ROLE_SUPER_ADMIN]);
+        }
+
+        return Employee::query()
+            ->whereKey($employeeId)
+            ->whereHas('user', function ($q) use ($companyId): void {
+                $q->where('company_id', $companyId);
+            })
+            ->exists();
+    }
+
     protected function scopeToCompany(Request $request, $query, string $relation = ''): void
     {
         $user = $request->user();
@@ -266,5 +282,25 @@ abstract class Controller
                 $q->where('company_id', $companyId);
             });
         }
+    }
+
+    protected function tableHasCompanyScope(string $table): bool
+    {
+        return Schema::hasColumn($table, 'company_id');
+    }
+
+    // For models that have global (company_id = null) rows alongside company-specific ones,
+    // e.g. shared salary grades or leave blackouts that apply to all companies.
+    protected function scopeToCompanyOrGlobal(Request $request, $query): void
+    {
+        $user = $request->user();
+        $companyId = $user?->company_id;
+        if (!$companyId) {
+            if ($user && !$user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+                abort(403, 'Your account is not associated with a company.');
+            }
+            return;
+        }
+        $query->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId));
     }
 }

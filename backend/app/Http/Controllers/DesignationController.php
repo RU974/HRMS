@@ -9,18 +9,22 @@ use Illuminate\Validation\Rule;
 
 class DesignationController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $this->authorizeAnyPermission(request(), ['settings:manage_settings', 'employees:edit']);
+        $this->authorizeAnyPermission($request, ['settings:manage_settings', 'employees:edit']);
 
-        return $this->ok(Designation::orderBy('name')->get());
+        $query = Designation::query();
+        $this->scopeToCompany($request, $query);
+        return $this->ok($query->orderBy('name')->get());
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $this->authorizeAnyPermission(request(), ['settings:manage_settings', 'employees:edit']);
+        $this->authorizeAnyPermission($request, ['settings:manage_settings', 'employees:edit']);
 
-        return $this->ok(Designation::findOrFail($id));
+        $query = Designation::query();
+        $this->scopeToCompany($request, $query);
+        return $this->ok($query->findOrFail($id));
     }
 
     public function store(Request $request)
@@ -45,8 +49,10 @@ class DesignationController extends Controller
     {
         $this->authorizePermission($request, 'settings:manage_settings');
 
-        $companyId = $request->user()->company_id;
-        $designation = Designation::findOrFail($id);
+        $companyId   = $request->user()->company_id;
+        $query       = Designation::query();
+        $this->scopeToCompany($request, $query);
+        $designation = $query->findOrFail($id);
 
         $validated = $request->validate([
             'name' => [
@@ -64,8 +70,10 @@ class DesignationController extends Controller
     {
         $this->authorizePermission($request, 'settings:manage_settings');
 
-        $designation = Designation::findOrFail($id);
-        $inUse = Employee::where('designation_id', $designation->id)->count();
+        $query       = Designation::query();
+        $this->scopeToCompany($request, $query);
+        $designation = $query->findOrFail($id);
+        $inUse       = Employee::where('designation_id', $designation->id)->count();
 
         if ($inUse > 0) {
             return $this->fail('Designation cannot be deleted because it is assigned to employees.', 422, ['employee_count' => $inUse]);

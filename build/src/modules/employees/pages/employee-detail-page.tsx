@@ -7,22 +7,33 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
-import { apiClient } from "@/services/api-client";
-import { listDepartments, listDesignations, listShifts, listLeaves, listAttendance } from "@/services/hr-management-service";
-import { getEmployees, type Employee } from "@/services/employee-service";
+import { listDepartments, listDesignations, listShifts, listLeaves, listEmployeeDocuments, getEmployeeAttendance } from "@/services/hr-management-service";
+import {
+  getEmployees,
+  getEmployee,
+  updateEmployee,
+  getEmployeePayslips,
+  getEmployeeDirectReports,
+  saveEmployeeEmergencyContacts,
+  getEmployeePromotions,
+  createEmployeePromotion,
+  deleteEmployeePromotion,
+  type Employee,
+  type Payslip,
+  type EmployeePromotion,
+  type EmergencyContact,
+} from "@/services/employee-service";
+import {
+  getEmployeeAppraisals,
+  getEmployeeReviews,
+  getEmployeeGoals,
+  getEmployeeKpis,
+} from "@/services/performance-service";
 import { useAuthStore } from "@/store/auth-store";
 import { useCurrencyStore } from "@/store/currency-store";
 import { toast } from "@/components/notifications/toast";
 
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30";
-
-function getEmployee(id: number) {
-  return apiClient<Employee>(`/employees/${id}`);
-}
-
-function updateEmployee(id: number, payload: FormData) {
-  return apiClient<Employee>(`/employees/${id}`, { method: "POST", body: payload });
-}
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -70,17 +81,7 @@ const tabs: { key: Tab; label: string }[] = [
   { key: "history",      label: "History" },
 ];
 
-interface Payslip {
-  id: number; slip_number: string; status: string; issue_date: string; file_url?: string | null;
-  payroll?: { month: number; year: number; net_salary: number | string; base_salary?: number | string | null; bonus?: number | string | null; deductions?: number | string | null; tax?: number | string | null } | null;
-}
-interface Appraisal { id: number; cycle: string; overall_score: number; strengths?: string | null; improvements?: string | null; created_at: string }
-interface Review    { id: number; period: string; rating: number; summary?: string | null; created_at: string }
-interface Goal      { id: number; title: string; status: string; progress: number; due_date?: string | null }
-interface Kpi       { id: number; name: string; target_value: number | string; current_value: number | string; unit: string }
 interface DirectReport { id: number; name: string; designation?: string | null; status: string; department?: { name: string } | null }
-interface Promotion { id: number; type: string; from_designation?: string | null; to_designation?: string | null; from_department?: string | null; to_department?: string | null; from_salary?: number | string | null; to_salary?: number | string | null; effective_date: string; notes?: string | null }
-interface EmergencyContact { name: string; relationship: string; phone: string; email?: string }
 
 const PROMOTION_TYPES = ["promotion", "transfer", "demotion", "grade_change"] as const;
 
@@ -88,7 +89,7 @@ const PROMOTION_TYPES = ["promotion", "transfer", "demotion", "grade_change"] as
 function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: number }) {
   const { data, isLoading } = useQuery({
     queryKey: ["payslips", "employee", employeeId],
-    queryFn: () => apiClient<{ data: Payslip[] }>(`/payslips?employee_id=${employeeId}`),
+    queryFn: () => getEmployeePayslips(employeeId),
   });
   const { formatAmount } = useCurrencyStore();
   // Subscribe to currency changes so the component re-renders
@@ -161,15 +162,15 @@ function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: n
 
 // ── Performance tab ──────────────────────────────────────────────────────────
 function PerformanceTab({ employeeId }: { employeeId: number }) {
-  const appraisalsQ = useQuery({ queryKey: ["perf-appraisals", employeeId], queryFn: () => apiClient<Appraisal[]>(`/performance-appraisals?employee_id=${employeeId}`) });
-  const reviewsQ    = useQuery({ queryKey: ["perf-reviews",    employeeId], queryFn: () => apiClient<Review[]>(`/performance-reviews?employee_id=${employeeId}`) });
-  const goalsQ      = useQuery({ queryKey: ["perf-goals",      employeeId], queryFn: () => apiClient<Goal[]>(`/performance-goals?employee_id=${employeeId}`) });
-  const kpisQ       = useQuery({ queryKey: ["perf-kpis",       employeeId], queryFn: () => apiClient<Kpi[]>(`/performance-kpis?employee_id=${employeeId}`) });
+  const appraisalsQ = useQuery({ queryKey: ["perf-appraisals", employeeId], queryFn: () => getEmployeeAppraisals(employeeId) });
+  const reviewsQ    = useQuery({ queryKey: ["perf-reviews",    employeeId], queryFn: () => getEmployeeReviews(employeeId) });
+  const goalsQ      = useQuery({ queryKey: ["perf-goals",      employeeId], queryFn: () => getEmployeeGoals(employeeId) });
+  const kpisQ       = useQuery({ queryKey: ["perf-kpis",       employeeId], queryFn: () => getEmployeeKpis(employeeId) });
 
-  const appraisals = (appraisalsQ.data as Appraisal[] | undefined) ?? [];
-  const reviews    = (reviewsQ.data as Review[]    | undefined) ?? [];
-  const goals      = (goalsQ.data  as Goal[]      | undefined) ?? [];
-  const kpis       = (kpisQ.data   as Kpi[]       | undefined) ?? [];
+  const appraisals = appraisalsQ.data ?? [];
+  const reviews    = reviewsQ.data ?? [];
+  const goals      = goalsQ.data ?? [];
+  const kpis       = kpisQ.data ?? [];
 
   const statusColor = (s: string) => s === "completed" ? "bg-emerald-50 text-emerald-700" : s === "in_progress" ? "bg-blue-50 text-blue-700" : s === "on_hold" ? "bg-amber-50 text-amber-700" : "bg-slate-50 text-slate-600";
 
@@ -287,9 +288,9 @@ function PerformanceTab({ employeeId }: { employeeId: number }) {
 function OrgTab({ employee, employeeId }: { employee: Employee; employeeId: number }) {
   const directReportsQ = useQuery({
     queryKey: ["direct-reports", employeeId],
-    queryFn: () => apiClient<{ data: DirectReport[] }>(`/employees?manager_id=${employeeId}&per_page=50`),
+    queryFn: () => getEmployeeDirectReports(employeeId),
   });
-  const directReports = (directReportsQ.data as { data?: DirectReport[] } | undefined)?.data ?? [];
+  const directReports = (directReportsQ.data?.data ?? []) as DirectReport[];
 
   return (
     <div className="space-y-5">
@@ -361,10 +362,7 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
 
   async function saveContacts(updated: EmergencyContact[]) {
     setContactSaving(true);
-    const fd = new FormData();
-    fd.append("emergency_contacts", JSON.stringify(updated));
-    fd.append("_method", "PUT");
-    await apiClient(`/employees/${employeeId}`, { method: "POST", body: fd });
+    await saveEmployeeEmergencyContacts(employeeId, updated);
     await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
     setContactSaving(false);
   }
@@ -384,21 +382,21 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
   // Promotions / transfer history
   const promotionsQ = useQuery({
     queryKey: ["promotions", employeeId],
-    queryFn: () => apiClient<Promotion[]>(`/employees/${employeeId}/promotions`),
+    queryFn: () => getEmployeePromotions(employeeId),
   });
-  const promotions = (promotionsQ.data as Promotion[] | undefined) ?? [];
+  const promotions = promotionsQ.data ?? [];
 
   const [promoModal, setPromoModal] = useState(false);
   const [promoForm, setPromoForm] = useState({ type: "promotion", from_designation: "", to_designation: "", from_department: "", to_department: "", from_salary: "", to_salary: "", effective_date: "", notes: "" });
 
   const promoMutation = useMutation({
-    mutationFn: (data: typeof promoForm) => apiClient(`/employees/${employeeId}/promotions`, { method: "POST", body: JSON.stringify(data) }),
+    mutationFn: (data: typeof promoForm) => createEmployeePromotion(employeeId, data),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); toast.success("Saved", "Promotion record added successfully."); setPromoModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const promoDeleteMutation = useMutation({
-    mutationFn: (id: number) => apiClient(`/employees/${employeeId}/promotions/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => deleteEmployeePromotion(employeeId, id),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["promotions", employeeId] }); toast.success("Deleted", "Promotion record removed."); },
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
@@ -554,7 +552,7 @@ export function EmployeeDetailPage() {
 
   const attendanceQuery = useQuery({
     queryKey: ["attendance", "employee", employeeId],
-    queryFn: () => apiClient<{ data: Array<{ id: number; date: string; check_in?: string | null; check_out?: string | null; status: string }> }>(`/attendance/employee/${employeeId}`),
+    queryFn: () => getEmployeeAttendance(employeeId),
     enabled: tab === "attendance",
   });
 
@@ -566,7 +564,7 @@ export function EmployeeDetailPage() {
 
   const docsQuery = useQuery({
     queryKey: ["employee-documents", employeeId],
-    queryFn: () => apiClient<Array<{ id: number; title: string; type?: string | null; visibility: string; expiry_date?: string | null }>>(`/employee-documents?employee_id=${employeeId}`),
+    queryFn: () => listEmployeeDocuments({ employee_id: employeeId }),
     enabled: tab === "documents",
   });
 
@@ -656,8 +654,7 @@ export function EmployeeDetailPage() {
   }
 
   const initials = (employee.name ?? "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-  type AttRaw = { id: number; date: string; check_in?: string | null; check_out?: string | null; status: string };
-  const attendanceList = (attendanceQuery.data as { data?: AttRaw[] } | undefined)?.data ?? [];
+  const attendanceList = attendanceQuery.data?.data ?? [];
   const presentCount   = attendanceList.filter((a) => a.status === "present").length;
   const lateCount      = attendanceList.filter((a) => a.status === "late").length;
   const absentCount    = attendanceList.filter((a) => a.status === "absent").length;
@@ -797,7 +794,7 @@ export function EmployeeDetailPage() {
           <h3 className="mb-4 text-base font-semibold">Employee Documents</h3>
           {docsQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading documents…</p>}
           <div className="grid gap-3 sm:grid-cols-2">
-            {((docsQuery.data ?? []) as Array<{ id: number; title: string; type?: string | null; visibility: string; expiry_date?: string | null }>).map((doc) => (
+            {(docsQuery.data?.data ?? []).map((doc) => (
               <div key={doc.id} className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-sm font-bold text-[var(--primary)]">
                   {(doc.type ?? "DOC").slice(0, 3).toUpperCase()}
@@ -810,7 +807,7 @@ export function EmployeeDetailPage() {
                 <Link to="/employee-documents" className="ml-auto shrink-0 text-xs text-[var(--primary)] hover:underline">View</Link>
               </div>
             ))}
-            {((docsQuery.data ?? []) as unknown[]).length === 0 && !docsQuery.isLoading && (
+            {(docsQuery.data?.data ?? []).length === 0 && !docsQuery.isLoading && (
               <p className="col-span-2 py-6 text-center text-sm text-[var(--muted)]">No documents uploaded.</p>
             )}
           </div>

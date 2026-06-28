@@ -16,16 +16,13 @@ class BranchController extends Controller
     {
         $this->authorizePermission($request, 'settings:manage_settings');
         $q = Branch::query()->with('company')->withCount('users')->orderBy('name');
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            if ($request->filled('company_id') && (string) $request->input('company_id') !== (string) $companyId) {
-                abort(403, 'You are not authorized to access this branch.');
-            }
+        $this->scopeToCompany($request, $q);
 
-            $q->where('company_id', $companyId);
-        } elseif ($request->filled('company_id')) {
+        // Super admins (no company_id) may optionally filter by a specific company
+        if (!$request->user()?->company_id && $request->filled('company_id')) {
             $q->where('company_id', (string) $request->input('company_id'));
         }
+
         return $this->ok($q->get());
     }
 

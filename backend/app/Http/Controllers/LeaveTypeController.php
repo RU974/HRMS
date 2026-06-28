@@ -8,9 +8,11 @@ use Illuminate\Validation\Rule;
 
 class LeaveTypeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return $this->ok(LeaveType::orderBy('name')->get());
+        $query = LeaveType::query();
+        $this->scopeToCompany($request, $query);
+        return $this->ok($query->orderBy('name')->get());
     }
 
     public function store(Request $request)
@@ -58,15 +60,19 @@ class LeaveTypeController extends Controller
         return $this->ok($leaveType, 'Leave type created successfully', 201);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        return $this->ok(LeaveType::findOrFail($id));
+        $query = LeaveType::query();
+        $this->scopeToCompany($request, $query);
+        return $this->ok($query->findOrFail($id));
     }
 
     public function update(Request $request, $id)
     {
         $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
-        $leaveType = LeaveType::findOrFail($id);
+        $query     = LeaveType::query();
+        $this->scopeToCompany($request, $query);
+        $leaveType = $query->findOrFail($id);
         $validated = $request->validate([
             'name' => [
                 'sometimes', 'string', 'max:120',
@@ -96,7 +102,9 @@ class LeaveTypeController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'attendance:edit|leaves:manage_settings');
-        LeaveType::findOrFail($id)->delete();
+        $query = LeaveType::query();
+        $this->scopeToCompany($request, $query);
+        $query->findOrFail($id)->delete();
         return $this->ok(null, 'Leave type deleted successfully');
     }
 }

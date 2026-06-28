@@ -15,6 +15,7 @@ class DepartmentController extends Controller
         $this->authorizeAnyPermission($request, ['settings:manage_settings', 'employees:edit', 'recruitment:view']);
 
         $query = Department::query()->withCount('employees')->orderBy('name');
+        $this->scopeToCompany($request, $query);
         if ($request->boolean('include_archived')) {
             $query->withTrashed();
         }
@@ -22,11 +23,13 @@ class DepartmentController extends Controller
         return $this->ok($query->get());
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $this->authorizeAnyPermission(request(), ['settings:manage_settings', 'employees:edit', 'recruitment:view']);
+        $this->authorizeAnyPermission($request, ['settings:manage_settings', 'employees:edit', 'recruitment:view']);
 
-        return $this->ok(Department::with('employees')->findOrFail($id));
+        $query = Department::query()->with('employees');
+        $this->scopeToCompany($request, $query);
+        return $this->ok($query->findOrFail($id));
     }
 
     public function store(Request $request)
@@ -53,8 +56,10 @@ class DepartmentController extends Controller
     {
         $this->authorizePermission($request, 'settings:manage_settings');
 
-        $companyId = $request->user()->company_id;
-        $department = Department::findOrFail($id);
+        $companyId  = $request->user()->company_id;
+        $query      = Department::query();
+        $this->scopeToCompany($request, $query);
+        $department = $query->findOrFail($id);
 
         $validated = $request->validate([
             'name' => [
@@ -74,14 +79,18 @@ class DepartmentController extends Controller
     public function destroy(Request $request, $id)
     {
         $this->authorizePermission($request, 'settings:manage_settings');
-        Department::findOrFail($id)->delete();
+        $query = Department::query();
+        $this->scopeToCompany($request, $query);
+        $query->findOrFail($id)->delete();
         return $this->ok(message: 'Department archived successfully');
     }
 
     public function restore(Request $request, $id)
     {
         $this->authorizePermission($request, 'settings:manage_settings');
-        $department = Department::withTrashed()->findOrFail($id);
+        $query      = Department::query();
+        $this->scopeToCompany($request, $query);
+        $department = $query->withTrashed()->findOrFail($id);
         $department->restore();
         return $this->ok($department, 'Department restored successfully');
     }
@@ -115,7 +124,9 @@ class DepartmentController extends Controller
     {
         $this->authorizePermission($request, 'settings:manage_settings');
 
-        $department = Department::withTrashed()->findOrFail($id);
+        $query      = Department::query();
+        $this->scopeToCompany($request, $query);
+        $department = $query->withTrashed()->findOrFail($id);
         $activeEmployees = Employee::where('department_id', $department->id)->count();
 
         if ($activeEmployees > 0) {

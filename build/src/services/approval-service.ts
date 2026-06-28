@@ -156,3 +156,15 @@ export const createDelegation = (payload: CreateDelegationPayload) =>
 
 export const deleteDelegation = (id: number) =>
   apiClient<null>(`/approval-delegations/${id}`, { method: "DELETE" });
+
+export interface PendingApprovalItem {
+  id: number;
+  title: string;
+  type: string;
+  requester?: { name?: string } | null;
+  created_at: string;
+}
+
+export function listPendingApprovals(limit = 6) {
+  return apiClient<{ data: PendingApprovalItem[] }>(`/approvals?status=pending&per_page=${limit}`);
+}

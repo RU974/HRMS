@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,6 +17,8 @@ class InventoryItemController extends Controller
             ->with('category:id,name')
             ->withCount('activeAssignments')
             ->orderBy('name');
+
+        $this->scopeToCompany($request, $query);
 
         if ($request->boolean('include_archived')) {
             $query->withTrashed();
@@ -32,10 +35,12 @@ class InventoryItemController extends Controller
     {
         $this->authorizeAnyPermission($request, ['inventory:view', 'inventory:manage_settings']);
 
-        $item = InventoryItem::with([
+        $query = InventoryItem::query()->with([
             'category:id,name',
             'assignments' => fn ($q) => $q->with('employee:id,name')->orderByDesc('assigned_date'),
-        ])->findOrFail($id);
+        ]);
+        $this->scopeToCompany($request, $query);
+        $item = $query->findOrFail($id);
 
         return $this->ok($item);
     }
@@ -48,7 +53,7 @@ class InventoryItemController extends Controller
 
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', 'exists:inventory_categories,id'],
+            'category_id' => ['nullable', Rule::exists('inventory_categories', 'id')->where('company_id', $companyId)],
             'sku'         => [
                 'nullable', 'string', 'max:100',
                 Rule::unique('inventory_items', 'sku')->where('company_id', $companyId)->whereNull('deleted_at'),
@@ -71,11 +76,13 @@ class InventoryItemController extends Controller
         $this->authorizePermission($request, 'inventory:edit');
 
         $companyId = $request->user()->company_id;
-        $item = InventoryItem::findOrFail($id);
+        $query     = InventoryItem::query();
+        $this->scopeToCompany($request, $query);
+        $item      = $query->findOrFail($id);
 
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', 'exists:inventory_categories,id'],
+            'category_id' => ['nullable', Rule::exists('inventory_categories', 'id')->where('company_id', $companyId)],
             'sku'         => [
                 'nullable', 'string', 'max:100',
                 Rule::unique('inventory_items', 'sku')->ignore($id)->where('company_id', $companyId)->whereNull('deleted_at'),
@@ -100,7 +107,9 @@ class InventoryItemController extends Controller
     {
         $this->authorizePermission($request, 'inventory:delete');
 
-        $item = InventoryItem::findOrFail($id);
+        $query = InventoryItem::query();
+        $this->scopeToCompany($request, $query);
+        $item  = $query->findOrFail($id);
 
         if ($item->activeAssignments()->exists()) {
             return $this->fail('Cannot archive item with active assignments. Return all assigned items first.', 422);
@@ -115,7 +124,9 @@ class InventoryItemController extends Controller
     {
         $this->authorizePermission($request, 'inventory:manage_settings');
 
-        $item = InventoryItem::withTrashed()->findOrFail($id);
+        $query = InventoryItem::query();
+        $this->scopeToCompany($request, $query);
+        $item  = $query->withTrashed()->findOrFail($id);
         $item->restore();
 
         return $this->ok($item, 'Item restored successfully');

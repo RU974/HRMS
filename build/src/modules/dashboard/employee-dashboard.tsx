@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getWorkspaceDashboard } from "@/services/dashboard-service";
 import { isSuperAdminRole } from "@/config/rbac";
 import { useAuthStore } from "@/store/auth-store";
-import { apiClient } from "@/services/api-client";
+import { checkInAttendance, checkOutAttendance } from "@/services/hr-management-service";
 import {
   SummaryCard, ChartCard, ActivityFeed,
   AttendanceWidget, AnnouncementWidget, NotificationWidget, TableWidget,
@@ -49,11 +49,11 @@ function CheckInCard({ today, employeeId }: {
   const qc = useQueryClient();
 
   const checkIn = useMutation({
-    mutationFn: () => apiClient("/attendance/check-in", { method: "POST", body: JSON.stringify({ employee_id: employeeId }) }),
+    mutationFn: () => checkInAttendance(employeeId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard", "workspace"] }),
   });
   const checkOut = useMutation({
-    mutationFn: () => apiClient("/attendance/check-out", { method: "POST", body: JSON.stringify({ employee_id: employeeId }) }),
+    mutationFn: () => checkOutAttendance(employeeId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dashboard", "workspace"] }),
   });
 

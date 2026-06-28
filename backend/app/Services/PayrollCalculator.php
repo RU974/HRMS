@@ -84,7 +84,7 @@ class PayrollCalculator
         $taxableAmount = $baseSalary + $taxableBonuses + $overtimePay;
         $tax = $this->taxCalculator->calculate($taxableAmount);
 
-        $net = round($gross - $deductionsTotal - $tax, 2);
+        $net = round(max(0, $gross - $deductionsTotal - $tax), 2);
 
         return [
             'base_salary' => round($baseSalary, 2),

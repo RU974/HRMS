@@ -6,21 +6,23 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
 import { FormInput } from "@/components/forms/form-input";
-import { apiClient, API_BASE_URL } from "@/services/api-client";
 import { useAuthStore } from "@/store/auth-store";
-import type { Employee } from "@/services/employee-service";
+import {
+  type Employee,
+  type EmployeeImportResult,
+  listEmployeesPaginated,
+  exportEmployeesCsv,
+  importEmployeesCsv,
+} from "@/services/employee-service";
 
 const CSV_TEMPLATE_HEADER = "name,email,phone,cnic,gender,date_of_birth,department,designation,joining_date,employment_type,basic_salary,allowances,address\n";
 const CSV_TEMPLATE_ROW    = "John Doe,john@example.com,03001234567,12345-6789012-3,male,1990-01-15,Engineering,Software Engineer,2024-01-01,full_time,80000,20000,123 Main St\n";
 
-interface ImportResult { imported: number; skipped: number; errors: string[] }
-
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
-  const token = useAuthStore((s) => s.token);
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [result, setResult] = useState<EmployeeImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function downloadTemplate() {
@@ -39,16 +41,8 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
     setError(null);
     setResult(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(`${API_BASE_URL}/employees/import`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-        body: fd,
-      });
-      const json = (await res.json()) as { success?: boolean; data?: ImportResult; message?: string };
-      if (!res.ok) throw new Error(json.message ?? "Import failed");
-      setResult(json.data ?? null);
+      const data = await importEmployeesCsv(file);
+      setResult(data);
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
@@ -99,19 +93,6 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   );
 }
 
-interface PaginatedResponse<T> {
-  data: T[];
-  current_page: number;
-  last_page: number;
-  total: number;
-  per_page: number;
-}
-
-function fetchEmployees(page: number, search: string) {
-  const params = new URLSearchParams({ page: String(page), per_page: "15" });
-  if (search.trim()) params.set("search", search.trim());
-  return apiClient<PaginatedResponse<Employee>>(`/employees?${params.toString()}`);
-}
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -128,7 +109,6 @@ function StatusBadge({ status }: { status: string }) {
 
 export function EmployeesPage() {
   const navigate = useNavigate();
-  const token = useAuthStore((s) => s.token);
   const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
   const queryClient = useQueryClient();
 
@@ -140,7 +120,7 @@ export function EmployeesPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["employees", page, search],
-    queryFn: () => fetchEmployees(page, search),
+    queryFn: () => listEmployeesPaginated(page, search),
     retry: false,
     placeholderData: (prev) => prev,
   });
@@ -160,17 +140,7 @@ export function EmployeesPage() {
   async function handleExport() {
     setExporting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/employees/export/csv`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "text/csv" },
-      });
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `employees-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await exportEmployeesCsv();
     } catch {
       alert("Export failed. Please try again.");
     } finally {

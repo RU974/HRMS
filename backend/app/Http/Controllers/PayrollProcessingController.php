@@ -15,9 +15,8 @@ class PayrollProcessingController extends Controller
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
 
-        $query = PayrollProcessing::query()
-            ->forCompany($this->companyId($request))
-            ->latest();
+        $query = PayrollProcessing::query()->latest();
+        $this->scopeToCompany($request, $query);
 
         if ($request->filled('month')) {
             $query->where('month', (int) $request->query('month'));
@@ -47,8 +46,7 @@ class PayrollProcessingController extends Controller
             'notes'        => 'nullable|string|max:1000',
         ]);
 
-        // Stamp with the authenticated user's company
-        $validated['company_id'] = $this->companyId($request);
+        $validated['company_id'] = $request->user()?->company_id;
 
         try {
             $item = PayrollProcessing::create($validated);
@@ -76,8 +74,9 @@ class PayrollProcessingController extends Controller
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
 
-        $item = PayrollProcessing::findOrFail($id);
-        $this->assertSameCompany($request, $item);
+        $query = PayrollProcessing::query();
+        $this->scopeToCompany($request, $query);
+        $item  = $query->findOrFail($id);
 
         return $this->ok($item);
     }
@@ -89,8 +88,9 @@ class PayrollProcessingController extends Controller
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
 
-        $item = PayrollProcessing::findOrFail($id);
-        $this->assertSameCompany($request, $item);
+        $query = PayrollProcessing::query();
+        $this->scopeToCompany($request, $query);
+        $item  = $query->findOrFail($id);
 
         $validated = $request->validate([
             'month'        => 'sometimes|integer|min:1|max:12',
@@ -126,8 +126,9 @@ class PayrollProcessingController extends Controller
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
 
-        $item = PayrollProcessing::findOrFail($id);
-        $this->assertSameCompany($request, $item);
+        $query = PayrollProcessing::query();
+        $this->scopeToCompany($request, $query);
+        $item  = $query->findOrFail($id);
 
         $item->delete();
 
@@ -137,34 +138,6 @@ class PayrollProcessingController extends Controller
     // ──────────────────────────────────────────────────────────────
     //  Private helpers
     // ──────────────────────────────────────────────────────────────
-
-    /**
-     * Returns the authenticated user's company_id, or null for super-admins
-     * who have no company assignment (they can see everything).
-     */
-    private function companyId(Request $request): ?string
-    {
-        return $request->user()?->company_id
-            ? (string) $request->user()->company_id
-            : null;
-    }
-
-    /**
-     * Abort 403 if the record belongs to a different company than the requester.
-     * Super-admins (no company_id) are always allowed through.
-     */
-    private function assertSameCompany(Request $request, PayrollProcessing $item): void
-    {
-        $companyId = $this->companyId($request);
-
-        if ($companyId === null) {
-            return; // super-admin — unrestricted
-        }
-
-        if ((string) ($item->company_id ?? '') !== $companyId) {
-            abort(403, 'You are not authorized to access this payroll processing record.');
-        }
-    }
 
     private function isUniqueError(QueryException $e): bool
     {

@@ -155,6 +155,54 @@ export const checkOutAttendance = (employeeId: number) =>
     body: JSON.stringify({ employee_id: employeeId }),
   });
 
+export interface TeamDailyAttendanceRow {
+  employee_id: number;
+  name: string;
+  department?: string | null;
+  designation?: string | null;
+  attendance?: AttendanceItem | null;
+  monthly_absences: number;
+}
+
+export function listAttendancePaginated(page: number, employeeId?: number) {
+  const base = `/attendance?per_page=20&page=${page}`;
+  return apiClient<PaginatedResponse<AttendanceItem>>(employeeId ? `${base}&employee_id=${employeeId}` : base);
+}
+
+export function getEmployeeAttendanceCalendar(employeeId: number, month: number, year: number) {
+  return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}?month=${month}&year=${year}&per_page=31`);
+}
+
+export function getEmployeeAttendance(employeeId: number) {
+  return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}`);
+}
+
+export function getTeamDailyAttendance(date: string) {
+  return apiClient<TeamDailyAttendanceRow[]>(`/attendance/team-daily?date=${date}`);
+}
+
+export function getAttendanceMonthlyStats(employeeId: number, month: number, year: number) {
+  return apiClient<{ present: number; absent: number; late: number; leave: number; total: number }>(
+    `/attendance/monthly-stats/${employeeId}/${month}/${year}`
+  );
+}
+
+export function requestAttendanceCorrection(id: number, note: string) {
+  return apiClient(`/attendance/${id}/request-correction`, {
+    method: "POST",
+    body: JSON.stringify({ correction_request_notes: note }),
+  });
+}
+
+export function getAttendanceByFilter(filters: { month?: number; year?: number; status?: string; per_page?: number }) {
+  const params = new URLSearchParams();
+  if (filters.month !== undefined) params.set("month", String(filters.month));
+  if (filters.year !== undefined) params.set("year", String(filters.year));
+  if (filters.status) params.set("status", filters.status);
+  params.set("per_page", String(filters.per_page ?? 25));
+  return apiClient<{ data: AttendanceItem[] }>(`/attendance?${params.toString()}`);
+}
+
 export const listLeaves = (filters: { employee_id?: number; status?: LeaveItem["status"] } = {}) => {
   const query = new URLSearchParams({ per_page: "50" });
 

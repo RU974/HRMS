@@ -244,7 +244,8 @@ class LeaveController extends Controller
         }
 
         $employee     = Employee::findOrFail($employeeId);
-        $leaveTypes   = LeaveType::where('is_active', true)->orderBy('name')->get();
+        $companyId    = $request->user()?->company_id ?? $employee->company_id;
+        $leaveTypes   = LeaveType::where('is_active', true)->where('company_id', $companyId)->orderBy('name')->get();
         $policyService = new LeavePolicyService();
         $today        = Carbon::today();
 
@@ -275,7 +276,8 @@ class LeaveController extends Controller
         }
 
         $employee      = Employee::findOrFail($employeeId);
-        $leaveTypes    = LeaveType::where('is_active', true)->where('encashable', true)->orderBy('name')->get();
+        $companyId     = $request->user()?->company_id ?? $employee->company_id;
+        $leaveTypes    = LeaveType::where('is_active', true)->where('encashable', true)->where('company_id', $companyId)->orderBy('name')->get();
         $policyService = new LeavePolicyService();
         $today         = Carbon::today();
         $dailyRate     = $employee->basic_salary ? round((float) $employee->basic_salary / 26, 2) : 0;

@@ -94,11 +94,9 @@ class DashboardController extends Controller
             ->latest('issue_date')
             ->first();
 
-        $upcomingHolidays = Holiday::query()
-            ->whereDate('holiday_date', '>=', $today)
-            ->orderBy('holiday_date')
-            ->limit(5)
-            ->get()
+        $holidayQuery = Holiday::query()->whereDate('holiday_date', '>=', $today)->orderBy('holiday_date')->limit(5);
+        $this->scopeToCompany($request, $holidayQuery);
+        $upcomingHolidays = $holidayQuery->get()
             ->map(fn (Holiday $holiday) => [
                 'id' => $holiday->id,
                 'name' => $holiday->name,
@@ -107,19 +105,9 @@ class DashboardController extends Controller
             ])
             ->values();
 
-        $announcements = Announcement::query()
-            ->where('is_published', true)
-            ->when($user->company_id, function ($query) use ($user): void {
-                $query->where(function ($builder) use ($user): void {
-                    $builder->where('company_id', $user->company_id)
-                        ->orWhere(function ($legacyQuery) use ($user): void {
-                            $legacyQuery->whereNull('company_id')
-                                ->whereHas('creator', function ($creatorQuery) use ($user): void {
-                                    $creatorQuery->where('company_id', $user->company_id);
-                                });
-                        });
-                });
-            })
+        $announcementQuery = Announcement::query()->where('is_published', true);
+        $this->scopeToCompany($request, $announcementQuery);
+        $announcements = $announcementQuery
             ->latest('published_at')
             ->get()
             ->filter(fn (Announcement $announcement) => $this->announcementVisibleToUser($announcement, $user))
@@ -220,23 +208,15 @@ class DashboardController extends Controller
         $year = $validated['year'] ?? $today->year;
         $companyId = $request->user()?->company_id;
 
-        $employeeQuery = Employee::query();
+        $employeeQuery  = Employee::query();
         $attendanceQuery = Attendance::query();
-        $leaveQuery = Leave::query();
-        $payrollQuery = Payroll::query();
+        $leaveQuery     = Leave::query();
+        $payrollQuery   = Payroll::query();
 
-        if ($companyId) {
-            $employeeQuery->where('company_id', $companyId);
-            $attendanceQuery->whereHas('employee.user', function ($query) use ($companyId): void {
-                $query->where('company_id', $companyId);
-            });
-            $leaveQuery->whereHas('employee.user', function ($query) use ($companyId): void {
-                $query->where('company_id', $companyId);
-            });
-            $payrollQuery->whereHas('employee.user', function ($query) use ($companyId): void {
-                $query->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $employeeQuery);
+        $this->scopeToCompany($request, $attendanceQuery, 'employee.user');
+        $this->scopeToCompany($request, $leaveQuery, 'employee.user');
+        $this->scopeToCompany($request, $payrollQuery, 'employee.user');
 
         $this->applyManagedEmployeeScope($request, $employeeQuery);
         $this->applyManagedEmployeeScope($request, $attendanceQuery, 'employee');
@@ -269,15 +249,14 @@ class DashboardController extends Controller
     {
         $today = Carbon::today();
         $last7Start = $today->copy()->subDays(6);
-        $companyId = $request->user()?->company_id;
+        $user = $request->user();
+        $companyId = $user?->company_id;
+        if (!$companyId && $user && !$user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
+            abort(403, 'Your account is not associated with a company.');
+        }
 
-        $attendanceRows = Attendance::select('date', DB::raw('COUNT(*) as total'), DB::raw("SUM(CASE WHEN status IN ('present', 'late') THEN 1 ELSE 0 END) as present_count"))
-            ->when($companyId, function ($query) use ($companyId): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                    $userQuery->where('company_id', $companyId);
-                });
-            });
-
+        $attendanceRows = Attendance::select('date', DB::raw('COUNT(*) as total'), DB::raw("SUM(CASE WHEN status IN ('present', 'late') THEN 1 ELSE 0 END) as present_count"));
+        $this->scopeToCompany($request, $attendanceRows, 'employee.user');
         $this->applyManagedEmployeeScope($request, $attendanceRows, 'employee');
 
         $attendanceRows = $attendanceRows
@@ -319,12 +298,9 @@ class DashboardController extends Controller
             ])
             ->values();
 
-        $leaveBreakdown = Leave::query()
-            ->when($companyId, function ($query) use ($companyId): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                    $userQuery->where('company_id', $companyId);
-                });
-            })
+        $leaveQuery = Leave::query();
+        $this->scopeToCompany($request, $leaveQuery, 'employee.user');
+        $leaveBreakdown = $leaveQuery
             ->select('status', DB::raw('COUNT(*) as total'))
             ->groupBy('status')
             ->get()
@@ -334,13 +310,9 @@ class DashboardController extends Controller
             ])
             ->values();
 
-        $recentEmployees = Employee::query()
-            ->with('department:id,name')
-            ->when($companyId, function ($query) use ($companyId): void {
-                $query->whereHas('user', function ($userQuery) use ($companyId): void {
-                    $userQuery->where('company_id', $companyId);
-                });
-            })
+        $recentEmployeesQuery = Employee::query()->with('department:id,name');
+        $this->scopeToCompany($request, $recentEmployeesQuery, 'user');
+        $recentEmployees = $recentEmployeesQuery
             ->orderByDesc('created_at')
             ->limit(6)
             ->get(['id', 'employee_number', 'name', 'status', 'department_id', 'created_at'])
@@ -356,7 +328,7 @@ class DashboardController extends Controller
 
         $monthlyPayrollTrend = $this->getMonthlyPayrollTrend($companyId, $request);
         $headcountTrend      = $this->getHeadcountTrend($companyId, $request);
-        $performanceSummary  = $this->getPerformanceSummary($companyId);
+        $performanceSummary  = $this->getPerformanceSummary($request);
         $attritionRisk       = $this->getAttritionRisk($companyId);
 
         return $this->ok([
@@ -439,10 +411,9 @@ class DashboardController extends Controller
             $year  = $date->year;
 
             $query = Payroll::query()
-                ->when($companyId, fn ($q) => $q->whereHas('employee.user', fn ($uq) => $uq->where('company_id', $companyId)))
                 ->whereMonth('payment_date', $month)
                 ->whereYear('payment_date', $year);
-
+            $this->scopeToCompany($request, $query, 'employee.user');
             $this->applyManagedEmployeeScope($request, $query, 'employee');
 
             return [
@@ -461,9 +432,8 @@ class DashboardController extends Controller
 
             $query = Employee::query()
                 ->where('status', 'active')
-                ->where('created_at', '<=', $endOfMonth)
-                ->when($companyId, fn ($q) => $q->where('company_id', $companyId));
-
+                ->where('created_at', '<=', $endOfMonth);
+            $this->scopeToCompany($request, $query);
             $this->applyManagedEmployeeScope($request, $query);
 
             return [
@@ -473,32 +443,30 @@ class DashboardController extends Controller
         })->values()->all();
     }
 
-    private function getPerformanceSummary(?string $companyId): array
+    private function getPerformanceSummary(Request $request): array
     {
-        $companyScope = function ($query) use ($companyId): void {
-            if ($companyId) {
-                $query->whereHas('employee.user', fn ($q) => $q->where('company_id', $companyId));
-            }
-        };
+        $goalBase = PerformanceGoal::query();
+        $this->scopeToCompany($request, $goalBase, 'employee.user');
+        $avgProgress    = round((float) (clone $goalBase)->avg('progress') ?? 0);
+        $openGoals      = (clone $goalBase)->whereNotIn('status', ['completed'])->count();
+        $completedGoals = (clone $goalBase)->where('status', 'completed')->count();
 
-        $goalBase        = PerformanceGoal::query()->tap($companyScope);
-        $avgProgress     = round((float) (clone $goalBase)->avg('progress') ?? 0);
-        $openGoals       = (clone $goalBase)->whereNotIn('status', ['completed'])->count();
-        $completedGoals  = (clone $goalBase)->where('status', 'completed')->count();
-
-        $kpiBase            = PerformanceKpi::query()->tap($companyScope);
+        $kpiBase = PerformanceKpi::query();
+        $this->scopeToCompany($request, $kpiBase, 'employee.user');
         $totalKpis          = (clone $kpiBase)->count();
         $achievedKpis       = (clone $kpiBase)->whereRaw('current_value >= target_value')->count();
         $kpiAchievementRate = $totalKpis > 0 ? round(($achievedKpis / $totalKpis) * 100) : 0;
 
-        $openAppraisals = PerformanceAppraisal::query()->tap($companyScope)->count();
+        $appraisalBase  = PerformanceAppraisal::query();
+        $this->scopeToCompany($request, $appraisalBase, 'employee.user');
+        $openAppraisals = $appraisalBase->count();
 
         return [
-            'avg_goal_progress'   => $avgProgress,
-            'open_goals'          => $openGoals,
-            'completed_goals'     => $completedGoals,
+            'avg_goal_progress'    => $avgProgress,
+            'open_goals'           => $openGoals,
+            'completed_goals'      => $completedGoals,
             'kpi_achievement_rate' => $kpiAchievementRate,
-            'open_appraisals'     => $openAppraisals,
+            'open_appraisals'      => $openAppraisals,
         ];
     }
 

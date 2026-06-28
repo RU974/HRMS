@@ -13,12 +13,8 @@ class PerformanceMetaController extends Controller
     public function trend(Request $request, int $employeeId)
     {
         $this->authorizePermission($request, 'performance:view');
-        $companyId = $request->user()?->company_id;
-
         $employeeQuery = Employee::query()->whereKey($employeeId);
-        if ($companyId) {
-            $employeeQuery->where('company_id', $companyId);
-        }
+        $this->scopeToCompany($request, $employeeQuery);
         if (!$employeeQuery->exists()) {
             abort(403, 'You are not authorized to access this employee.');
         }

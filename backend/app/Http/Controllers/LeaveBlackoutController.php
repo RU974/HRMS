@@ -10,12 +10,9 @@ class LeaveBlackoutController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'leaves:view|leaves:manage_settings');
-        $companyId = $request->user()?->company_id;
 
         $query = LeaveBlackout::with('leaveType:id,name')->orderBy('start_date');
-        if ($companyId) {
-            $query->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId));
-        }
+        $this->scopeToCompanyOrGlobal($request, $query);
 
         return $this->ok($query->get());
     }

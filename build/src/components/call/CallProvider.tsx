@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Call, sendHeartbeat } from "@/services/call-service";
+import { Call, sendHeartbeat, getIncomingCalls } from "@/services/call-service";
 import { useAuthStore } from "@/store/auth-store";
 import { startRingtone, stopRingtone } from "@/lib/ringtone";
 import { echo } from "@/lib/echo";
@@ -18,6 +18,9 @@ export function useCallContext() {
   return useContext(CallContext);
 }
 
+// How often the fallback poll runs (ms). Only fires when WebSocket is down.
+const POLL_INTERVAL_MS = 4_000;
+
 export function CallProvider({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuthStore();
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
@@ -29,6 +32,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const activeCallRef = useRef<Call | null>(null);
   activeCallRef.current = activeCall;
 
+  // Track whether WebSocket delivered at least one event — if yes, skip polling.
+  // This avoids double-triggering when Reverb IS working.
+  const wsAliveRef = useRef(false);
+
   // ── Heartbeat: keep last_seen_at fresh every 30 s ──────────────────────────
   useEffect(() => {
     if (!token || !user) return;
@@ -38,7 +45,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [token, user]);
 
-  // ── Real-time call events via WebSocket (replaces 3 s polling) ─────────────
+  // ── Shared helper: surface a new incoming call ──────────────────────────────
+  const handleIncomingCall = useCallback((call: Call) => {
+    if (activeCallRef.current) return; // never interrupt an ongoing call
+    if (seenCallIds.current.has(call.id)) return;
+    seenCallIds.current.add(call.id);
+    setIncomingCall(call);
+    if (!incomingRingRef.current) {
+      incomingRingRef.current = true;
+      startRingtone("incoming").catch(() => {});
+    }
+  }, []);
+
+  // ── Real-time call events via WebSocket ────────────────────────────────────
   useEffect(() => {
     if (!token || !user) return;
 
@@ -47,19 +66,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Incoming call from another user
     channel.listen(".CallInitiated", (data: { call: Call }) => {
-      if (activeCallRef.current) return; // never interrupt an ongoing call
-      const { call } = data;
-      if (seenCallIds.current.has(call.id)) return;
-      seenCallIds.current.add(call.id);
-      setIncomingCall(call);
-      if (!incomingRingRef.current) {
-        incomingRingRef.current = true;
-        startRingtone("incoming").catch(() => {});
-      }
+      wsAliveRef.current = true; // WebSocket is working
+      handleIncomingCall(data.call);
     });
 
     // Caller cancelled / all participants rejected before we answered — dismiss modal
     channel.listen(".CallEnded", (data: { call_id: number }) => {
+      wsAliveRef.current = true;
       setIncomingCall((prev) => {
         if (prev?.id === data.call_id) {
           stopRingtone();
@@ -80,7 +93,37 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
   // user.id and token are the only values that should trigger re-subscription
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, token]);
+  }, [user?.id, token, handleIncomingCall]);
+
+  // ── Polling fallback (fires when WebSocket is unavailable) ─────────────────
+  // Polls /calls/incoming every 4 s. If WebSocket already delivered the event
+  // (wsAliveRef.current === true), incoming calls from WS are already in
+  // seenCallIds so the dedup guard in handleIncomingCall silently skips them.
+  // This means the poll is harmless when WS works and rescues when WS is down.
+  useEffect(() => {
+    if (!token || !user) return;
+
+    const poll = async () => {
+      // Skip poll if user is already in an active call
+      if (activeCallRef.current) return;
+      try {
+        const calls = await getIncomingCalls();
+        for (const call of calls) {
+          handleIncomingCall(call);
+        }
+      } catch {
+        // Network error — silently ignore, next tick will retry
+      }
+    };
+
+    // Run once immediately on mount to catch any call that arrived before
+    // the WebSocket subscription was established (race condition on page load).
+    poll();
+
+    const id = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, user?.id, handleIncomingCall]);
 
   const startCall = useCallback((call: Call) => {
     stopRingtone();

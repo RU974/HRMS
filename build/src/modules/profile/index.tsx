@@ -8,8 +8,8 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { useAuthStore, getCurrentPermissionKeys } from "@/store/auth-store";
 import { getUserRoleKeys, isSuperAdminRole } from "@/config/rbac";
-import { me } from "@/services/auth-service";
-import { apiClient } from "@/services/api-client";
+import { me, changePassword } from "@/services/auth-service";
+import { updateEmployee } from "@/services/employee-service";
 import { toast } from "@/components/notifications/toast";
 
 const inputClass =
@@ -98,10 +98,7 @@ export function ProfilePage() {
       if (profileForm.gender) fd.append("gender", profileForm.gender);
       if (photoFile) fd.append("profile_image", photoFile);
       fd.append("_method", "PUT");
-      return apiClient<typeof user>(`/employees/${employeeId}`, {
-        method: "POST",
-        body: fd,
-      });
+      return updateEmployee(employeeId, fd);
     },
     onSuccess: async () => {
       const fresh = await me();
@@ -115,11 +112,7 @@ export function ProfilePage() {
   });
 
   const pwMutation = useMutation({
-    mutationFn: () =>
-      apiClient("/auth/change-password", {
-        method: "POST",
-        body: JSON.stringify(pwForm),
-      }),
+    mutationFn: () => changePassword(pwForm),
     onSuccess: () => {
       setPwForm({ current_password: "", password: "", password_confirmation: "" });
       toast.success("Password changed", "Your password has been updated successfully.");

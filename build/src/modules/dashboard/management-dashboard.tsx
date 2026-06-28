@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
 import { useCurrencyStore } from "@/store/currency-store";
 import { getDashboardInsights, getDashboardSummary } from "@/services/dashboard-service";
-import { apiClient } from "@/services/api-client";
+import { listPendingApprovals, type PendingApprovalItem } from "@/services/approval-service";
 import { SummaryCard, ChartCard, TableWidget } from "./dashboard-widgets";
 import {
   Users, Clock, CalendarX, Wallet, TrendingUp,
@@ -13,22 +13,7 @@ import {
   AlertCircle, TrendingDown, Activity, Award,
 } from "lucide-react";
 import { TicketStatsWidget } from "@/modules/tickets/ticket-stats-widget";
-
-// ─── Currency handled globally via useCurrencyStore ──────────────────────────
-
-// ─── Chart.js loader ─────────────────────────────────────────────────────────
-declare global { interface Window { Chart: any; } }
-
-function useChartJs(cb: () => void, deps: unknown[]) {
-  useEffect(() => {
-    if (window.Chart) { cb(); return; }
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    s.onload = cb;
-    document.head.appendChild(s);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-}
+import { useChartJs } from "./use-chart-js";
 
 // ─── Line chart ──────────────────────────────────────────────────────────────
 function AttendanceTrendChart({ points }: { points: Array<{ label: string; rate: number }> }) {
@@ -274,19 +259,13 @@ function AttritionRiskWidget({ employees }: { employees: import("@/services/dash
 }
 
 // ─── Pending approvals ────────────────────────────────────────────────────────
-interface PendingApproval {
-  id: number; title: string; type: string;
-  requester?: { name?: string } | null;
-  created_at: string;
-}
-
 function PendingApprovalsWidget() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-pending-approvals"],
-    queryFn: () => apiClient<{ data: PendingApproval[] }>("/approvals?status=pending&per_page=6"),
+    queryFn: () => listPendingApprovals(6),
     retry: false,
   });
-  const items = (data as { data?: PendingApproval[] } | undefined)?.data ?? [];
+  const items = (data as { data?: PendingApprovalItem[] } | undefined)?.data ?? [];
 
   return (
     <ChartCard

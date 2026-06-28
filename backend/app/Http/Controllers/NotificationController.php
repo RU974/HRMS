@@ -6,7 +6,6 @@ use App\Models\NotificationItem;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class NotificationController extends Controller
@@ -23,7 +22,7 @@ class NotificationController extends Controller
 
             if ($this->canViewNotifications($user)) {
                 if ($user->company_id) {
-                    if ($this->supportsCompanyScope()) {
+                    if ($this->tableHasCompanyScope('notifications')) {
                         $builder->orWhere('company_id', $user->company_id);
                     }
 
@@ -95,7 +94,7 @@ class NotificationController extends Controller
             'created_by' => $user?->id,
         ];
 
-        if ($this->supportsCompanyScope()) {
+        if ($this->tableHasCompanyScope('notifications')) {
             $payload['company_id'] = $targetUser?->company_id ?? $user?->company_id;
         }
 
@@ -189,7 +188,7 @@ class NotificationController extends Controller
             'is_read' => false,
             'user_id' => $recipient->id,
             'created_by' => $creator?->id,
-            'company_id' => $this->supportsCompanyScope() ? $recipient->company_id : null,
+            'company_id' => $this->tableHasCompanyScope('notifications') ? $recipient->company_id : null,
             'created_at' => $now,
             'updated_at' => $now,
         ])->all();
@@ -213,8 +212,4 @@ class NotificationController extends Controller
         return trim(preg_replace('/\s+/u', ' ', strip_tags($query)) ?? $query);
     }
 
-    private function supportsCompanyScope(): bool
-    {
-        return Schema::hasColumn('notifications', 'company_id');
-    }
 }

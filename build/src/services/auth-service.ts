@@ -62,3 +62,7 @@ export function resetPassword(payload: ResetPasswordPayload) {
     })
   });
 }
+
+export function changePassword(payload: { current_password: string; password: string; password_confirmation: string }) {
+  return apiClient("/auth/change-password", { method: "POST", body: JSON.stringify(payload) });
+}

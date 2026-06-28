@@ -15,10 +15,9 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'users:view');
 
-        $users = \App\Models\User::with(['roles.permissions', 'permissions', 'company', 'branch'])
-            ->when($request->user()?->company_id, fn ($q) => $q->where('company_id', $request->user()->company_id))
-            ->orderBy('name')
-            ->get();
+        $query = \App\Models\User::query()->with(['roles.permissions', 'permissions', 'company', 'branch'])->orderBy('name');
+        $this->scopeToCompany($request, $query);
+        $users = $query->get();
 
         return $this->ok($users);
     }
@@ -62,12 +61,9 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'users:view');
 
-        $user = \App\Models\User::with(['roles.permissions', 'permissions', 'company', 'branch'])
-            ->findOrFail($id);
-
-        if ($request->user()?->company_id && (string) $user->company_id !== (string) $request->user()->company_id) {
-            abort(403, 'You are not authorized to view this user.');
-        }
+        $query = \App\Models\User::query()->with(['roles.permissions', 'permissions', 'company', 'branch']);
+        $this->scopeToCompany($request, $query);
+        $user  = $query->findOrFail($id);
 
         return $this->ok($user);
     }
@@ -76,11 +72,9 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'users:edit');
 
-        $user = \App\Models\User::findOrFail($id);
-
-        if ($request->user()?->company_id && (string) $user->company_id !== (string) $request->user()->company_id) {
-            abort(403, 'You are not authorized to update this user.');
-        }
+        $query = \App\Models\User::query();
+        $this->scopeToCompany($request, $query);
+        $user  = $query->findOrFail($id);
 
         $validated = $request->validate([
             'name'       => 'sometimes|required|string|max:255',
@@ -103,11 +97,9 @@ class UserManagementController extends Controller
     {
         $this->authorizePermission($request, 'users:delete');
 
-        $user = \App\Models\User::findOrFail($id);
-
-        if ($request->user()?->company_id && (string) $user->company_id !== (string) $request->user()->company_id) {
-            abort(403, 'You are not authorized to delete this user.');
-        }
+        $query = \App\Models\User::query();
+        $this->scopeToCompany($request, $query);
+        $user  = $query->findOrFail($id);
 
         if ((string) $user->id === (string) $request->user()->id) {
             return $this->fail('You cannot delete your own account.', 422);

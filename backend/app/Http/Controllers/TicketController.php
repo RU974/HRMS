@@ -154,7 +154,9 @@ class TicketController extends Controller
     {
         $this->authorizeAnyPermission($request, ['tickets:view', 'tickets:create', 'tickets:manage_settings']);
 
-        $ticket = Ticket::where('company_id', $request->user()->company_id)->findOrFail($ticketId);
+        $ticketQuery = Ticket::query();
+        $this->scopeToCompany($request, $ticketQuery);
+        $ticket = $ticketQuery->findOrFail($ticketId);
 
         $request->validate([
             'file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,docx,xlsx'],
@@ -183,7 +185,9 @@ class TicketController extends Controller
     {
         $this->authorizeAnyPermission($request, ['tickets:view', 'tickets:create', 'tickets:manage_settings']);
 
-        Ticket::where('company_id', $request->user()->company_id)->findOrFail($ticketId);
+        $dlQuery = Ticket::query();
+        $this->scopeToCompany($request, $dlQuery);
+        $dlQuery->findOrFail($ticketId);
 
         $attachment = TicketAttachment::where('ticket_id', $ticketId)->findOrFail($attachmentId);
 

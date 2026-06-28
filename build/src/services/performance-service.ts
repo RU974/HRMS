@@ -186,3 +186,23 @@ export function updatePerformanceReviewTemplate(id: number, payload: Partial<Per
 export function deletePerformanceReviewTemplate(id: number) {
   return apiClient<null>(`/performance-review-templates/${id}`, { method: "DELETE" });
 }
+
+export function getEmployeeAppraisals(employeeId: number) {
+  return apiClient<PerformanceAppraisal[]>(`/performance-appraisals?employee_id=${employeeId}`);
+}
+
+export function getEmployeeReviews(employeeId: number) {
+  return apiClient<PerformanceReview[]>(`/performance-reviews?employee_id=${employeeId}`);
+}
+
+export function getEmployeeGoals(employeeId: number) {
+  return apiClient<PerformanceGoal[]>(`/performance-goals?employee_id=${employeeId}`);
+}
+
+export function getEmployeeKpis(employeeId: number) {
+  return apiClient<PerformanceKpi[]>(`/performance-kpis?employee_id=${employeeId}`);
+}
+
+export function listPerformanceEmployees() {
+  return apiClient<Array<{ id: number; first_name?: string | null; last_name?: string | null; name?: string | null; employee_code?: string | null }>>("/performance/meta/employees");
+}

@@ -319,12 +319,8 @@ class AttendanceController extends Controller
         ]);
 
         $rows = Attendance::whereMonth('date', $validated['month'])
-            ->whereYear('date', $validated['year'])
-            ->when($request->user()?->company_id, function ($query) use ($request): void {
-                $query->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            });
+            ->whereYear('date', $validated['year']);
+        $this->scopeToCompany($request, $rows, 'employee.user');
 
         $this->applyManagedEmployeeScope($request, $rows, 'employee');
 
@@ -350,15 +346,10 @@ class AttendanceController extends Controller
         ['date' => $date] = $request->validate(['date' => 'required|date']);
 
         $user = $request->user();
-        $companyId = $user?->company_id;
         $date = Carbon::parse($date)->toDateString();
 
-        $employeeQuery = Employee::with(['department'])
-            ->where('status', 'active');
-
-        if ($companyId) {
-            $employeeQuery->where('company_id', $companyId);
-        }
+        $employeeQuery = Employee::with(['department'])->where('status', 'active');
+        $this->scopeToCompany($request, $employeeQuery);
 
         // Department managers: scope to their own department
         if (!$user?->can('attendance:manage_settings') && $user?->can('attendance:approve')) {

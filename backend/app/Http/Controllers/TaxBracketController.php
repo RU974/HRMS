@@ -10,12 +10,9 @@ class TaxBracketController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'payroll:view|payroll:manage_settings');
-        $companyId = $request->user()?->company_id;
 
         $query = TaxBracket::orderBy('min_income');
-        if ($companyId) {
-            $query->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId));
-        }
+        $this->scopeToCompanyOrGlobal($request, $query);
 
         return $this->ok($query->get());
     }

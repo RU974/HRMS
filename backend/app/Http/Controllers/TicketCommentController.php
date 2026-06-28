@@ -17,7 +17,9 @@ class TicketCommentController extends Controller
     {
         $this->authorizeAnyPermission($request, ['tickets:view', 'tickets:create', 'tickets:edit', 'tickets:manage_settings']);
 
-        $ticket = Ticket::findOrFail($ticketId);
+        $ticketQuery = Ticket::query();
+        $this->scopeToCompany($request, $ticketQuery);
+        $ticket = $ticketQuery->findOrFail($ticketId);
 
         $user = $request->user();
 

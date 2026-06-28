@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
-import { apiClient } from "@/services/api-client";
 import { getAttendanceReportSummary } from "@/services/report-service";
-import type { AttendanceItem } from "@/services/hr-management-service";
+import { getAttendanceByFilter, type AttendanceItem } from "@/services/hr-management-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
 import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
 import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
@@ -148,9 +147,7 @@ export function AttendanceReportsPage() {
           title={`Attendance — ${drillStatus} (${formatMonthYear(month, year)})`}
           queryKey={["reports", "attendance", "drilldown", drillStatus, month, year]}
           queryFn={async () => {
-            const response = await apiClient<{ data: AttendanceItem[] }>(
-              `/attendance?month=${month}&year=${year}&status=${drillStatus}&per_page=25`
-            );
+            const response = await getAttendanceByFilter({ month, year, status: drillStatus, per_page: 25 });
             return response.data ?? [];
           }}
           rowKey={(row) => row.id}

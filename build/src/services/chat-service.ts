@@ -138,6 +138,10 @@ export function addConversationParticipant(id: number, userId: number) {
   });
 }
 
+export function listChatUsers() {
+  return apiClient<ChatUser[]>("/chat-messages/users");
+}
+
 export function removeConversationParticipant(id: number, userId: number) {
   return apiClient<null>(`/chat-conversations/${id}/participants/${userId}`, { method: "DELETE" });
 }

@@ -10,12 +10,9 @@ class PerformanceReviewTemplateController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'performance:view|performance:manage_settings');
-        $companyId = $request->user()?->company_id;
 
         $query = PerformanceReviewTemplate::orderBy('name');
-        if ($companyId) {
-            $query->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId));
-        }
+        $this->scopeToCompanyOrGlobal($request, $query);
 
         return $this->ok($query->get());
     }

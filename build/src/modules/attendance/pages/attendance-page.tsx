@@ -7,14 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
-import { apiClient } from "@/services/api-client";
 import {
   type AttendanceItem,
+  type TeamDailyAttendanceRow,
   checkInAttendance,
   checkOutAttendance,
   createAttendance,
   deleteAttendance,
   updateAttendance,
+  listAttendancePaginated,
+  getEmployeeAttendanceCalendar,
+  getEmployeeAttendance,
+  getTeamDailyAttendance,
+  getAttendanceMonthlyStats,
+  requestAttendanceCorrection,
 } from "@/services/hr-management-service";
 import { getEmployees } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
@@ -68,9 +74,7 @@ function CalendarView({ employeeId }: { employeeId: number }) {
 
   const { data, isLoading } = useQuery({
     queryKey: ["attendance", "calendar", employeeId, month, year],
-    queryFn:  () => apiClient<{ data: AttendanceItem[] }>(
-      `/attendance/employee/${employeeId}?month=${month}&year=${year}&per_page=31`
-    ),
+    queryFn:  () => getEmployeeAttendanceCalendar(employeeId, month, year),
     enabled: employeeId > 0,
   });
 
@@ -186,25 +190,16 @@ function CalendarView({ employeeId }: { employeeId: number }) {
 }
 
 // ── Team view ─────────────────────────────────────────────────────────────────
-interface TeamRow {
-  employee_id: number;
-  name: string;
-  department?: string | null;
-  designation?: string | null;
-  attendance?: AttendanceItem | null;
-  monthly_absences: number;
-}
-
 function TeamView() {
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
 
   const { data, isLoading } = useQuery({
     queryKey: ["attendance", "team-daily", date],
-    queryFn:  () => apiClient<TeamRow[]>(`/attendance/team-daily?date=${date}`),
+    queryFn:  () => getTeamDailyAttendance(date),
   });
 
-  const rows: TeamRow[] = (data as TeamRow[] | undefined) ?? [];
+  const rows: TeamDailyAttendanceRow[] = (data as TeamDailyAttendanceRow[] | undefined) ?? [];
   const present = rows.filter(r => r.attendance?.status === "present").length;
   const late    = rows.filter(r => r.attendance?.status === "late").length;
   const absent  = rows.filter(r => !r.attendance || r.attendance.status === "absent").length;
@@ -434,19 +429,14 @@ export function AttendancePage() {
   // Records list
   const query = useQuery({
     queryKey: ["attendance", "list", page, canManage ? null : employeeId],
-    queryFn: () => {
-      const base = `/attendance?per_page=20&page=${page}`;
-      return apiClient<{ data: AttendanceItem[]; current_page: number; last_page: number; total: number }>(
-        canManage ? base : `${base}&employee_id=${employeeId}`
-      );
-    },
+    queryFn: () => listAttendancePaginated(page, canManage ? undefined : employeeId),
     enabled: canManage || employeeId > 0,
   });
 
   // Today's record (for the check-in card)
   const todayRecord = useQuery({
     queryKey: ["attendance", "today", employeeId],
-    queryFn:  () => apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}`),
+    queryFn:  () => getEmployeeAttendance(employeeId),
     enabled: !!employeeId,
     select: d => (d as { data: AttendanceItem[] }).data?.find(a => a.date?.startsWith(today)) ?? null,
   });
@@ -454,9 +444,7 @@ export function AttendancePage() {
   // Monthly stats
   const monthlyStats = useQuery({
     queryKey: ["attendance", "monthly", employeeId, now.getMonth() + 1, now.getFullYear()],
-    queryFn:  () => apiClient<{ present: number; absent: number; late: number; leave: number; total: number }>(
-      `/attendance/monthly-stats/${employeeId}/${now.getMonth() + 1}/${now.getFullYear()}`
-    ),
+    queryFn:  () => getAttendanceMonthlyStats(employeeId, now.getMonth() + 1, now.getFullYear()),
     enabled: !!employeeId,
   });
 
@@ -482,10 +470,7 @@ export function AttendancePage() {
 
   const correctionMutation = useMutation({
     mutationFn: ({ id, note }: { id: number; note: string }) =>
-      apiClient(`/attendance/${id}/request-correction`, {
-        method: "POST",
-        body: JSON.stringify({ correction_request_notes: note }),
-      }),
+      requestAttendanceCorrection(id, note),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
       setCorrectionModal(null);

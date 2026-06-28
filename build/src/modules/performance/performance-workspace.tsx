@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
-import { apiClient } from "@/services/api-client";
 import { toast } from "@/components/notifications/toast";
 import {
   AppraisalStatus,
@@ -43,6 +42,7 @@ import {
   updatePerformanceKpi,
   updatePerformanceReview,
   updatePerformanceReviewTemplate,
+  listPerformanceEmployees,
 } from "@/services/performance-service";
 import { createSalaryIncrement } from "@/services/payroll-service";
 import { PerformanceSectionKey, PerformanceSubnav } from "./shared";
@@ -142,7 +142,7 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
   const employeesQuery = useQuery({
     queryKey: ["performance", "employees"],
     queryFn: async () => {
-      const res = await apiClient<Array<{ id: number; first_name?: string; last_name?: string; name?: string; employee_code?: string }>>("/performance/meta/employees");
+      const res = await listPerformanceEmployees();
       return (res ?? []).map((emp) => ({
         id: emp.id,
         label: `${(emp.first_name ?? emp.name ?? "").trim()} ${(emp.last_name ?? "").trim()}`.trim() + (emp.employee_code ? ` (${emp.employee_code})` : ""),

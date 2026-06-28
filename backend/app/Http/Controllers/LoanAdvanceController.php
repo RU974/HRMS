@@ -14,10 +14,7 @@ class LoanAdvanceController extends Controller
 
         $query = LoanAdvance::with('employee:id,name')->orderByDesc('start_date');
 
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->where('company_id', $companyId);
-        }
+        $this->scopeToCompany($request, $query);
 
         if ($request->filled('employee_id')) {
             $query->where('employee_id', (int) $request->query('employee_id'));

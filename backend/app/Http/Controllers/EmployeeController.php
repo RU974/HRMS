@@ -426,9 +426,7 @@ class EmployeeController extends Controller
         $imported     = 0;
         $skipped      = 0;
         $errors       = [];
-        $defaultDeptId = \App\Models\Department::query()
-            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
-            ->value('id');
+        $defaultDeptId = \App\Models\Department::query()->value('id');
 
         while (($row = fgetcsv($handle)) !== false) {
             $data = array_combine(array_map('strtolower', array_map('trim', $headers)), array_map('trim', $row));
@@ -450,7 +448,6 @@ class EmployeeController extends Controller
             $deptId   = $defaultDeptId;
             if ($deptName) {
                 $dept = \App\Models\Department::query()
-                    ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
                     ->where('name', 'like', $deptName)
                     ->value('id');
                 if ($dept) $deptId = $dept;

@@ -16,6 +16,7 @@ class InventoryAssignmentController extends Controller
             'item:id,name,sku',
             'employee:id,name',
         ])->orderByDesc('assigned_date');
+        $this->scopeToCompany($request, $query, 'employee.user');
 
         if ($request->filled('status')) {
             $query->where('status', $request->string('status'));
@@ -44,7 +45,12 @@ class InventoryAssignmentController extends Controller
             'notes'         => ['nullable', 'string'],
         ]);
 
+        $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
+
         $item = InventoryItem::findOrFail($validated['item_id']);
+        if ($item->company_id !== $request->user()->company_id) {
+            abort(403, 'You are not authorized to assign this item.');
+        }
 
         if ($item->quantity_available < $validated['quantity']) {
             return $this->fail(

@@ -15,13 +15,8 @@ class ApprovalController extends Controller
     {
         $this->authorizePermission($request, 'approvals:view');
 
-        $query = Approval::query()
-            ->with(['workflow', 'currentStep.approvers'])
-            ->latest();
-
-        if ($companyId = $request->user()?->company_id) {
-            $query->where('company_id', $companyId);
-        }
+        $query = Approval::query()->with(['workflow', 'currentStep.approvers'])->latest();
+        $this->scopeToCompany($request, $query);
 
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
@@ -38,12 +33,9 @@ class ApprovalController extends Controller
     {
         $this->authorizePermission($request, 'approvals:view');
 
-        $approval = Approval::query()
-            ->with(['workflow', 'currentStep.approvers', 'requester:id,name,email'])
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->findOrFail($id);
+        $showQuery = Approval::query()->with(['workflow', 'currentStep.approvers', 'requester:id,name,email']);
+        $this->scopeToCompany($request, $showQuery);
+        $approval  = $showQuery->findOrFail($id);
 
         $auditTrail = AuditLog::query()
             ->where('approval_id', $approval->id)
@@ -67,12 +59,9 @@ class ApprovalController extends Controller
             'metadata' => 'nullable|array',
         ]);
 
-        $workflow = Workflow::query()
-            ->whereKey($validated['workflow_id'])
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->firstOrFail();
+        $wfQuery  = Workflow::query()->whereKey($validated['workflow_id']);
+        $this->scopeToCompany($request, $wfQuery);
+        $workflow = $wfQuery->firstOrFail();
 
         $approval = (new WorkflowEngine())->startWorkflow(
             $validated['module'],
@@ -89,12 +78,9 @@ class ApprovalController extends Controller
     {
         $this->authorizePermission($request, 'approvals:approve');
 
-        $approval = Approval::query()
-            ->with(['workflow', 'currentStep.approvers'])
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->findOrFail($id);
+        $approveQuery = Approval::query()->with(['workflow', 'currentStep.approvers']);
+        $this->scopeToCompany($request, $approveQuery);
+        $approval     = $approveQuery->findOrFail($id);
 
         if ($approval->status !== 'pending') {
             return $this->fail('Approval has already been completed.', 422);
@@ -119,12 +105,9 @@ class ApprovalController extends Controller
     {
         $this->authorizePermission($request, 'approvals:approve');
 
-        $approval = Approval::query()
-            ->with(['workflow', 'currentStep.approvers'])
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->findOrFail($id);
+        $rejectQuery = Approval::query()->with(['workflow', 'currentStep.approvers']);
+        $this->scopeToCompany($request, $rejectQuery);
+        $approval    = $rejectQuery->findOrFail($id);
 
         if ($approval->status !== 'pending') {
             return $this->fail('Approval has already been completed.', 422);

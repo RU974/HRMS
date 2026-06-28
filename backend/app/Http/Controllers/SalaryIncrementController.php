@@ -15,10 +15,7 @@ class SalaryIncrementController extends Controller
         $query = SalaryIncrement::with('employee:id,name')
             ->orderByDesc('effective_date');
 
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee', fn ($q) => $q->where('company_id', $companyId));
-        }
+        $this->scopeToCompany($request, $query, 'employee');
 
         if ($request->filled('employee_id')) {
             $query->where('employee_id', (int) $request->query('employee_id'));

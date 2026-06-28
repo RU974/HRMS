@@ -10,12 +10,9 @@ class SalaryGradeController extends Controller
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'payroll:view|payroll:manage_settings');
-        $companyId = $request->user()?->company_id;
 
         $query = SalaryGrade::orderBy('min_salary');
-        if ($companyId) {
-            $query->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId));
-        }
+        $this->scopeToCompanyOrGlobal($request, $query);
 
         return $this->ok($query->get());
     }
@@ -45,7 +42,9 @@ class SalaryGradeController extends Controller
     public function update(Request $request, int $id)
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
-        $grade = SalaryGrade::findOrFail($id);
+        $query = SalaryGrade::query();
+        $this->scopeToCompany($request, $query);
+        $grade = $query->findOrFail($id);
 
         $validated = $request->validate([
             'name'                => 'sometimes|string|max:120',
@@ -72,7 +71,9 @@ class SalaryGradeController extends Controller
     public function destroy(Request $request, int $id)
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
-        SalaryGrade::findOrFail($id)->delete();
+        $query = SalaryGrade::query();
+        $this->scopeToCompany($request, $query);
+        $query->findOrFail($id)->delete();
         return $this->ok(null, 'Salary grade deleted.');
     }
 }

@@ -8,7 +8,6 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -24,9 +23,7 @@ class ChatMessageController extends Controller
             ->select(['id', 'name', 'email', 'last_seen_at'])
             ->orderBy('name');
 
-        if ($user->company_id) {
-            $query->where('company_id', $user->company_id);
-        }
+        $this->scopeToCompany($request, $query);
 
         $onlineThreshold = now()->subMinutes(2);
 
@@ -73,7 +70,7 @@ class ChatMessageController extends Controller
 
                 if ($user->can('chat:view') || $user->can('chat:manage_settings')) {
                     if ($user->company_id) {
-                        if ($this->supportsCompanyScope()) {
+                        if ($this->tableHasCompanyScope('chat_messages')) {
                             $builder->orWhere('company_id', $user->company_id);
                         }
 
@@ -151,7 +148,7 @@ class ChatMessageController extends Controller
             $payload['receiver_id'] = $request->user()->id;
         }
 
-        if ($this->supportsCompanyScope()) {
+        if ($this->tableHasCompanyScope('chat_messages')) {
             $payload['company_id'] = $request->user()?->company_id;
         }
 
@@ -228,8 +225,4 @@ class ChatMessageController extends Controller
         return trim(preg_replace('/\s+/u', ' ', strip_tags($query)) ?? $query);
     }
 
-    private function supportsCompanyScope(): bool
-    {
-        return Schema::hasColumn('chat_messages', 'company_id');
-    }
 }

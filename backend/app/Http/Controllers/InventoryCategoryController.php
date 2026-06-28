@@ -12,10 +12,9 @@ class InventoryCategoryController extends Controller
     {
         $this->authorizeAnyPermission($request, ['inventory:view', 'inventory:manage_settings']);
 
-        $categories = InventoryCategory::query()
-            ->withCount('items')
-            ->orderBy('name')
-            ->get();
+        $query = InventoryCategory::query()->withCount('items')->orderBy('name');
+        $this->scopeToCompany($request, $query);
+        $categories = $query->get();
 
         return $this->ok($categories);
     }
@@ -44,7 +43,9 @@ class InventoryCategoryController extends Controller
         $this->authorizePermission($request, 'inventory:manage_settings');
 
         $companyId = $request->user()->company_id;
-        $category = InventoryCategory::findOrFail($id);
+        $query     = InventoryCategory::query();
+        $this->scopeToCompany($request, $query);
+        $category  = $query->findOrFail($id);
 
         $validated = $request->validate([
             'name' => [
@@ -63,7 +64,9 @@ class InventoryCategoryController extends Controller
     {
         $this->authorizePermission($request, 'inventory:manage_settings');
 
-        $category = InventoryCategory::withCount('items')->findOrFail($id);
+        $query    = InventoryCategory::query()->withCount('items');
+        $this->scopeToCompany($request, $query);
+        $category = $query->findOrFail($id);
 
         if ($category->items_count > 0) {
             return $this->fail('Cannot delete category with existing items. Reassign items first.', 422, ['items_count' => $category->items_count]);

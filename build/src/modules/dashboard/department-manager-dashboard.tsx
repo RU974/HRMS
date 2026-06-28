@@ -1,27 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
 import { getDashboardSummary, getDashboardInsights } from "@/services/dashboard-service";
-import { apiClient } from "@/services/api-client";
+import { getActiveEmployees } from "@/services/employee-service";
+import { listPendingApprovals, type PendingApprovalItem } from "@/services/approval-service";
 import { SummaryCard, ChartCard, TableWidget } from "./dashboard-widgets";
 import {
   Users, Clock, CalendarX, ClipboardList, ArrowRight,
   AlertCircle, TrendingUp, Building2, CheckSquare,
 } from "lucide-react";
 
-declare global { interface Window { Chart: any; } }
-
-function useChartJs(cb: () => void, deps: unknown[]) {
-  useEffect(() => {
-    if (window.Chart) { cb(); return; }
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    s.onload = cb;
-    document.head.appendChild(s);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-}
+import { useChartJs } from "./use-chart-js";
 
 function TeamAttendanceTrendChart({ points }: { points: Array<{ label: string; rate: number }> }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -73,14 +63,6 @@ interface TeamMember {
   designation?: { name: string } | null;
 }
 
-interface PendingApproval {
-  id: number;
-  title: string;
-  type: string;
-  requester?: { name?: string } | null;
-  created_at: string;
-}
-
 function QuickLink({ label, to, icon: Icon, desc, color }: { label: string; to: string; icon: React.ElementType; desc: string; color: string }) {
   return (
     <Link to={to}
@@ -114,18 +96,18 @@ export function DepartmentManagerDashboard({ roleName }: { roleName: string }) {
 
   const { data: teamMembersData } = useQuery({
     queryKey: ["dashboard-team-members"],
-    queryFn: () => apiClient<{ data: TeamMember[] }>("/employees?per_page=10&status=active"),
+    queryFn: () => getActiveEmployees(10),
     retry: false,
   });
 
   const { data: pendingApprovalsData } = useQuery({
     queryKey: ["dashboard-pending-approvals"],
-    queryFn: () => apiClient<{ data: PendingApproval[] }>("/approvals?status=pending&per_page=5"),
+    queryFn: () => listPendingApprovals(5),
     retry: false,
   });
 
-  const teamMembers = (teamMembersData as { data?: TeamMember[] } | undefined)?.data ?? [];
-  const pendingApprovals = (pendingApprovalsData as { data?: PendingApproval[] } | undefined)?.data ?? [];
+  const teamMembers = (teamMembersData?.data ?? []) as TeamMember[];
+  const pendingApprovals = (pendingApprovalsData as { data?: PendingApprovalItem[] } | undefined)?.data ?? [];
 
   const greeting = (() => {
     const h = new Date().getHours();

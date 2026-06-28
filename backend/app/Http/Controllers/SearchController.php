@@ -60,7 +60,7 @@ class SearchController extends Controller
         $this->appendCategory($categories, 'attendance', 'Attendance', $this->searchAttendance($request, $query, $employee?->id));
         $this->appendCategory($categories, 'leaves', 'Leaves', $this->searchLeaves($request, $query, $employee?->id));
         $this->appendCategory($categories, 'payroll', 'Payroll', $this->searchPayroll($request, $query, $employee?->id));
-        $this->appendCategory($categories, 'reports', 'Reports', $this->searchReports($query), $request->user()?->can('reports:view') || $request->user()?->can('reports:export') || $request->user()?->can('payroll:manage_settings') || $request->user()?->can('performance:manage_settings') || $request->user()?->can('performance:view') || $request->user()?->can('recruitment:view'));
+        $this->appendCategory($categories, 'reports', 'Reports', $this->searchReports($request, $query), $request->user()?->can('reports:view') || $request->user()?->can('reports:export') || $request->user()?->can('payroll:manage_settings') || $request->user()?->can('performance:manage_settings') || $request->user()?->can('performance:view') || $request->user()?->can('recruitment:view'));
         $this->appendCategory($categories, 'announcements', 'Announcements', $this->searchAnnouncements($request, $query));
         $this->appendCategory($categories, 'notifications', 'Notifications', $this->searchNotifications($request, $query));
         $this->appendCategory($categories, 'chat', 'Chat Messages', $this->searchChatMessages($request, $query));
@@ -103,20 +103,14 @@ class SearchController extends Controller
     {
         $user = $request->user();
         $canViewAll = (bool) $user?->can('employees:view');
-        $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Employee::query()
-            ->with(['department:id,name', 'designationRef:id,name'])
-            ->when($companyId, function ($query) use ($companyId): void {
-                $query->whereHas('user', function ($userQuery) use ($companyId): void {
-                    $userQuery->where('company_id', $companyId);
-                });
-            });
-
+            ->with(['department:id,name', 'designationRef:id,name']);
+        $this->scopeToCompany($request, $builder, 'user');
         $this->applyManagedEmployeeScope($request, $builder);
 
         return $builder
@@ -234,18 +228,13 @@ class SearchController extends Controller
     {
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('attendance:manage_settings') || $user?->can('attendance:approve'));
-        $companyId = $user?->company_id;
         if (!$canViewAll && $employeeId === null) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Attendance::query()->with('employee:id,name,employee_number');
-        if ($companyId) {
-            $builder->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $builder, 'employee.user');
         $this->applyManagedEmployeeScope($request, $builder, 'employee');
 
         if ($canViewAll) {
@@ -284,18 +273,13 @@ class SearchController extends Controller
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('leaves:view') || $user?->can('leaves:approve'));
         $canViewOwn = (bool) $user?->can('leaves:create');
-        $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Leave::query()->with('employee:id,name,employee_number');
-        if ($companyId) {
-            $builder->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $builder, 'employee.user');
         $this->applyManagedEmployeeScope($request, $builder, 'employee');
 
         if ($canViewAll) {
@@ -333,18 +317,13 @@ class SearchController extends Controller
         $user = $request->user();
         $canViewAll = (bool) ($user?->can('payroll:manage_settings') || $user?->can('payroll:view'));
         $canViewOwn = (bool) $user?->can('payroll:view');
-        $companyId = $user?->company_id;
         if (!$canViewAll && (!$canViewOwn || $employeeId === null)) {
             return [];
         }
 
         $like = '%' . $query . '%';
         $builder = Payroll::query()->with('employee:id,name,employee_number');
-        if ($companyId) {
-            $builder->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $builder, 'employee.user');
         $this->applyManagedEmployeeScope($request, $builder, 'employee');
 
         if ($canViewAll) {
@@ -377,17 +356,12 @@ class SearchController extends Controller
             ->all();
     }
 
-    private function searchReports(string $query): array
+    private function searchReports(Request $request, string $query): array
     {
         $like = '%' . $query . '%';
-        return Report::query()
-            ->with(['creator:id,name,email'])
-            ->when(request()?->user()?->company_id, function ($builder) {
-                $companyId = request()?->user()?->company_id;
-                $builder->whereHas('creator', function ($creatorQuery) use ($companyId): void {
-                    $creatorQuery->where('company_id', $companyId);
-                });
-            })
+        $builder = Report::query()->with(['creator:id,name,email']);
+        $this->scopeToCompany($request, $builder, 'creator');
+        return $builder
             ->where(function ($builder) use ($like): void {
                 $builder->where('name', 'like', $like)
                     ->orWhere('description', 'like', $like)
@@ -556,13 +530,9 @@ class SearchController extends Controller
         }
 
         $like = '%' . $query . '%';
-        return PerformanceReview::query()
-            ->with('employee:id,name,employee_number')
-            ->when($request->user()?->company_id, function ($builder) use ($request): void {
-                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
+        $builder = PerformanceReview::query()->with('employee:id,name,employee_number');
+        $this->scopeToCompany($request, $builder, 'employee.user');
+        return $builder
             ->where(function ($builder) use ($like): void {
                 $builder->where('period', 'like', $like)
                     ->orWhere('summary', 'like', $like)
@@ -592,13 +562,9 @@ class SearchController extends Controller
         }
 
         $like = '%' . $query . '%';
-        return PerformanceKpi::query()
-            ->with('employee:id,name,employee_number')
-            ->when($request->user()?->company_id, function ($builder) use ($request): void {
-                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
+        $builder = PerformanceKpi::query()->with('employee:id,name,employee_number');
+        $this->scopeToCompany($request, $builder, 'employee.user');
+        return $builder
             ->where(function ($builder) use ($like): void {
                 $builder->where('name', 'like', $like)
                     ->orWhere('unit', 'like', $like)
@@ -627,13 +593,9 @@ class SearchController extends Controller
         }
 
         $like = '%' . $query . '%';
-        return PerformanceGoal::query()
-            ->with('employee:id,name,employee_number')
-            ->when($request->user()?->company_id, function ($builder) use ($request): void {
-                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
+        $builder = PerformanceGoal::query()->with('employee:id,name,employee_number');
+        $this->scopeToCompany($request, $builder, 'employee.user');
+        return $builder
             ->where(function ($builder) use ($like): void {
                 $builder->where('title', 'like', $like)
                     ->orWhere('description', 'like', $like)
@@ -663,13 +625,9 @@ class SearchController extends Controller
         }
 
         $like = '%' . $query . '%';
-        return PerformanceAppraisal::query()
-            ->with('employee:id,name,employee_number')
-            ->when($request->user()?->company_id, function ($builder) use ($request): void {
-                $builder->whereHas('employee.user', function ($userQuery) use ($request): void {
-                    $userQuery->where('company_id', $request->user()?->company_id);
-                });
-            })
+        $builder = PerformanceAppraisal::query()->with('employee:id,name,employee_number');
+        $this->scopeToCompany($request, $builder, 'employee.user');
+        return $builder
             ->where(function ($builder) use ($like): void {
                 $builder->where('cycle', 'like', $like)
                     ->orWhere('strengths', 'like', $like)

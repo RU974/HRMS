@@ -335,53 +335,28 @@ class ReportController extends Controller
 
     private function assertCompanyAccess(Request $request, Report $report): void
     {
-        $companyId = $request->user()?->company_id;
-        if (!$companyId) {
-            return;
-        }
-
-        $allowed = Report::query()
-            ->whereKey($report->id)
-            ->whereHas('creator', function ($creatorQuery) use ($companyId): void {
-                $creatorQuery->where('company_id', $companyId);
-            })
-            ->exists();
-
-        if (!$allowed) {
+        $query = Report::query()->whereKey($report->id);
+        $this->scopeToCompany($request, $query, 'creator');
+        if (!$query->exists()) {
             abort(403, 'You are not authorized to access this report.');
         }
     }
 
     private function scopeEmployeeQuery(Request $request, $query): void
     {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $query, 'user');
         $this->applyManagedEmployeeScope($request, $query);
     }
 
     private function scopeAttendanceQuery(Request $request, $query): void
     {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
     }
 
     private function scopePayrollQuery(Request $request, $query): void
     {
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $query->whereHas('employee.user', function ($userQuery) use ($companyId): void {
-                $userQuery->where('company_id', $companyId);
-            });
-        }
+        $this->scopeToCompany($request, $query, 'employee.user');
         $this->applyManagedEmployeeScope($request, $query, 'employee');
     }
 }

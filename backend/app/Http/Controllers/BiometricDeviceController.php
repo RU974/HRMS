@@ -228,10 +228,7 @@ class BiometricDeviceController extends Controller
             ->whereNotNull('employee_number')
             ->whereNotIn('id', $existingEmployeeIds);
 
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $employeesQuery->where('company_id', $companyId);
-        }
+        $this->scopeToCompany($request, $employeesQuery);
 
         $suggestions = $employeesQuery->get()->map(function (Employee $employee) {
             $deviceUserId = preg_replace('/\D/', '', (string) $employee->employee_number) ?: $employee->employee_number;
@@ -288,10 +285,7 @@ class BiometricDeviceController extends Controller
             }
 
             $employeeQuery = Employee::query()->where('employee_number', $employeeCode);
-            $companyId = $request->user()?->company_id;
-            if ($companyId) {
-                $employeeQuery->where('company_id', $companyId);
-            }
+            $this->scopeToCompany($request, $employeeQuery);
             $employee = $employeeQuery->first();
 
             if (!$employee) {

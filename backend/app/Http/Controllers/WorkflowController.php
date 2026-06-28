@@ -13,11 +13,7 @@ class WorkflowController extends Controller
         $this->authorizePermission($request, 'approvals:manage_settings');
 
         $query = Workflow::query()->with('steps.approvers')->latest();
-
-        if ($companyId = $request->user()?->company_id) {
-            $query->where('company_id', $companyId);
-        }
-
+        $this->scopeToCompany($request, $query);
         return $this->ok($query->get());
     }
 
@@ -25,13 +21,9 @@ class WorkflowController extends Controller
     {
         $this->authorizePermission($request, 'approvals:manage_settings');
 
-        $workflow = Workflow::query()
-            ->with('steps.approvers')
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->findOrFail($id);
-
+        $query = Workflow::query()->with('steps.approvers');
+        $this->scopeToCompany($request, $query);
+        $workflow = $query->findOrFail($id);
         return $this->ok($workflow);
     }
 
@@ -64,11 +56,9 @@ class WorkflowController extends Controller
     {
         $this->authorizePermission($request, 'approvals:manage_settings');
 
-        $workflow = Workflow::query()
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->findOrFail($id);
+        $wfQuery  = Workflow::query();
+        $this->scopeToCompany($request, $wfQuery);
+        $workflow = $wfQuery->findOrFail($id);
 
         $validated = $request->validate($this->stepRules(false) + [
             'name' => 'sometimes|string|max:255',
@@ -101,11 +91,9 @@ class WorkflowController extends Controller
     {
         $this->authorizePermission($request, 'approvals:manage_settings');
 
-        $workflow = Workflow::query()
-            ->when($request->user()?->company_id, function ($query, $companyId) {
-                $query->where('company_id', $companyId);
-            })
-            ->findOrFail($id);
+        $delQuery = Workflow::query();
+        $this->scopeToCompany($request, $delQuery);
+        $workflow = $delQuery->findOrFail($id);
 
         if ($workflow->approvals()->exists()) {
             return $this->fail('Workflow cannot be deleted while approvals exist.', 422);

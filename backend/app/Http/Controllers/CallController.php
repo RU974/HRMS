@@ -39,11 +39,11 @@ class CallController extends Controller
         $threshold = now()->subMinutes(2);
         $user = $request->user();
 
-        $users = \App\Models\User::query()
+        $userQuery = \App\Models\User::query()
             ->whereIn('id', $validated['user_ids'])
-            ->where('company_id', $user->company_id)
-            ->select(['id', 'last_seen_at'])
-            ->get();
+            ->select(['id', 'last_seen_at']);
+        $this->scopeToCompany($request, $userQuery);
+        $users = $userQuery->get();
 
         $inCallUserIds = CallParticipant::query()
             ->whereIn('user_id', $users->pluck('id'))
@@ -89,11 +89,11 @@ class CallController extends Controller
         }
 
         // Check if user already has an active call
-        $activeCall = Call::query()
-            ->where('company_id', $user->company_id)
+        $activeCallQuery = Call::query()
             ->where('status', 'ringing')
-            ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id)->whereIn('status', ['invited', 'joined']))
-            ->first();
+            ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id)->whereIn('status', ['invited', 'joined']));
+        $this->scopeToCompany($request, $activeCallQuery);
+        $activeCall = $activeCallQuery->first();
 
         if ($activeCall) {
             return $this->fail('You already have an active call in progress.', 422);
@@ -151,13 +151,12 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $calls = Call::query()
-            ->where('company_id', $user->company_id)
+        $incomingQuery = Call::query()
             ->where('status', 'ringing')
             ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id)->where('status', 'invited'))
-            ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email'])
-            ->get()
-            ->map(fn ($call) => $this->formatCall($call));
+            ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email']);
+        $this->scopeToCompany($request, $incomingQuery);
+        $calls = $incomingQuery->get()->map(fn ($call) => $this->formatCall($call));
 
         return $this->ok($calls);
     }
@@ -169,11 +168,11 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $call = Call::query()
-            ->where('company_id', $user->company_id)
+        $showQuery = Call::query()
             ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id))
-            ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email'])
-            ->findOrFail($id);
+            ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email']);
+        $this->scopeToCompany($request, $showQuery);
+        $call = $showQuery->findOrFail($id);
 
         return $this->ok($this->formatCall($call));
     }
@@ -185,10 +184,9 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $call = Call::query()
-            ->where('company_id', $user->company_id)
-            ->where('status', 'ringing')
-            ->findOrFail($id);
+        $answerQuery = Call::query()->where('status', 'ringing');
+        $this->scopeToCompany($request, $answerQuery);
+        $call = $answerQuery->findOrFail($id);
 
         $participant = CallParticipant::query()
             ->where('call_id', $call->id)
@@ -223,9 +221,9 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $call = Call::query()
-            ->where('company_id', $user->company_id)
-            ->findOrFail($id);
+        $rejectQuery = Call::query();
+        $this->scopeToCompany($request, $rejectQuery);
+        $call = $rejectQuery->findOrFail($id);
 
         $participant = CallParticipant::query()
             ->where('call_id', $call->id)
@@ -270,10 +268,9 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $call = Call::query()
-            ->where('company_id', $user->company_id)
-            ->whereIn('status', ['ringing', 'active'])
-            ->findOrFail($id);
+        $endQuery = Call::query()->whereIn('status', ['ringing', 'active']);
+        $this->scopeToCompany($request, $endQuery);
+        $call = $endQuery->findOrFail($id);
 
         // Verify user is a participant
         $isParticipant = CallParticipant::query()
@@ -342,10 +339,9 @@ class CallController extends Controller
 
         $user = $request->user();
 
-        $call = Call::query()
-            ->where('company_id', $user->company_id)
-            ->whereIn('status', ['ringing', 'active'])
-            ->findOrFail($id);
+        $signalQuery = Call::query()->whereIn('status', ['ringing', 'active']);
+        $this->scopeToCompany($request, $signalQuery);
+        $call = $signalQuery->findOrFail($id);
 
         // Verify both users are participants
         $fromIsParticipant = CallParticipant::query()
@@ -385,10 +381,9 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $call = Call::query()
-            ->where('company_id', $user->company_id)
-            ->whereIn('status', ['ringing', 'active'])
-            ->findOrFail($id);
+        $getSignalQuery = Call::query()->whereIn('status', ['ringing', 'active']);
+        $this->scopeToCompany($request, $getSignalQuery);
+        $call = $getSignalQuery->findOrFail($id);
 
         $signals = CallSignal::query()
             ->where('call_id', $call->id)
@@ -419,15 +414,14 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $calls = Call::query()
-            ->where('company_id', $user->company_id)
+        $historyQuery = Call::query()
             ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id))
             ->whereIn('status', ['ended', 'missed'])
             ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email'])
             ->latest()
-            ->limit(50)
-            ->get()
-            ->map(fn ($call) => $this->formatCall($call));
+            ->limit(50);
+        $this->scopeToCompany($request, $historyQuery);
+        $calls = $historyQuery->get()->map(fn ($call) => $this->formatCall($call));
 
         return $this->ok($calls);
     }

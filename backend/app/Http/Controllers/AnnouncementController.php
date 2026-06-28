@@ -8,7 +8,6 @@ use App\Models\NotificationItem;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -21,7 +20,7 @@ class AnnouncementController extends Controller
     {
         $this->authorize('viewAny', Announcement::class);
 
-        $user = $request->user()->loadMissing('company');
+        $user = $request->user()->loadMissing(['company', 'roles']);
         if (!$user->company_id) {
             return $this->ok([]);
         }
@@ -29,7 +28,7 @@ class AnnouncementController extends Controller
         $query = Announcement::query()->with(['creator:id,name,email,company_id', 'company:id,name']);
 
         $query->where(function ($builder) use ($user): void {
-            if ($this->supportsCompanyScope()) {
+            if ($this->tableHasCompanyScope('announcements')) {
                 $builder->where('company_id', $user->company_id)
                     ->orWhere(function ($legacyQuery) use ($user): void {
                         $legacyQuery->whereNull('company_id')
@@ -70,6 +69,33 @@ class AnnouncementController extends Controller
             });
         }
 
+        $canManage = $user->hasAnyRole([User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN])
+            || $user->can('announcement:create')
+            || $user->can('announcement:edit')
+            || $user->can('announcement:delete');
+
+        if (!$canManage) {
+            $userRoles = $user->roles->pluck('name')->all();
+            $isHr = !empty(array_intersect($userRoles, [
+                User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE,
+            ]));
+            $isManager = !empty(array_intersect($userRoles, [
+                User::ROLE_DEPARTMENT_MANAGER, User::ROLE_HR_MANAGER,
+            ]));
+
+            $query->where('is_published', true)
+                ->where(function ($builder) use ($isHr, $isManager): void {
+                    $builder->where('target', 'all')
+                        ->orWhere('target', 'employees');
+                    if ($isHr) {
+                        $builder->orWhere('target', 'hr');
+                    }
+                    if ($isManager) {
+                        $builder->orWhere('target', 'managers');
+                    }
+                });
+        }
+
         $announcements = $query->latest()->get();
 
         $this->attachReadState($announcements, $user->id);
@@ -108,7 +134,7 @@ class AnnouncementController extends Controller
             'created_by' => $request->user()?->id,
         ];
 
-        if ($this->supportsCompanyScope()) {
+        if ($this->tableHasCompanyScope('announcements')) {
             $payload['company_id'] = $request->user()?->company_id;
         }
 
@@ -305,10 +331,6 @@ class AnnouncementController extends Controller
         return trim(preg_replace('/\s+/u', ' ', strip_tags($query)) ?? $query);
     }
 
-    private function supportsCompanyScope(): bool
-    {
-        return Schema::hasColumn('announcements', 'company_id');
-    }
 
     private function broadcastAnnouncement(Announcement $announcement, ?User $creator): void
     {
@@ -378,7 +400,7 @@ class AnnouncementController extends Controller
             'is_read' => false,
             'user_id' => $recipient->id,
             'created_by' => $creator?->id,
-            'company_id' => $this->supportsCompanyScope() ? $recipient->company_id : null,
+            'company_id' => $this->tableHasCompanyScope('announcements') ? $recipient->company_id : null,
             'created_at' => $now,
             'updated_at' => $now,
         ])->all();

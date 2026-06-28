@@ -10,6 +10,7 @@ class EmployeePromotionController extends Controller
     public function index(Request $request, int $employeeId)
     {
         $this->authorizePermission($request, 'employees:view');
+        $this->assertEmployeeInCompany($request, $employeeId);
         $this->authorizeManagedEmployeeAccess($request, $employeeId, 'employee');
 
         $items = EmployeePromotion::query()
@@ -23,6 +24,7 @@ class EmployeePromotionController extends Controller
     public function store(Request $request, int $employeeId)
     {
         $this->authorizePermission($request, 'employees:edit');
+        $this->assertEmployeeInCompany($request, $employeeId);
         $this->authorizeManagedEmployeeAccess($request, $employeeId, 'employee');
 
         $validated = $request->validate([
@@ -45,6 +47,7 @@ class EmployeePromotionController extends Controller
     public function destroy(Request $request, int $employeeId, int $id)
     {
         $this->authorizePermission($request, 'employees:edit');
+        $this->assertEmployeeInCompany($request, $employeeId);
 
         $item = EmployeePromotion::where('employee_id', $employeeId)->findOrFail($id);
         $item->delete();

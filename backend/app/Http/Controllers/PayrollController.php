@@ -237,11 +237,7 @@ class PayrollController extends Controller
         $employeeQuery = Employee::with(['shift'])
             ->where('status', 'active');
 
-        // Scope to company
-        $companyId = $request->user()?->company_id;
-        if ($companyId) {
-            $employeeQuery->where('company_id', $companyId);
-        }
+        $this->scopeToCompany($request, $employeeQuery);
 
         if (!empty($validated['department_id'])) {
             $employeeQuery->where('department_id', (int) $validated['department_id']);
