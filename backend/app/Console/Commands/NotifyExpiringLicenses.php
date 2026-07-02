@@ -19,13 +19,20 @@ class NotifyExpiringLicenses extends Command
 
         foreach ($thresholds as $days) {
             $licenses = License::query()
-                ->where('is_active', true)
+                ->active()
                 ->where('status', 'active')
                 ->whereNotNull('expires_at')
                 ->whereDate('expires_at', now()->addDays($days)->toDateString())
                 ->get();
 
             foreach ($licenses as $license) {
+                $key      = "expiry_{$days}";
+                $notifiedThresholds = $license->notified_thresholds ?? [];
+
+                if (in_array($key, $notifiedThresholds, true)) {
+                    continue;
+                }
+
                 $expiryDate = $license->expires_at->format('F j, Y');
                 $body       = <<<TEXT
                     Dear {$license->licensee_name},
@@ -47,6 +54,11 @@ class NotifyExpiringLicenses extends Command
                             ->to($license->licensee_email)
                             ->subject("Action Required: Your HRMS License Expires in {$days} Day(s)")
                     );
+
+                    $notifiedThresholds[] = $key;
+                    $license->notified_thresholds = $notifiedThresholds;
+                    $license->save();
+
                     $notified++;
                 } catch (\Throwable $e) {
                     $this->warn("Failed to notify {$license->licensee_email}: {$e->getMessage()}");

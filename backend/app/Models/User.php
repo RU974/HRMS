@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -40,8 +41,14 @@ class User extends Authenticatable
         'email',
         'username',
         'password',
+        'profile_image',
         'last_seen_at',
     ];
+
+    public function getProfileImageAttribute($value): ?string
+    {
+        return $value ? Storage::disk('public')->url($value) : null;
+    }
 
 
     /**

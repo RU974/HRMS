@@ -1,9 +1,14 @@
 import { apiClient } from "./api-client";
-import type { AuthUser } from "@/store/auth-store";
+import type { AuthUser, AuthLicense } from "@/store/auth-store";
 
 interface AuthPayload {
   user: AuthUser;
   token: string;
+}
+
+export interface MePayload {
+  user: AuthUser;
+  license: AuthLicense | null;
 }
 
 export function login(email: string, password: string) {
@@ -28,7 +33,7 @@ export function register(name: string, email: string, password: string, password
 }
 
 export function me() {
-  return apiClient<AuthUser>("/auth/me");
+  return apiClient<MePayload>("/auth/me");
 }
 
 export function logoutRequest() {
@@ -65,4 +70,8 @@ export function resetPassword(payload: ResetPasswordPayload) {
 
 export function changePassword(payload: { current_password: string; password: string; password_confirmation: string }) {
   return apiClient("/auth/change-password", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateProfile(formData: FormData) {
+  return apiClient<AuthUser>("/auth/profile", { method: "POST", body: formData });
 }

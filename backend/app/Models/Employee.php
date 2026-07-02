@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 use App\Models\Shift;
 
@@ -41,6 +42,11 @@ class Employee extends Model
     protected $casts = [
         'emergency_contacts' => 'array',
     ];
+
+    public function getProfileImageAttribute($value): ?string
+    {
+        return $value ? Storage::disk('public')->url($value) : null;
+    }
 
     public function department(): BelongsTo
     {

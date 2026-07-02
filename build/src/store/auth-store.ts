@@ -5,6 +5,7 @@ export interface AuthUser {
   id: number;
   name: string;
   email: string;
+  profile_image?: string | null;
   company_id?: string | null;
   branch_id?: string | null;
   employee?: {
@@ -14,6 +15,7 @@ export interface AuthUser {
     email?: string | null;
     status?: string | null;
     joining_date?: string | null;
+    profile_image?: string | null;
     department?: { id: number; name: string } | null;
     designation?: { id: number; name: string } | null;
     shift?: { id: number; name: string } | null;
@@ -25,12 +27,23 @@ export interface AuthUser {
   roles_relation?: Array<{ id: string; name: string; permissions?: Array<{ id: string; key: string }> }>;
 }
 
+export interface AuthLicense {
+  status: "active" | "trial" | "expired" | "suspended";
+  edition: string;
+  days_remaining: number | null;
+  expires_at: string | null;
+  features: string[];
+  max_employees: number | null;
+  max_users: number | null;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   token: string | null;
   user: AuthUser | null;
-  setSession: (token: string, user: AuthUser) => void;
-  setUser: (user: AuthUser) => void;
+  license: AuthLicense | null;
+  setSession: (token: string, user: AuthUser, license?: AuthLicense | null) => void;
+  setUser: (user: AuthUser, license?: AuthLicense | null) => void;
   hasPermission: (permission: string) => boolean;
   logout: () => void;
 }
@@ -39,7 +52,8 @@ function readStoredSession() {
   // Use sessionStorage so the token is never accessible to other tabs or
   // persisted beyond the browser session — mitigates XSS token theft.
   const storedToken = sessionStorage.getItem("hrms_token");
-  const storedUser = sessionStorage.getItem("hrms_user");
+  const storedUser  = sessionStorage.getItem("hrms_user");
+  const storedLic   = sessionStorage.getItem("hrms_license");
 
   let parsedUser: AuthUser | null = null;
   if (storedUser) {
@@ -50,23 +64,35 @@ function readStoredSession() {
     }
   }
 
-  return { storedToken, parsedUser };
+  let parsedLicense: AuthLicense | null = null;
+  if (storedLic) {
+    try {
+      parsedLicense = JSON.parse(storedLic) as AuthLicense;
+    } catch {
+      sessionStorage.removeItem("hrms_license");
+    }
+  }
+
+  return { storedToken, parsedUser, parsedLicense };
 }
 
-const { storedToken, parsedUser } = readStoredSession();
+const { storedToken, parsedUser, parsedLicense } = readStoredSession();
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: Boolean(storedToken),
   token: storedToken,
   user: parsedUser,
-  setSession: (token, user) => {
+  license: parsedLicense,
+  setSession: (token, user, license = null) => {
     sessionStorage.setItem("hrms_token", token);
     sessionStorage.setItem("hrms_user", JSON.stringify(user));
-    set({ isAuthenticated: true, token, user });
+    if (license) sessionStorage.setItem("hrms_license", JSON.stringify(license));
+    set({ isAuthenticated: true, token, user, license: license ?? null });
   },
-  setUser: (user) => {
+  setUser: (user, license = null) => {
     sessionStorage.setItem("hrms_user", JSON.stringify(user));
-    set({ user, isAuthenticated: true });
+    if (license !== null) sessionStorage.setItem("hrms_license", JSON.stringify(license));
+    set({ user, isAuthenticated: true, ...(license !== null ? { license } : {}) });
   },
   hasPermission: (permission) => {
     return userHasPermission(get().user, permission);
@@ -74,7 +100,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: () => {
     sessionStorage.removeItem("hrms_token");
     sessionStorage.removeItem("hrms_user");
-    set({ isAuthenticated: false, token: null, user: null });
+    sessionStorage.removeItem("hrms_license");
+    set({ isAuthenticated: false, token: null, user: null, license: null });
   }
 }));
 

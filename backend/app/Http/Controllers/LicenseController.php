@@ -29,7 +29,7 @@ class LicenseController extends Controller
     {
         $this->authorizePermission($request, 'licenses:view');
 
-        $license = License::with('company:id,name')->findOrFail($id);
+        $license = $this->resolveLicense($request, $id, ['company:id,name']);
 
         return $this->ok($license);
     }
@@ -60,7 +60,11 @@ class LicenseController extends Controller
 
         $companyId = $request->user()?->company_id;
 
-        $license = $this->service->create($validated, $companyId);
+        try {
+            $license = $this->service->create($validated, $companyId);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         return $this->ok($license, 'License issued successfully.', 201);
     }
@@ -71,7 +75,7 @@ class LicenseController extends Controller
     {
         $this->authorizePermission($request, 'licenses:edit');
 
-        $license = License::findOrFail($id);
+        $license = $this->resolveLicense($request, $id);
 
         $validated = $request->validate([
             'licensee_name'  => ['sometimes', 'required', 'string', 'max:255'],
@@ -99,7 +103,7 @@ class LicenseController extends Controller
     {
         $this->authorizePermission($request, 'licenses:delete');
 
-        $license = License::findOrFail($id);
+        $license = $this->resolveLicense($request, $id);
 
         $this->service->delete($license);
 
@@ -110,9 +114,9 @@ class LicenseController extends Controller
 
     public function suspend(Request $request, string $id): JsonResponse
     {
-        $this->authorizePermission($request, 'licenses:edit');
+        $this->authorizeRoles($request, [User::ROLE_SUPER_ADMIN]);
 
-        $license = License::findOrFail($id);
+        $license = $this->resolveLicense($request, $id);
 
         return $this->ok($this->service->suspend($license), 'License suspended.');
     }
@@ -121,9 +125,9 @@ class LicenseController extends Controller
 
     public function unsuspend(Request $request, string $id): JsonResponse
     {
-        $this->authorizePermission($request, 'licenses:edit');
+        $this->authorizeRoles($request, [User::ROLE_SUPER_ADMIN]);
 
-        $license = License::findOrFail($id);
+        $license = $this->resolveLicense($request, $id);
 
         return $this->ok($this->service->unsuspend($license), 'License unsuspended.');
     }
@@ -170,8 +174,51 @@ class LicenseController extends Controller
 
         $page    = max(1, (int) $request->input('page', 1));
         $perPage = min(100, max(5, (int) $request->input('per_page', 25)));
+        $search  = trim($request->input('search', ''));
 
-        return $this->ok($this->service->allCompanyUsage($page, $perPage));
+        return $this->ok($this->service->allCompanyUsage($page, $perPage, $search));
+    }
+
+    // ─── GET /company/usage  (any authenticated user) ────────────────────────
+
+    /**
+     * Lightweight seat-meter endpoint consumed by the frontend cap widget.
+     * Intentionally requires no special permission — every authenticated user
+     * in a company needs to know whether new employees can be added.
+     * Super admins (company_id = null) receive nulls; they use /settings/licenses/all-usage.
+     */
+    public function selfUsage(Request $request): JsonResponse
+    {
+        $companyId = $request->user()?->company_id;
+        $usage     = $this->service->usage($companyId);
+        $license   = $usage['license'];
+
+        $limit   = $license?->max_employees;
+        $current = $usage['active_employees'];
+
+        return $this->ok([
+            'plan_tier'        => $license?->edition,
+            'employee_limit'   => $limit,
+            'active_employees' => $current,
+            'remaining'        => $limit === null ? null : max(0, $limit - $current),
+        ]);
+    }
+
+    // ─── POST /settings/licenses/{id}/renew ──────────────────────────────────
+
+    public function renew(Request $request, string $id): JsonResponse
+    {
+        $this->authorizePermission($request, 'licenses:manage_settings');
+
+        $license = $this->resolveLicense($request, $id);
+
+        try {
+            $renewed = $this->service->renew($license);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return $this->ok($renewed, 'License renewed successfully.');
     }
 
     // ─── POST /settings/licenses/activate ────────────────────────────────────
@@ -185,7 +232,7 @@ class LicenseController extends Controller
         ]);
 
         try {
-            $license = $this->service->activate($validated['license_key']);
+            $license = $this->service->activate($validated['license_key'], $request->user()?->company_id);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return response()->json([
                 'message' => 'License key not found. Please check the key and try again.',
@@ -195,5 +242,48 @@ class LicenseController extends Controller
         }
 
         return $this->ok($license, 'License activated successfully.');
+    }
+
+    // ─── GET /settings/licenses/editions ─────────────────────────────────────
+
+    /**
+     * Returns the canonical edition list (seat limits + feature sets) from config.
+     * Consumed by the frontend IssueModal so edition defaults stay in sync with
+     * the backend without hardcoding them in two places.
+     */
+    public function editions(): JsonResponse
+    {
+        return $this->ok(config('licenses.editions', []));
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Resolve a license by ID, scoped to the caller's company.
+     *
+     * Super Admin (company_id = null) may resolve any license.
+     * Company-scoped callers may only resolve their own company's licenses;
+     * a foreign or non-existent ID returns 404 — not 403 — so existence
+     * is never leaked across tenant boundaries.
+     *
+     * @param  string[]  $with  Eager-load relations (e.g. ['company:id,name'])
+     */
+    private function resolveLicense(Request $request, string $id, array $with = []): License
+    {
+        $companyId = $request->user()?->company_id;
+
+        $query = License::query();
+
+        if ($with) {
+            $query->with($with);
+        }
+
+        // Company-scoped callers are restricted to their own company's licenses.
+        // findOrFail will produce a 404 for both missing and cross-tenant IDs.
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
+
+        return $query->findOrFail($id);
     }
 }

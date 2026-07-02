@@ -92,7 +92,11 @@ $registerRoutes = function (): void {
             Route::post('/logout', [AuthController::class, 'logout']);
             Route::get('/me', [AuthController::class, 'me']);
             Route::post('/refresh', [AuthController::class, 'refresh']);
+            Route::post('/profile', [AuthController::class, 'updateProfile']);
         });
+
+        // Company seat-meter — no special permission, any authenticated user needs this
+        Route::get('company/usage', [LicenseController::class, 'selfUsage']);
 
         // Dashboard + reports (all protected with audit log)
         Route::get('dashboard/summary', [DashboardController::class, 'summary']);
@@ -152,11 +156,13 @@ $registerRoutes = function (): void {
         Route::middleware('permission:licenses:view|licenses:create|licenses:edit|licenses:delete|licenses:manage_settings')->group(function () {
             Route::get('settings/licenses/all-usage',          [LicenseController::class, 'allCompanyUsage']);
             Route::get('settings/licenses/usage',              [LicenseController::class, 'usage']);
+            Route::get('settings/licenses/editions',           [LicenseController::class, 'editions']);
             // Throttle activation to 10 attempts per minute to prevent brute-force
             Route::post('settings/licenses/activate',          [LicenseController::class, 'activate'])->middleware('throttle:10,1');
             // Custom actions BEFORE apiResource so Laravel does not treat them as {license} UUID segments
             Route::post('settings/licenses/{id}/suspend',      [LicenseController::class, 'suspend']);
             Route::post('settings/licenses/{id}/unsuspend',    [LicenseController::class, 'unsuspend']);
+            Route::post('settings/licenses/{id}/renew',        [LicenseController::class, 'renew']);
             Route::apiResource('settings/licenses',            LicenseController::class);
         });
 

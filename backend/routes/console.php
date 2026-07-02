@@ -21,6 +21,12 @@ Schedule::command('licenses:expire-active')->hourly();
 // Email licensees whose licenses expire in 30, 14, 7, or 1 day(s).
 Schedule::command('licenses:notify-expiring')->dailyAt('08:00');
 
+// Email trial licensees when 7, 3, or 1 day(s) remain before their trial ends.
+Schedule::command('licenses:notify-trial-expiring')->dailyAt('08:10');
+
+// Email licensees whose license has just expired (one-time notification, runs daily).
+Schedule::command('licenses:notify-expired')->dailyAt('08:20');
+
 // ─── Report delivery ───────────────────────────────────────────────────────
 
 // Send saved reports whose daily/weekly schedule is due (checked hourly,

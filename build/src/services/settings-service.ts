@@ -105,8 +105,8 @@ export type LicenseItem = {
   edition: LicenseEdition;
   licensee_name: string;
   licensee_email: string;
-  max_employees: number;
-  max_users: number;
+  max_employees: number | null;
+  max_users: number | null;
   status: LicenseStatus;
   issued_at?: string | null;
   expires_at?: string | null;
@@ -198,10 +198,10 @@ export type AllCompanyUsageResponse = {
  * Fetch the full company usage snapshot.
  * Only callable by Super Admin — backend returns 403 for all other roles.
  */
-export function getAllCompanyUsage(page = 1, perPage = 25) {
-  return apiClient<AllCompanyUsageResponse>(
-    `/settings/licenses/all-usage?page=${page}&per_page=${perPage}`
-  );
+export function getAllCompanyUsage(page = 1, perPage = 25, search = '') {
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  if (search) params.set('search', search);
+  return apiClient<AllCompanyUsageResponse>(`/settings/licenses/all-usage?${params}`);
 }
 export function suspendLicense(id: string) {
   return apiClient<LicenseItem>(`/settings/licenses/${id}/suspend`, { method: "POST" });
@@ -209,3 +209,18 @@ export function suspendLicense(id: string) {
 export function unsuspendLicense(id: string) {
   return apiClient<LicenseItem>(`/settings/licenses/${id}/unsuspend`, { method: "POST" });
 }
+export function renewLicense(id: string) {
+  return apiClient<LicenseItem>(`/settings/licenses/${id}/renew`, { method: "POST" });
+}
+
+export type EditionConfig = {
+  max_employees: number | null;
+  max_users: number | null;
+  features: string[];
+};
+
+/** Returns the canonical edition defaults from the backend config. */
+export function getEditionConfig() {
+  return apiClient<Record<LicenseEdition, EditionConfig>>("/settings/licenses/editions");
+}
+

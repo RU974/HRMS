@@ -16,6 +16,7 @@ class LicenseService
     {
         return License::query()
             ->forCompany($companyId)
+            ->where('is_active', true)
             ->with('company:id,name')
             ->orderByDesc('created_at')
             ->get();
@@ -25,29 +26,37 @@ class LicenseService
 
     private function editionDefaults(string $edition): array
     {
-        return match ($edition) {
-            'Professional' => [
-                'max_employees' => 200,
-                'max_users'     => 50,
-                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication', 'approvals'],
-            ],
-            'Enterprise' => [
-                'max_employees' => null,
-                'max_users'     => null,
-                'features'      => ['attendance', 'leaves', 'payroll', 'performance', 'communication', 'approvals', 'recruitment'],
-            ],
-            default => [ // Starter
-                'max_employees' => 20,
-                'max_users'     => 3,
-                'features'      => ['attendance', 'leaves'],
-            ],
-        };
+        $editions = config('licenses.editions', []);
+
+        return $editions[$edition] ?? [
+            'max_employees' => 20,
+            'max_users'     => null,
+            'features'      => ['attendance', 'leaves'],
+        ];
     }
 
     // ─── Create ───────────────────────────────────────────────────────────────
 
     public function create(array $data, ?string $companyId): License
     {
+        $targetCompanyId = $data['company_id'] ?? $companyId;
+
+        // Prevent issuing a second active/trial license to the same company.
+        // One company, one active license — additional keys must be issued only
+        // after the existing one is revoked or expired.
+        if ($targetCompanyId) {
+            $hasActive = License::where('company_id', $targetCompanyId)
+                ->where('is_active', true)
+                ->whereIn('status', ['active', 'trial'])
+                ->exists();
+
+            if ($hasActive) {
+                throw new \RuntimeException(
+                    'This company already has an active or trial license. Revoke or let the existing license expire before issuing a new one.'
+                );
+            }
+        }
+
         $edition  = $data['edition'] ?? 'Starter';
         $defaults = $this->editionDefaults($edition);
 
@@ -80,17 +89,22 @@ class LicenseService
         // unsuspend()/activate() flows, so it can't be bypassed into an invalid
         // state through this generic update endpoint.
         $license->fill($data);
+        // recalculateStatus() auto-persists via saveQuietly() when the record exists.
         $license->recalculateStatus();
-        $license->save();
 
         return $license->fresh(['company']);
     }
 
     // ─── Activate ─────────────────────────────────────────────────────────────
 
-    public function activate(string $licenseKey): License
+    public function activate(string $licenseKey, ?string $callerCompanyId = null): License
     {
         $license = License::where('license_key', strtoupper(trim($licenseKey)))->firstOrFail();
+
+        // Tribe check: a company-scoped caller can only activate keys that belong to their company.
+        if ($callerCompanyId && $license->company_id && $license->company_id !== $callerCompanyId) {
+            throw new \RuntimeException('This license key does not belong to your company.');
+        }
 
         // Revoked licenses (is_active = false) can never be re-activated.
         if (! $license->is_active) {
@@ -109,11 +123,17 @@ class LicenseService
             return $license->load('company');
         }
 
+        // Claim unassigned key: stamp the caller's company before any further checks
+        // so the one-active-license guard below uses the correct company scope.
+        if ($callerCompanyId && ! $license->company_id) {
+            $license->company_id = $callerCompanyId;
+        }
+
         if ($license->company_id) {
             $hasOtherActive = License::where('company_id', $license->company_id)
                 ->where('id', '!=', $license->id)
                 ->where('is_active', true)
-                ->where('status', 'active')
+                ->whereIn('status', ['active', 'trial'])
                 ->exists();
 
             if ($hasOtherActive) {
@@ -136,8 +156,19 @@ class LicenseService
 
     // ─── Seat-limit guards ────────────────────────────────────────────────────
 
-    public function canAddEmployee(?string $companyId = null): bool
+    /**
+     * Core seat-check logic shared by canAddEmployee() and assertCanAddEmployee().
+     * Returns null when the add is permitted, or an error message string when it
+     * should be blocked. Keeping the decision in one place means callers never
+     * drift out of sync.
+     */
+    private function resolveEmployeeSeatCheck(?string $companyId, int $adding = 1): ?string
     {
+        // Super Admins (company_id = null) are never seat-limited.
+        if ($companyId === null) {
+            return null;
+        }
+
         $license = License::query()
             ->forCompany($companyId)
             ->active()
@@ -145,17 +176,53 @@ class LicenseService
             ->first();
 
         if (! $license) {
-            return true;
+            // No license on file — fail-open so new tenants can onboard before
+            // a license is formally issued. Enforcement begins once a license
+            // record exists (active, trial, expired, or suspended).
+            return null;
         }
+
+        if ($license->status === 'suspended') {
+            return 'Your license has been suspended. New employees cannot be added until it is reinstated. Please contact support.';
+        }
+
+        if ($license->status === 'expired') {
+            return 'Your license has expired. New employees cannot be added until the license is renewed.';
+        }
+
+        // active or trial — enforce seat cap when set
         if ($license->max_employees === null) {
-            return true;
+            return null;
         }
 
         $count = Employee::where('status', 'active')
-            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->where('company_id', $companyId)
             ->count();
 
-        return $count < $license->max_employees;
+        if (($count + $adding) > $license->max_employees) {
+            return "Employee limit of {$license->max_employees} reached on your {$license->edition} plan. Upgrade to add more employees.";
+        }
+
+        return null;
+    }
+
+    public function canAddEmployee(?string $companyId = null, int $adding = 1): bool
+    {
+        return $this->resolveEmployeeSeatCheck($companyId, $adding) === null;
+    }
+
+    /**
+     * Throws when a new employee add must be blocked (fail-closed for
+     * expired/suspended licenses; fail-open when no license exists at all).
+     * Catch \RuntimeException at call sites and return HTTP 422.
+     */
+    public function assertCanAddEmployee(?string $companyId, int $adding = 1): void
+    {
+        $message = $this->resolveEmployeeSeatCheck($companyId, $adding);
+
+        if ($message !== null) {
+            throw new \RuntimeException($message);
+        }
     }
 
     public function canAddUser(?string $companyId = null): bool
@@ -163,19 +230,25 @@ class LicenseService
         $license = License::query()
             ->forCompany($companyId)
             ->active()
+            ->whereIn('status', ['active', 'trial'])
             ->orderByDesc('created_at')
             ->first();
 
         if (! $license) {
-            return true;
+            // Super Admins have no company_id and are never seat-limited.
+            // A real company with no active/trial license must be blocked.
+            return $companyId === null;
         }
         if ($license->max_users === null) {
             return true;
         }
 
+        // Exclude users who are also employees — they are counted against
+        // max_employees, not max_users, matching allCompanyUsage counting.
         $count = User::query()
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN))
+            ->whereDoesntHave('employee')
             ->count();
 
         return $count < $license->max_users;
@@ -187,7 +260,8 @@ class LicenseService
     {
         $employeeQuery = Employee::query()->where('status', 'active');
         $userQuery     = User::query()
-            ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN));
+            ->whereDoesntHave('roles', fn ($q) => $q->where('name', User::ROLE_SUPER_ADMIN))
+            ->whereDoesntHave('employee');
 
         if ($companyId) {
             $employeeQuery->where('company_id', $companyId);
@@ -205,11 +279,7 @@ class LicenseService
             ->with('company:id,name')
             ->first();
 
-        // Reflect expiry in this response without writing during a read request;
-        // the licenses:expire-active scheduled command persists the transition.
-        if ($license && $license->expires_at?->isPast() && $license->status !== 'expired') {
-            $license->status = 'expired';
-        }
+        $license?->reflectExpiry();
 
         return [
             'active_employees' => $activeEmployees,
@@ -230,7 +300,7 @@ class LicenseService
      *   company_id, company_name, total_employees, total_users,
      *   license (current active), license_history (all other licenses)
      */
-    public function allCompanyUsage(int $page = 1, int $perPage = 25): array
+    public function allCompanyUsage(int $page = 1, int $perPage = 25, string $search = ''): array
     {
         // ── Global summary (all companies, not just this page) ────────────────
         $totalCompanies       = Company::where('is_active', true)->count();
@@ -269,6 +339,7 @@ class LicenseService
         // ── Paginated company rows ────────────────────────────────────────────
         $paginator = Company::query()
             ->where('is_active', true)
+            ->when($search !== '', fn ($q) => $q->where('name', 'LIKE', "%{$search}%"))
             ->withCount(['users' => fn ($q) => $q
                 ->whereDoesntHave('employee')
                 ->whereDoesntHave('roles', fn ($r) => $r->where('name', User::ROLE_SUPER_ADMIN)),
@@ -304,11 +375,7 @@ class LicenseService
             // Current license = first record that is still active (not revoked)
             $license = $companyLicenses->first(fn ($l) => $l->is_active);
 
-            // Reflect expiry in this response without writing during a read request;
-            // the licenses:expire-active scheduled command persists the transition.
-            if ($license && $license->expires_at?->isPast() && $license->status !== 'expired') {
-                $license->status = 'expired';
-            }
+            $license?->reflectExpiry();
 
             // History = everything except the current license
             $history = $companyLicenses
@@ -337,6 +404,37 @@ class LicenseService
         ];
     }
 
+    // ─── Renew ────────────────────────────────────────────────────────────────
+
+    public function renew(License $license): License
+    {
+        if (! $license->is_active) {
+            throw new \RuntimeException('This license has been revoked and cannot be renewed. Please contact support.');
+        }
+
+        if ($license->status === 'suspended') {
+            throw new \RuntimeException('This license is currently suspended. Please contact support to renew.');
+        }
+
+        // Extend by one year from the later of today or the current expiry date,
+        // so renewal on an already-future expiry stacks rather than resets.
+        $base = ($license->expires_at && $license->expires_at->isFuture())
+            ? $license->expires_at->copy()
+            : now();
+
+        $license->expires_at = $base->addYear();
+
+        // Transition expired or unactivated trial to active.
+        if (in_array($license->status, ['expired', 'trial'], true)) {
+            $license->activated_at ??= now();
+            $license->status = 'active';
+        }
+
+        $license->save();
+
+        return $license->fresh(['company']);
+    }
+
     // ─── Suspend / Unsuspend ──────────────────────────────────────────────────
 
     public function suspend(License $license): License
@@ -348,8 +446,17 @@ class LicenseService
 
     public function unsuspend(License $license): License
     {
-        $license->status = null; // clear suspended so recalculateStatus is not blocked
-        $license->recalculateStatus();
+        // Inline the status calculation rather than setting status = null
+        // as an intermediate: the column is a non-nullable enum and a
+        // mid-flight exception would try to persist an invalid null value.
+        if ($license->expires_at?->isPast()) {
+            $license->status = 'expired';
+        } elseif ($license->activated_at) {
+            $license->status = 'active';
+        } else {
+            $license->status = 'trial';
+        }
+
         $license->save();
         return $license->fresh(['company']);
     }

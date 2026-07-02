@@ -15,13 +15,15 @@ import {
   CompanyItem,
   CompanyLicenseUsage,
   AllCompanyUsageResponse,
+  EditionConfig,
   activateLicense,
   createLicense,
   deleteLicense,
   getAllCompanyUsage,
+  getEditionConfig,
   getLicenseUsage,
-  listLicenses,
   listCompanies,
+  renewLicense,
   suspendLicense,
   unsuspendLicense,
   updateLicense,
@@ -95,9 +97,9 @@ const EDITION_DEFAULTS: Record<LicenseEdition, {
   max_users: string;
   features: string[];
 }> = {
-  Starter:      { max_employees: "20",  max_users: "3",  features: ["attendance", "leaves"] },
-  Professional: { max_employees: "200", max_users: "50", features: ["attendance", "leaves", "payroll", "performance", "communication", "approvals"] },
-  Enterprise:   { max_employees: "",    max_users: "",   features: ["attendance", "leaves", "payroll", "performance", "communication", "approvals", "recruitment"] },
+  Starter:      { max_employees: "20",  max_users: "", features: ["attendance", "leaves"] },
+  Professional: { max_employees: "200", max_users: "", features: ["attendance", "leaves", "payroll", "performance", "communication", "approvals"] },
+  Enterprise:   { max_employees: "",    max_users: "", features: ["attendance", "leaves", "payroll", "performance", "communication", "approvals", "recruitment"] },
 };
 
 const FEATURE_LABEL: Record<string, string> = {};
@@ -152,7 +154,16 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
   const userPct = usagePct(usage.active_users, license.max_users);
 
   const TRIAL_DAYS = 14;
-  const maxDays = license.status === "trial" ? TRIAL_DAYS : 365;
+  const maxDays = license.status === "trial"
+    ? TRIAL_DAYS
+    : (() => {
+        const start = license.activated_at ?? license.issued_at;
+        const end   = license.expires_at;
+        if (start && end) {
+          return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000));
+        }
+        return 365;
+      })();
 
   const daysColor = license.days_remaining == null ? "#10b981"
     : license.days_remaining < 30  ? "#ef4444"
@@ -217,9 +228,13 @@ function ActiveLicenseHero({ license, usage }: { license: LicenseItem; usage: Li
         <div className="mb-6 flex flex-wrap items-center justify-around gap-6 rounded-2xl border border-white/10 bg-white/5 py-5 backdrop-blur-sm">
           <UsageRing used={usage.active_employees} max={license.max_employees} label="Employees"
             color={empPct >= 90 ? "#ef4444" : empPct >= 70 ? "#f59e0b" : "#10b981"} />
-          <div className="h-16 w-px bg-white/10" />
-          <UsageRing used={usage.active_users} max={license.max_users} label="Users"
-            color={userPct >= 90 ? "#ef4444" : userPct >= 70 ? "#f59e0b" : "#10b981"} />
+          {license.max_users !== null && (
+            <>
+              <div className="h-16 w-px bg-white/10" />
+              <UsageRing used={usage.active_users} max={license.max_users} label="Admin seats"
+                color={userPct >= 90 ? "#ef4444" : userPct >= 70 ? "#f59e0b" : "#10b981"} />
+            </>
+          )}
           <div className="h-16 w-px bg-white/10" />
           <div className="flex flex-col items-center gap-2">
             <div className="relative h-20 w-20">
@@ -289,7 +304,7 @@ const PLANS: Array<{
     yearlyPeriod: "/ employee / year",
     yearlyMonthly: "$5.60",
     tagline: "For small teams getting started",
-    limits: "Up to 20 employees · 3 users",
+    limits: "Up to 20 employees · min. 5 seats",
     trial: "14-day free trial",
     features: ["Employee records", "Basic attendance", "Leave management", "Email support"],
   },
@@ -301,7 +316,7 @@ const PLANS: Array<{
     yearlyPeriod: "/ employee / year",
     yearlyMonthly: "$11.20",
     tagline: "For growing organizations",
-    limits: "Up to 200 employees · 50 users",
+    limits: "Up to 200 employees · min. 5 seats",
     trial: "14-day free trial",
     features: ["Everything in Starter", "Payroll processing", "Performance reviews", "Approvals & workflows", "Chat & announcements", "Priority support"],
     highlighted: true,
@@ -314,7 +329,7 @@ const PLANS: Array<{
     yearlyPeriod: "",
     yearlyMonthly: "",
     tagline: "For large enterprises",
-    limits: "Unlimited employees & users",
+    limits: "Unlimited employees",
     trial: "Custom onboarding",
     features: ["Everything in Professional", "Recruitment module", "Custom roles & permissions", "Multi-branch & company", "Audit logs", "Dedicated support", "SLA guarantee"],
   },
@@ -407,7 +422,7 @@ function PlanCard({ plan, current, onSelect, ctaLabel, yearly }: {
           {plan.features.map((f) => (
             <li key={f} className="flex items-start gap-2 text-xs text-[var(--text)]">
               <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-              {f}
+                  {f}
             </li>
           ))}
         </ul>
@@ -493,7 +508,8 @@ function RevokeModal({
 }: {
   open: boolean; onClose: () => void; onSuccess: () => void; license: LicenseItem;
 }) {
-  const [errMsg, setErrMsg] = React.useState("");
+  const [errMsg, setErrMsg]       = React.useState("");
+  const [confirmed, setConfirmed] = React.useState(false);
 
   const mutation = useMutation({
     mutationFn: () => deleteLicense(license.id),
@@ -510,21 +526,44 @@ function RevokeModal({
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
           <div className="flex items-center gap-2">
             <Trash2 className="h-4 w-4 text-rose-500" />
-            <h3 className="text-base font-semibold text-[var(--text)]">Revoke License</h3>
+            <h3 className="text-base font-semibold text-[var(--text)]">Permanently Revoke License</h3>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-[var(--border)]/40">
             <X className="h-4 w-4 text-[var(--muted)]" />
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
-            This will permanently revoke the license. The license key will remain in the audit trail but can no longer be activated. This cannot be undone.
+          {/* Revoke vs Suspend comparison */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+              <p className="font-bold text-amber-700 dark:text-amber-400 mb-1">Suspend (reversible)</p>
+              <p className="text-amber-600 dark:text-amber-300 leading-relaxed">Temporarily blocks access. Can be lifted at any time. The key remains valid.</p>
+            </div>
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 dark:border-rose-800 dark:bg-rose-900/20">
+              <p className="font-bold text-rose-700 dark:text-rose-400 mb-1">Revoke ← you are here</p>
+              <p className="text-rose-600 dark:text-rose-300 leading-relaxed">Permanent. The key is blacklisted and can never be re-activated. This cannot be undone.</p>
+            </div>
           </div>
+
           <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 space-y-1">
-            <p className="text-xs font-semibold text-[var(--muted)]">License</p>
+            <p className="text-xs font-semibold text-[var(--muted)]">License to be permanently revoked</p>
             <code className="text-sm font-mono font-semibold text-[var(--text)]">{license.license_key}</code>
             <p className="text-xs text-[var(--muted)]">{license.licensee_name} · {license.edition}</p>
           </div>
+
+          {/* Explicit confirmation checkbox */}
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-[var(--border)] accent-rose-600"
+            />
+            <span className="text-xs text-[var(--text)]">
+              I understand this is <strong>permanent and irreversible</strong>. The license key will be permanently disabled.
+            </span>
+          </label>
+
           {errMsg && (
             <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
               <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> {errMsg}
@@ -532,16 +571,16 @@ function RevokeModal({
           )}
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text)] hover:bg-[var(--background)]">
-              Cancel
+              Cancel — Keep License
             </button>
             <button
               onClick={() => { setErrMsg(""); void mutation.mutate(); }}
-              disabled={mutation.isPending}
-              className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              disabled={mutation.isPending || !confirmed}
+              className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {mutation.isPending
                 ? <><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> Revoking…</>
-                : <><Trash2 className="h-3.5 w-3.5" /> Revoke</>
+                : <><Trash2 className="h-3.5 w-3.5" /> Permanently Revoke</>
               }
             </button>
           </div>
@@ -552,7 +591,7 @@ function RevokeModal({
 }
 
 // ─── Activate key modal ───────────────────────────────────────────────────────
-function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+function ActivateModal({ open, onClose, onSuccess, hint }: { open: boolean; onClose: () => void; onSuccess: () => void; hint?: string }) {
   const [key, setKey]   = useState("");
   const [errMsg, setErrMsg] = useState("");
 
@@ -588,6 +627,11 @@ function ActivateModal({ open, onClose, onSuccess }: { open: boolean; onClose: (
           </button>
         </div>
         <div className="p-5 space-y-4">
+          {hint && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-900/20 dark:text-violet-300">
+              {hint}
+            </div>
+          )}
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
             Enter the license key provided by Slingshotteck. Format: <code className="font-mono font-bold">HRMS-XXXXX-XXXXX-XXXXX-XXXXX</code>
             <span className="mt-1 block text-blue-500/80">No key yet? Every plan includes a <strong>14-day free trial</strong> — contact <a href="mailto:sales@slingshotteck.com" className="underline">sales@slingshotteck.com</a></span>
@@ -679,6 +723,15 @@ function IssueModal({
     staleTime: 60_000,
   });
 
+  // Edition defaults from backend so the form stays in sync with server-side config.
+  const editionConfigQuery = useQuery({
+    queryKey: ["settings", "license-editions"],
+    queryFn:  getEditionConfig,
+    enabled:  open,
+    staleTime: 5 * 60_000,
+  });
+  const editionConfigMap: Record<string, EditionConfig> = editionConfigQuery.data ?? {};
+
   const companies: CompanyItem[] = companiesQuery.data ?? [];
 
   const mutation = useMutation({
@@ -718,11 +771,20 @@ function IssueModal({
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  // Changing edition auto-fills seat limits and module features
+  // Changing edition auto-fills seat limits and module features.
+  // Uses backend config when available, falls back to static EDITION_DEFAULTS.
   const handleEditionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const edition = e.target.value as LicenseEdition;
-    const d = EDITION_DEFAULTS[edition];
-    setForm((p) => ({ ...p, edition, max_employees: d.max_employees, max_users: d.max_users, features: d.features }));
+    const serverCfg = editionConfigMap[edition];
+    const fallback  = EDITION_DEFAULTS[edition];
+    const maxEmp = serverCfg
+      ? (serverCfg.max_employees == null ? "" : String(serverCfg.max_employees))
+      : fallback.max_employees;
+    const maxUsr = serverCfg
+      ? (serverCfg.max_users == null ? "" : String(serverCfg.max_users))
+      : fallback.max_users;
+    const features = serverCfg?.features ?? fallback.features;
+    setForm((p) => ({ ...p, edition, max_employees: maxEmp, max_users: maxUsr, features }));
   };
 
   const toggleFeature = (value: string, checked: boolean) =>
@@ -827,7 +889,7 @@ function IssueModal({
                 onChange={set("max_users")}
               />
               {form.max_users === "" && (
-                <p className="text-[10px] text-[var(--muted)]">No limit (Enterprise)</p>
+                <p className="text-[10px] text-[var(--muted)]">Unlimited — enter a number to cap admin seats</p>
               )}
             </div>
           </div>
@@ -876,7 +938,7 @@ function IssueModal({
           {license && confirmOverwrite && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              This will overwrite the existing license details for <strong>{license.licensee_name}</strong>. Click "Confirm & Save" to proceed.
+              These changes will take effect immediately for <strong>{license.licensee_name}</strong>. Click "Confirm & Save" to apply them.
             </div>
           )}
 
@@ -1040,18 +1102,29 @@ function CompanyLicenseRow({
             </div>
           )}
 
+          {/* Suspended notice */}
+          {license?.status === "suspended" && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              <Ban className="h-3.5 w-3.5 shrink-0" />
+              License suspended — access to all features is blocked until reinstated by the platform team.
+            </div>
+          )}
+
           {/* Seat usage bars */}
           {license && license.status !== "suspended" && (
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Employees", used: row.total_employees, max: license.max_employees, pct: empPct },
-                { label: "Users",     used: row.total_users,     max: license.max_users,     pct: userPct },
+                { label: "Employees",   used: row.total_employees, max: license.max_employees, pct: empPct },
+                ...(license.max_users !== null
+                  ? [{ label: "Admin seats", used: row.total_users, max: license.max_users, pct: userPct }]
+                  : []),
               ].map((s) => (
                 <div key={s.label}>
                   <div className="mb-1 flex items-center justify-between text-[10px]">
                     <span className="font-semibold text-[var(--muted)]">{s.label}</span>
                     <span className="text-[var(--muted)]">
-                      <strong className="text-[var(--text)]">{s.used}</strong>/{s.max} ({s.pct}%)
+                      <strong className="text-[var(--text)]">{s.used}</strong>
+                      {s.max == null ? " / ∞" : ` / ${s.max.toLocaleString()} (${s.pct}%)`}
                     </span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border)]">
@@ -1127,7 +1200,10 @@ function CompanyLicenseRow({
             <div className="mt-2 space-y-1.5">
               {row.license_history.map((h) => (
                 <div key={h.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-xs text-[var(--muted)]">
-                  <StatusBadge status={h.status} />
+                  {h.is_active
+                    ? <StatusBadge status={h.status} />
+                    : <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-semibold text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"><XCircle className="h-3 w-3" /> Revoked</span>
+                  }
                   <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${(EDITION_CFG[h.edition] ?? EDITION_CFG.Starter).badge}`}>{h.edition}</span>
                   <code className="font-mono opacity-60">{h.license_key}</code>
                   {h.issued_at && <span>Issued {fmtDate(h.issued_at)}</span>}
@@ -1154,6 +1230,8 @@ function SuperAdminDashboard({
   onRevoke,
   pagination,
   onPageChange,
+  search,
+  onSearch,
 }: {
   data:         AllCompanyUsageResponse | undefined;
   isLoading:    boolean;
@@ -1165,17 +1243,16 @@ function SuperAdminDashboard({
   onRevoke:     (license: LicenseItem) => void;
   pagination?:  LicensePagination;
   onPageChange: (page: number) => void;
+  search:       string;
+  onSearch:     (s: string) => void;
 }) {
-  const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "trial" | "expiring" | "expired" | "suspended" | "none">("all");
 
   const summary   = data?.summary;
   const companies = data?.companies ?? [];
 
-  // Filter + search
+  // Status filter only — search is handled server-side
   const visible = companies.filter((row) => {
-    const matchesSearch = row.company_name.toLowerCase().includes(search.toLowerCase());
-    if (!matchesSearch) return false;
     if (filter === "all")       return true;
     if (filter === "none")      return !row.license;
     if (filter === "active")    return row.license?.status === "active";
@@ -1252,13 +1329,8 @@ function SuperAdminDashboard({
             className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] py-2 pl-8 pr-3 text-sm outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/10 placeholder:text-[var(--muted)]"
             placeholder="Search companies…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => onSearch(e.target.value)}
           />
-          {search && pagination && pagination.last_page > 1 && (
-            <p className="mt-1 text-[10px] text-[var(--muted)]">
-              Searching within page {pagination.current_page} of {pagination.last_page}. Navigate pages to search all companies.
-            </p>
-          )}
         </div>
         {(["all", "active", "trial", "expiring", "expired", "suspended", "none"] as const).map((f) => (
           <button
@@ -1367,7 +1439,8 @@ export function LicensingTab() {
   const { user } = useAuthStore();
   const isSuperAdmin = isSuperAdminRole(user);
 
-  const [activateOpen, setActivateOpen] = useState(false);
+  const [activateOpen, setActivateOpen]   = useState(false);
+  const [activateHint, setActivateHint]   = useState<string | undefined>();
   const [issueOpen, setIssueOpen]       = useState(false);
   const [editOpen, setEditOpen]         = useState(false);
   const [suspendOpen, setSuspendOpen]   = useState(false);
@@ -1383,13 +1456,26 @@ export function LicensingTab() {
   // License targeted by suspend / unsuspend / revoke actions
   const [actionLicense, setActionLicense] = useState<LicenseItem | undefined>(undefined);
 
-  // Page state for the SA company list (server-side pagination)
-  const [saPage, setSaPage] = useState(1);
+  // Page + search state for the SA company list (server-side pagination + search)
+  const [saPage, setSaPage]     = useState(1);
+  const [saSearch, setSaSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search input — reset to page 1 when search changes
+  React.useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(saSearch); setSaPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [saSearch]);
+
+  // Reset billing period when plan comparison section is collapsed
+  React.useEffect(() => {
+    if (!showPlans) setBillingYearly(false);
+  }, [showPlans]);
 
   // ── Super Admin: all-company usage ──────────────────────────────────────────
   const allUsageQuery = useQuery({
-    queryKey: ["settings", "licenses-all-usage", saPage],
-    queryFn:  () => getAllCompanyUsage(saPage),
+    queryKey: ["settings", "licenses-all-usage", saPage, debouncedSearch],
+    queryFn:  () => getAllCompanyUsage(saPage, 25, debouncedSearch),
     enabled:  isSuperAdmin,
     retry: 1,
   });
@@ -1398,13 +1484,6 @@ export function LicensingTab() {
   const usageQuery = useQuery({
     queryKey: ["settings", "license-usage"],
     queryFn:  getLicenseUsage,
-    enabled:  !isSuperAdmin,
-    retry: 1,
-  });
-
-  const licensesQuery = useQuery({
-    queryKey: ["settings", "licenses"],
-    queryFn:  listLicenses,
     enabled:  !isSuperAdmin,
     retry: 1,
   });
@@ -1445,11 +1524,10 @@ export function LicensingTab() {
   }
 
   // Company Admin paths
-  const isLoading = usageQuery.isLoading || licensesQuery.isLoading;
-  const error     = usageQuery.error     || licensesQuery.error;
+  const isLoading = usageQuery.isLoading;
+  const error     = usageQuery.error;
 
-  const license: LicenseItem | null =
-    usageQuery.data?.license ?? licensesQuery.data?.[0] ?? null;
+  const license: LicenseItem | null = usageQuery.data?.license ?? null;
 
   const usage: LicenseUsage = {
     active_employees: usageQuery.data?.active_employees ?? 0,
@@ -1516,6 +1594,8 @@ export function LicensingTab() {
           onRevoke={handleRevoke}
           pagination={allUsageQuery.data?.pagination}
           onPageChange={setSaPage}
+          search={saSearch}
+          onSearch={setSaSearch}
         />
 
         {/* Issue new license button — floating in action bar */}
@@ -1588,8 +1668,9 @@ export function LicensingTab() {
     <div className="space-y-6">
       <ActivateModal
         open={activateOpen}
-        onClose={() => setActivateOpen(false)}
+        onClose={() => { setActivateOpen(false); setActivateHint(undefined); }}
         onSuccess={invalidate}
+        hint={activateHint}
       />
 
       {/* Action bar */}
@@ -1627,6 +1708,70 @@ export function LicensingTab() {
           </div>
         </div>
       )}
+
+      {/* In-app license health banner */}
+      {!isLoading && license && (() => {
+        if (license.status === "expired") {
+          return (
+            <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300">
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Your license has expired</p>
+                <p className="text-xs mt-0.5 opacity-80">
+                  Access to licensed modules is restricted. Contact your administrator or{" "}
+                  {license.support_email
+                    ? <a href={`mailto:${license.support_email}`} className="underline">{license.support_email}</a>
+                    : "support"}{" "}
+                  to renew.
+                </p>
+              </div>
+            </div>
+          );
+        }
+        if (license.status === "suspended") {
+          return (
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Your license has been suspended</p>
+                <p className="text-xs mt-0.5 opacity-80">
+                  Feature access is temporarily blocked. Please contact{" "}
+                  {license.support_email
+                    ? <a href={`mailto:${license.support_email}`} className="underline">{license.support_email}</a>
+                    : "support"}{" "}
+                  to resolve this.
+                </p>
+              </div>
+            </div>
+          );
+        }
+        if (license.days_remaining != null && license.days_remaining <= 30 && license.days_remaining > 0) {
+          const urgent = license.days_remaining <= 7;
+          return (
+            <div className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${
+              urgent
+                ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300"
+                : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+            }`}>
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">
+                  {license.status === "trial"
+                    ? `Trial ends in ${license.days_remaining} day${license.days_remaining !== 1 ? "s" : ""}`
+                    : `License expires in ${license.days_remaining} day${license.days_remaining !== 1 ? "s" : ""}`}
+                </p>
+                <p className="text-xs mt-0.5 opacity-80">
+                  Renew before {fmtDate(license.expires_at)} to avoid a service interruption.
+                  {license.support_email && (
+                    <> Contact <a href={`mailto:${license.support_email}`} className="underline">{license.support_email}</a> to renew.</>
+                  )}
+                </p>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* Loading skeleton */}
       {isLoading && (
@@ -1695,8 +1840,10 @@ export function LicensingTab() {
               </div>
 
               {[
-                { label: "Employees", used: usage.active_employees, max: license.max_employees, icon: Users },
-                { label: "Users",     used: usage.active_users,     max: license.max_users,     icon: Building2 },
+                { label: "Employees",   used: usage.active_employees, max: license.max_employees, icon: Users },
+                ...(license.max_users !== null
+                  ? [{ label: "Admin seats", used: usage.active_users, max: license.max_users, icon: Building2 }]
+                  : []),
               ].map((row) => {
                 const pct = usagePct(row.used, row.max);
                 const barColor = pct >= 90 ? "bg-rose-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500";
@@ -1708,7 +1855,8 @@ export function LicensingTab() {
                         <Icon className="h-3.5 w-3.5 text-[var(--muted)]" /> {row.label}
                       </div>
                       <span className="text-[var(--muted)]">
-                        <strong className="text-[var(--text)]">{row.used.toLocaleString()}</strong> / {row.max.toLocaleString()} ({pct}%)
+                        <strong className="text-[var(--text)]">{row.used.toLocaleString()}</strong>
+                        {row.max == null ? " / ∞" : ` / ${row.max.toLocaleString()} (${pct}%)`}
                       </span>
                     </div>
                     <div className="h-2.5 overflow-hidden rounded-full bg-[var(--border)]">
@@ -1820,10 +1968,15 @@ export function LicensingTab() {
                   if (p.edition === "Enterprise") {
                     ctaLabel = "Contact Sales";
                     onSelect = () => { window.location.href = "mailto:sales@slingshotteck.com"; };
+                  } else if (license) {
+                    ctaLabel = planRank > currentRank ? "Upgrade" : "Downgrade";
+                    const direction = planRank > currentRank ? "upgrade" : "downgrade";
+                    onSelect = () => {
+                      setActivateHint(`To ${direction} to ${p.edition}, enter the new license key provided by your administrator.`);
+                      setActivateOpen(true);
+                    };
                   } else {
-                    ctaLabel = license
-                      ? (planRank > currentRank ? "Upgrade" : "Downgrade")
-                      : "Start Free Trial";
+                    ctaLabel = "Start Free Trial";
                     onSelect = () => setActivateOpen(true);
                   }
                 }

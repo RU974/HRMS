@@ -31,13 +31,14 @@ class License extends Model
         'support_email',
         'features',
         'metadata',
-        'currency',
+        'notified_thresholds',
         'is_active',
     ];
 
     protected $casts = [
-        'features'     => 'array',
-        'metadata'     => 'array',
+        'features'             => 'array',
+        'metadata'             => 'array',
+        'notified_thresholds'  => 'array',
         'is_active'    => 'boolean',
         'issued_at'    => 'datetime',
         'expires_at'   => 'datetime',
@@ -102,8 +103,8 @@ class License extends Model
      *
      * is_active = false is a terminal state. activate() rejects these keys outright.
      *
-     * Recalculate and set status based on current timestamps.
-     * Called after activation and on any update that touches expires_at or activated_at.
+     * Recalculate status based on current timestamps and persist the change if the
+     * model already exists in the database. Callers do not need a follow-up save().
      */
     public function recalculateStatus(): void
     {
@@ -117,6 +118,12 @@ class License extends Model
             $this->status = 'active';
         } else {
             $this->status = 'trial';
+        }
+
+        // Persist immediately if the record already exists so callers don't need
+        // a redundant save() call and can't accidentally skip the write.
+        if ($this->exists) {
+            $this->saveQuietly();
         }
     }
 
@@ -151,5 +158,17 @@ class License extends Model
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
+    }
+
+    /**
+     * Reflect an expired status on this in-memory instance without persisting.
+     * Used by read-only endpoints that want to show accurate status before the
+     * scheduled licenses:expire-active command has run. Does not call save().
+     */
+    public function reflectExpiry(): void
+    {
+        if ($this->expires_at?->isPast() && $this->status !== 'expired') {
+            $this->status = 'expired';
+        }
     }
 }

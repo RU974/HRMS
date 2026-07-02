@@ -10,6 +10,7 @@ use App\Services\AuditLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password as PasswordRule;
@@ -126,7 +127,88 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        return $this->ok($request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']));
+        $user = $request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']);
+
+        // Attach a lightweight license snapshot so the frontend can render
+        // expiry banners and seat warnings without a separate API call.
+        $licenseSnapshot = null;
+        if ($user?->company_id) {
+            $license = \App\Models\License::query()
+                ->where('company_id', $user->company_id)
+                ->where('is_active', true)
+                ->orderByRaw("CASE status WHEN 'active' THEN 0 WHEN 'trial' THEN 1 WHEN 'expired' THEN 2 ELSE 3 END")
+                ->orderByDesc('created_at')
+                ->first();
+
+            if ($license) {
+                $licenseSnapshot = [
+                    'status'         => $license->status,
+                    'edition'        => $license->edition,
+                    'days_remaining' => $license->days_remaining,
+                    'expires_at'     => $license->expires_at?->toISOString(),
+                    'features'       => $license->features ?? [],
+                    'max_employees'  => $license->max_employees,
+                    'max_users'      => $license->max_users,
+                ];
+            }
+        }
+
+        return $this->ok([
+            'user'    => $user,
+            'license' => $licenseSnapshot,
+        ]);
+    }
+
+    /**
+     * Update own profile (name on user; employee fields if linked)
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $request->validate([
+            'name'          => 'sometimes|string|max:255',
+            'phone'         => 'nullable|string|max:20',
+            'address'       => 'nullable|string|max:1000',
+            'date_of_birth' => 'nullable|date',
+            'gender'        => 'nullable|in:male,female,other',
+            'profile_image' => 'nullable|image|max:5120',
+        ]);
+
+        $userPayload = [];
+        if ($request->filled('name')) {
+            $userPayload['name'] = $request->input('name');
+        }
+        if ($request->hasFile('profile_image')) {
+            $userPayload['profile_image'] = Storage::disk('public')->putFile('employee-profiles', $request->file('profile_image'));
+        }
+        if (!empty($userPayload)) {
+            $user->update($userPayload);
+        }
+
+        $employee = $user->employee;
+        if ($employee) {
+            $empPayload = array_filter([
+                'name'          => $request->input('name'),
+                'phone'         => $request->input('phone'),
+                'address'       => $request->input('address'),
+                'date_of_birth' => $request->input('date_of_birth'),
+                'gender'        => $request->input('gender'),
+            ], fn($v) => $v !== null);
+
+            if (isset($userPayload['profile_image'])) {
+                $empPayload['profile_image'] = $userPayload['profile_image'];
+            }
+
+            if (!empty($empPayload)) {
+                $employee->update($empPayload);
+            }
+        }
+
+        return $this->ok(
+            $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']),
+            'Profile updated successfully'
+        );
     }
 
     /**

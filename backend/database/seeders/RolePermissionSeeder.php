@@ -28,6 +28,7 @@ class RolePermissionSeeder extends Seeder
                 'inventory:view', 'inventory:create', 'inventory:edit', 'inventory:delete', 'inventory:manage_settings',
                 'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:delete', 'tickets:assign', 'tickets:manage_settings',
                 'biometric:view', 'biometric:sync', 'biometric:manage_mapping',
+                'licenses:view', 'licenses:manage_settings',
             ],
             'HR Manager' => [
                 'dashboard:view',

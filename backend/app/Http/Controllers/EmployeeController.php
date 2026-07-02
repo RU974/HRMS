@@ -65,10 +65,12 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:create');
 
-        if (! app(\App\Services\LicenseService::class)->canAddEmployee($request->user()?->company_id)) {
-            return response()->json([
-                'message' => 'Employee limit reached. Upgrade your license to add more employees.',
-            ], 403);
+        $companyId      = $request->user()?->company_id;
+        $licenseService = app(\App\Services\LicenseService::class);
+        try {
+            $licenseService->assertCanAddEmployee($companyId);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
         $validated = $request->validate([
@@ -231,6 +233,16 @@ class EmployeeController extends Controller
         }
 
         unset($updatePayload['first_name'], $updatePayload['last_name'], $updatePayload['position']);
+
+        // Gate: reactivating a single inactive employee counts as a new seat add.
+        if (isset($updatePayload['status']) && $updatePayload['status'] === 'active' && $employee->status !== 'active') {
+            try {
+                app(\App\Services\LicenseService::class)->assertCanAddEmployee($request->user()?->company_id);
+            } catch (\RuntimeException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        }
+
         $employee->update($updatePayload);
 
         return $this->ok($employee->load(['department', 'designationRef', 'user']), 'Employee updated successfully');
@@ -304,6 +316,20 @@ class EmployeeController extends Controller
         $this->scopeToCompany($request, $query);
         $this->applyManagedEmployeeScope($request, $query);
         if ($validated['action'] === 'activate') {
+            // Seat check: count how many inactive employees are being re-activated
+            // and ensure the license can absorb them all before committing.
+            $inactiveCount  = (clone $query)->where('status', '!=', 'active')->count();
+            $licenseService = app(\App\Services\LicenseService::class);
+            $companyId      = $request->user()?->company_id;
+
+            if ($inactiveCount > 0) {
+                try {
+                    $licenseService->assertCanAddEmployee($companyId, $inactiveCount);
+                } catch (\RuntimeException $e) {
+                    return response()->json(['message' => $e->getMessage()], 422);
+                }
+            }
+
             $query->update(['status' => 'active']);
         } elseif ($validated['action'] === 'deactivate') {
             $query->update(['status' => 'inactive']);
@@ -422,7 +448,18 @@ class EmployeeController extends Controller
             return $this->fail('CSV file is empty or has no header row.');
         }
 
-        $companyId    = $request->user()?->company_id;
+        $companyId      = $request->user()?->company_id;
+        $licenseService = app(\App\Services\LicenseService::class);
+
+        // Pre-flight: reject the whole import if the license blocks new adds
+        // (expired or suspended). Per-row seat checks run inside the loop.
+        try {
+            $licenseService->assertCanAddEmployee($companyId);
+        } catch (\RuntimeException $e) {
+            fclose($handle);
+            return response()->json(['message' => $e->getMessage()], 403);
+        }
+
         $imported     = 0;
         $skipped      = 0;
         $errors       = [];
@@ -456,6 +493,14 @@ class EmployeeController extends Controller
             if (!$deptId) {
                 $skipped++;
                 $errors[] = "Row skipped — no department found for: {$email}";
+                continue;
+            }
+
+            try {
+                $licenseService->assertCanAddEmployee($companyId);
+            } catch (\RuntimeException $e) {
+                $skipped++;
+                $errors[] = "Row skipped — {$e->getMessage()}";
                 continue;
             }
 

@@ -39,7 +39,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (isAuthenticated && !refreshed.current) {
       refreshed.current = true;
       me()
-        .then((user) => setUser(user))
+        .then(({ user, license }) => setUser(user, license))
         .catch(() => {
           // Token is invalid or expired — clear session and redirect to login
           logout();

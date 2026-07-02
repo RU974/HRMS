@@ -8,8 +8,7 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { useAuthStore, getCurrentPermissionKeys } from "@/store/auth-store";
 import { getUserRoleKeys, isSuperAdminRole } from "@/config/rbac";
-import { me, changePassword } from "@/services/auth-service";
-import { updateEmployee } from "@/services/employee-service";
+import { me, changePassword, updateProfile } from "@/services/auth-service";
 import { toast } from "@/components/notifications/toast";
 
 const inputClass =
@@ -69,27 +68,23 @@ export function ProfilePage() {
   });
 
   // Fetch fresh user data from /auth/me on mount
-  const { data: freshUser } = useQuery({
+  const { data: meData } = useQuery({
     queryKey: ["auth-me"],
     queryFn: me,
   });
 
   useEffect(() => {
-    if (freshUser) {
-      setUser(freshUser);
+    if (meData) {
+      setUser(meData.user, meData.license);
       setProfileForm((prev) => ({
         ...prev,
-        name: freshUser.name ?? prev.name,
+        name: meData.user.name ?? prev.name,
       }));
     }
-  }, [freshUser]);
+  }, [meData]);
 
   const profileMutation = useMutation({
     mutationFn: async () => {
-      const employeeId = user?.employee?.id;
-      if (!employeeId) {
-        throw new Error("Your account does not have a linked employee profile. Contact an administrator to update your details.");
-      }
       const fd = new FormData();
       if (profileForm.name.trim()) fd.append("name", profileForm.name.trim());
       if (profileForm.phone) fd.append("phone", profileForm.phone);
@@ -97,11 +92,9 @@ export function ProfilePage() {
       if (profileForm.date_of_birth) fd.append("date_of_birth", profileForm.date_of_birth);
       if (profileForm.gender) fd.append("gender", profileForm.gender);
       if (photoFile) fd.append("profile_image", photoFile);
-      fd.append("_method", "PUT");
-      return updateEmployee(employeeId, fd);
+      return updateProfile(fd);
     },
-    onSuccess: async () => {
-      const fresh = await me();
+    onSuccess: async (fresh) => {
       setUser(fresh);
       await queryClient.invalidateQueries({ queryKey: ["auth-me"] });
       toast.success("Profile saved", "Your profile has been updated successfully.");
@@ -135,7 +128,7 @@ export function ProfilePage() {
     .slice(0, 2)
     .toUpperCase();
 
-  const avatarUrl = previewUrl;
+  const avatarUrl = previewUrl ?? user?.profile_image ?? user?.employee?.profile_image ?? null;
 
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "profile", label: "Edit Profile" },
