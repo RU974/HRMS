@@ -50,7 +50,14 @@ export function ThemeSwitcher() {
   }
 
   return (
-    <Button variant="ghost" onClick={handleToggle} onContextMenu={(event) => { event.preventDefault(); void handleReset(); }} disabled={isSaving} title={`Theme: ${theme}${source !== "system" ? ` (${source})` : ""}`}>
+    <Button
+      variant="ghost"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-0 text-[var(--text)]"
+      onClick={handleToggle}
+      onContextMenu={(event) => { event.preventDefault(); void handleReset(); }}
+      disabled={isSaving}
+      title={`Theme: ${theme}${source !== "system" ? ` (${source})` : ""}`}
+    >
       {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </Button>
   );

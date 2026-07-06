@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { echo } from "@/lib/echo";
 import {
+  ArrowLeft,
   MessageCircle,
   Search,
   X,
@@ -322,7 +323,11 @@ export function ChatPage() {
       <div className="flex h-[calc(100vh-200px)] min-h-[560px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
 
         {/* ── Conversation sidebar ── */}
-        <div className="flex w-72 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--background)]/50">
+        <div
+          className={`w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--background)]/50 md:flex md:w-72 ${
+            selectedConversation ? "hidden md:flex" : "flex"
+          }`}
+        >
 
           {/* Sidebar header */}
           <div className="border-b border-[var(--border)] px-4 py-4 space-y-3">
@@ -515,10 +520,10 @@ export function ChatPage() {
         </div>
 
         {/* ── Message thread ── */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className={`flex-1 flex-col overflow-hidden md:flex ${selectedConversation ? "flex" : "hidden md:flex"}`}>
 
           {!selectedConversation ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            <div className="hidden flex-1 flex-col items-center justify-center gap-4 md:flex">
               <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--primary)]/10">
                 <MessageCircle className="h-7 w-7 text-[var(--primary)]" />
               </div>
@@ -531,6 +536,13 @@ export function ChatPage() {
             <>
               {/* Thread header */}
               <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--card)] px-5 py-3.5">
+                <button
+                  onClick={() => setSelectedConversationId(null)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--border)]/30 hover:text-[var(--text)] md:hidden"
+                  title="Back to conversations"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
                 <div className="shrink-0">
                   {selectedConversation.type === "group"
                     ? <GroupAvatar size="md" />
@@ -590,7 +602,7 @@ export function ChatPage() {
               )}
 
               {/* Messages area */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-1">
+              <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 sm:px-6">
                 {threadQuery.isLoading && (
                   <div className="flex flex-col gap-3 pt-4">
                     {[1, 2, 3].map((i) => (
@@ -657,7 +669,7 @@ export function ChatPage() {
                         </div>
 
                         {/* Bubble + meta */}
-                        <div className={`flex max-w-[60%] flex-col gap-1 ${isMine ? "items-end" : "items-start"}`}>
+                        <div className={`flex max-w-[85%] flex-col gap-1 sm:max-w-[75%] md:max-w-[60%] ${isMine ? "items-end" : "items-start"}`}>
                           {selectedConversation.type === "group" && !isMine && !isGrouped && (
                             <span className="px-1 text-[11px] font-semibold text-[var(--muted)]">{senderName}</span>
                           )}

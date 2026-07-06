@@ -106,7 +106,7 @@ export function NotificationDropdown() {
       </Button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/10">
+        <div className="fixed inset-x-4 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/10 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-96">
           <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
             <div>
               <p className="text-sm font-semibold">Notifications</p>
@@ -129,7 +129,7 @@ export function NotificationDropdown() {
             ) : null}
           </div>
 
-          <div className="max-h-[34rem] overflow-y-auto">
+          <div className="max-h-[min(34rem,calc(100vh-12rem))] overflow-y-auto">
             <section className="border-b border-[var(--border)]/70 px-4 py-3">
               <div className="mb-3 flex items-center gap-2">
                 <CheckCheck className="h-4 w-4 text-emerald-600" />

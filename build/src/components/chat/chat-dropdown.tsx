@@ -114,7 +114,7 @@ export function ChatDropdown() {
       </Button>
 
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/10">
+        <div className="fixed inset-x-4 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl shadow-black/10 sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+0.75rem)] sm:w-96">
           <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
             <div>
               <p className="text-sm font-semibold">Messages</p>
@@ -134,7 +134,7 @@ export function ChatDropdown() {
             ) : null}
           </div>
 
-          <div className="max-h-[34rem] overflow-y-auto px-4 py-3">
+          <div className="max-h-[min(34rem,calc(100vh-12rem))] overflow-y-auto px-4 py-3">
             {conversationsQuery.isLoading ? (
               <p className="text-sm text-[var(--muted)]">Loading messages...</p>
             ) : unreadConversations.length > 0 ? (
