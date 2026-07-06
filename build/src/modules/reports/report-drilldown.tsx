@@ -47,7 +47,7 @@ export function ReportDrillDownPanel<T>({
       )}
       {rows.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                 {columns.map((column) => (
@@ -59,7 +59,7 @@ export function ReportDrillDownPanel<T>({
               {rows.map((row) => (
                 <tr key={rowKey(row)} className="border-b border-[var(--border)]/50">
                   {columns.map((column) => (
-                    <td key={column.header} className="p-2">{column.render(row)}</td>
+                    <td key={column.header} className="p-2" data-label={column.header}>{column.render(row)}</td>
                   ))}
                 </tr>
               ))}

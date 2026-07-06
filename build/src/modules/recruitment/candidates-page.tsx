@@ -148,7 +148,7 @@ export function CandidatesPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
                 <th className="p-3">Name</th>
@@ -170,14 +170,14 @@ export function CandidatesPage() {
               )}
               {!candidatesQuery.isLoading && candidates.map((item) => (
                 <tr key={item.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
-                  <td className="p-3 font-medium">{item.full_name}</td>
-                  <td className="p-3">{item.email}</td>
-                  <td className="p-3">{item.jobOpening?.title ?? "-"}</td>
-                  <td className="p-3 capitalize">{item.stage}</td>
-                  <td className="p-3 capitalize">{item.status}</td>
-                  <td className="p-3">{item.rating ?? "-"}</td>
-                  <td className="p-3">{formatRecruitmentDate(item.applied_at)}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium" data-label="Name">{item.full_name}</td>
+                  <td className="p-3" data-label="Email">{item.email}</td>
+                  <td className="p-3" data-label="Job">{item.jobOpening?.title ?? "-"}</td>
+                  <td className="p-3 capitalize" data-label="Stage">{item.stage}</td>
+                  <td className="p-3 capitalize" data-label="Status">{item.status}</td>
+                  <td className="p-3" data-label="Rating">{item.rating ?? "-"}</td>
+                  <td className="p-3" data-label="Applied">{formatRecruitmentDate(item.applied_at)}</td>
+                  <td className="p-3" data-label="Employee">
                     {item.employee ? (
                       <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
                         {item.employee.name}
@@ -186,7 +186,7 @@ export function CandidatesPage() {
                       "-"
                     )}
                   </td>
-                  <td className="p-3">
+                  <td className="p-3" data-label="Actions">
                     <div className="flex justify-end gap-2">
                       <Button
                         variant="outline"

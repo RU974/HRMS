@@ -138,7 +138,7 @@ export function InterviewsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
                 <th className="p-3">Candidate</th>
@@ -158,13 +158,13 @@ export function InterviewsPage() {
               )}
               {!interviewsQuery.isLoading && interviews.map((item) => (
                 <tr key={item.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
-                  <td className="p-3 font-medium">{item.candidate?.full_name ?? "-"}</td>
-                  <td className="p-3">{item.interviewer_name}</td>
-                  <td className="p-3 capitalize">{item.interview_type}</td>
-                  <td className="p-3">{formatRecruitmentDate(item.scheduled_at, true)}</td>
-                  <td className="p-3 capitalize">{item.result}</td>
-                  <td className="max-w-[260px] truncate p-3 text-[var(--muted)]">{item.feedback ?? "-"}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium" data-label="Candidate">{item.candidate?.full_name ?? "-"}</td>
+                  <td className="p-3" data-label="Interviewer">{item.interviewer_name}</td>
+                  <td className="p-3 capitalize" data-label="Type">{item.interview_type}</td>
+                  <td className="p-3" data-label="Schedule">{formatRecruitmentDate(item.scheduled_at, true)}</td>
+                  <td className="p-3 capitalize" data-label="Result">{item.result}</td>
+                  <td className="max-w-[260px] truncate p-3 text-[var(--muted)]" data-label="Feedback">{item.feedback ?? "-"}</td>
+                  <td className="p-3" data-label="Actions">
                     <div className="flex justify-end gap-2">
                       <Button
                         variant="outline"

@@ -1,4 +1,5 @@
-import { Outlet } from "react-router-dom";
+import { useEffect } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { TopNavbar } from "@/components/navbar/top-navbar";
@@ -9,6 +10,16 @@ import { useLayoutStore } from "@/store/layout-store";
 export function AppLayout() {
   const open = useLayoutStore((s) => s.sidebarOpen);
   const toggle = useLayoutStore((s) => s.toggleSidebar);
+  const closeSidebar = useLayoutStore((s) => s.closeSidebar);
+  const location = useLocation();
+
+  // On mobile the sidebar is an overlay drawer — close it after navigating.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      closeSidebar();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -32,17 +43,7 @@ export function AppLayout() {
       </AnimatePresence>
 
       {/* ── Main content area ── */}
-      <div
-        className="transition-all duration-300"
-        style={{ marginLeft: open ? "272px" : "68px" }}
-      >
-        {/* On mobile, ignore the sidebar margin */}
-        <style>{`
-          @media (max-width: 767px) {
-            .ml-sidebar { margin-left: 0 !important; }
-          }
-        `}</style>
-
+      <div className={`transition-all duration-300 ${open ? "md:ml-[272px]" : "md:ml-[68px]"}`}>
         <TopNavbar />
 
         <main className="mx-auto max-w-[1600px] p-4 md:p-8">

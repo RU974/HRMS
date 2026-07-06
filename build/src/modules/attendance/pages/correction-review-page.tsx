@@ -172,7 +172,7 @@ export function CorrectionReviewPage() {
 
       {/* Table */}
       <Card className="overflow-x-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <table className="min-w-full text-sm">
+        <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Employee</th>
@@ -206,16 +206,16 @@ export function CorrectionReviewPage() {
             ) : (
               records.map(item => (
                 <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                  <td className="p-3 font-medium text-[var(--text)]">
+                  <td data-label="Employee" className="p-3 font-medium text-[var(--text)]">
                     {item.employee?.name ?? `Employee #${item.employee_id}`}
                   </td>
-                  <td className="p-3 tabular-nums">{item.date?.slice(0, 10) ?? "—"}</td>
-                  <td className="p-3 tabular-nums text-[var(--muted)]">
+                  <td data-label="Date" className="p-3 tabular-nums">{item.date?.slice(0, 10) ?? "—"}</td>
+                  <td data-label="Check In / Out" className="p-3 tabular-nums text-[var(--muted)]">
                     {item.check_in ? item.check_in.slice(11, 16) : "—"}
                     {" / "}
                     {item.check_out ? item.check_out.slice(11, 16) : "—"}
                   </td>
-                  <td className="p-3 max-w-[240px]">
+                  <td data-label="Reason" className="p-3 max-w-[240px]">
                     <p className="truncate text-[var(--text)]" title={item.correction_request_notes ?? undefined}>
                       {item.correction_request_notes ?? <span className="text-[var(--muted)]">—</span>}
                     </p>
@@ -225,12 +225,12 @@ export function CorrectionReviewPage() {
                       </p>
                     )}
                   </td>
-                  <td className="p-3 text-[var(--muted)]">
+                  <td data-label="Requested" className="p-3 text-[var(--muted)]">
                     {item.correction_requested_at
                       ? new Date(item.correction_requested_at).toLocaleDateString()
                       : "—"}
                   </td>
-                  <td className="p-3">
+                  <td data-label="Status" className="p-3">
                     <CorrectionBadge status={item.correction_status} />
                     {item.correction_reviewed_at && (
                       <p className="mt-0.5 text-[10px] text-[var(--muted)]">
@@ -239,7 +239,7 @@ export function CorrectionReviewPage() {
                     )}
                   </td>
                   {canApprove && (
-                    <td className="p-3 text-right">
+                    <td data-label="Actions" className="p-3 text-right">
                       {item.correction_status === "pending" ? (
                         <div className="flex flex-wrap justify-end gap-2">
                           <Button

@@ -116,7 +116,7 @@ export function PayrollRecordsTab() {
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Employee</th>
@@ -136,13 +136,13 @@ export function PayrollRecordsTab() {
             ))}
             {payrolls.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                <td className="p-3 font-medium">{item.employee?.name ?? `#${item.employee_id}`}</td>
-                <td className="p-3">{item.month}/{item.year}</td>
-                <td className="p-3">{fmt(Number(item.base_salary))}</td>
-                <td className="p-3 font-semibold">{fmt(Number(item.net_salary))}</td>
-                <td className="p-3">{item.payment_date?.slice(0, 10) ?? "—"}</td>
-                <td className="p-3"><Badge label={item.status} tone={payrollBadge(item.status)} /></td>
-                <td className="p-3">
+                <td className="p-3 font-medium" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                <td className="p-3" data-label="Period">{item.month}/{item.year}</td>
+                <td className="p-3" data-label="Base">{fmt(Number(item.base_salary))}</td>
+                <td className="p-3 font-semibold" data-label="Net">{fmt(Number(item.net_salary))}</td>
+                <td className="p-3" data-label="Payment Date">{item.payment_date?.slice(0, 10) ?? "—"}</td>
+                <td className="p-3" data-label="Status"><Badge label={item.status} tone={payrollBadge(item.status)} /></td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex flex-wrap justify-end gap-1.5">
                     <Button variant="outline" className="text-xs px-2 py-1" onClick={() => setPayrollDetail(item)}>View</Button>
                     {canManage && item.status !== "paid" && item.status !== "approved" && (

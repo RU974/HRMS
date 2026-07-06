@@ -204,7 +204,7 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
       )}
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="p-3">Name</th>
@@ -217,13 +217,13 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
             {isLoading && <tr><td className="p-3 text-[var(--muted)]" colSpan={4}>Loading reports...</td></tr>}
             {data?.data.map((report) => (
               <tr key={report.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
-                <td className="p-3">
+                <td className="p-3" data-label="Name">
                   <p className="font-medium">{report.name}</p>
                   <p className="text-xs text-[var(--muted)]">{report.description || "-"}</p>
                 </td>
-                <td className="p-3 capitalize">{report.status}</td>
-                <td className="p-3">{new Date(report.updated_at).toLocaleDateString()}</td>
-                <td className="p-3">
+                <td className="p-3 capitalize" data-label="Status">{report.status}</td>
+                <td className="p-3" data-label="Updated">{new Date(report.updated_at).toLocaleDateString()}</td>
+                <td className="p-3" data-label="Actions">
                   {canManageReports ? (
                     <div className="flex gap-2">
                       <Button variant="outline" onClick={() => startEdit(report)}>Edit</Button>

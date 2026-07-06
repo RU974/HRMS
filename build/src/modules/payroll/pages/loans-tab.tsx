@@ -59,7 +59,7 @@ export function LoansTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Employee</th>
@@ -74,13 +74,13 @@ export function LoansTab() {
           <tbody>
             {(loansQ.data?.data ?? []).map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3">{item.employee?.name ?? `#${item.employee_id}`}</td>
-                <td className="p-3 font-medium">{item.title}</td>
-                <td className="p-3">{fmt(item.amount)}</td>
-                <td className="p-3 font-semibold">{fmt(item.outstanding_balance)}</td>
-                <td className="p-3">{item.emi_amount != null ? fmt(item.emi_amount) : "—"}</td>
-                <td className="p-3"><Badge label={item.status} tone={loanBadge(item.status)} /></td>
-                <td className="p-3">
+                <td className="p-3" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                <td className="p-3 font-medium" data-label="Title">{item.title}</td>
+                <td className="p-3" data-label="Amount">{fmt(item.amount)}</td>
+                <td className="p-3 font-semibold" data-label="Outstanding">{fmt(item.outstanding_balance)}</td>
+                <td className="p-3" data-label="EMI">{item.emi_amount != null ? fmt(item.emi_amount) : "—"}</td>
+                <td className="p-3" data-label="Status"><Badge label={item.status} tone={loanBadge(item.status)} /></td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setLoanEdit(item); setLoanForm({ employee_id: item.employee_id, title: item.title, amount: item.amount, outstanding_balance: item.outstanding_balance, emi_amount: item.emi_amount ?? "", start_date: item.start_date.slice(0, 10), end_date: item.end_date?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setLoanModal(true); }}>

@@ -231,7 +231,7 @@ export function WorkflowsPage() {
       ) : null}
 
       <Card className="overflow-x-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <table className="min-w-full text-sm">
+        <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="p-3">Name</th>
@@ -258,9 +258,9 @@ export function WorkflowsPage() {
             ) : (
               workflows.map((workflow: WorkflowItem) => (
                 <tr key={workflow.id} className="border-b border-[var(--border)]/60 align-top">
-                  <td className="p-3 font-medium text-[var(--text)]">{workflow.name}</td>
-                  <td className="p-3">{workflow.module}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium text-[var(--text)]" data-label="Name">{workflow.name}</td>
+                  <td className="p-3" data-label="Module">{workflow.module}</td>
+                  <td className="p-3" data-label="Steps">
                     <div className="space-y-2">
                       {workflow.steps.map((step, idx) => (
                         <div key={step.id} className="flex items-start gap-2">
@@ -285,9 +285,9 @@ export function WorkflowsPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="p-3">{workflow.escalation_hours ? `${workflow.escalation_hours}h` : "Default"}</td>
-                  <td className="p-3">{workflow.created_at?.slice(0, 10) ?? "-"}</td>
-                  <td className="p-3 text-right">
+                  <td className="p-3" data-label="Escalation">{workflow.escalation_hours ? `${workflow.escalation_hours}h` : "Default"}</td>
+                  <td className="p-3" data-label="Created">{workflow.created_at?.slice(0, 10) ?? "-"}</td>
+                  <td className="p-3 text-right" data-label="Actions">
                     <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         variant="outline"

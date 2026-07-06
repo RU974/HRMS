@@ -24,7 +24,7 @@ export interface EmployeeMappingTableProps {
 export function EmployeeMappingTable({ rows, onChange, onSave, onDelete, savingEmployeeId }: EmployeeMappingTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="rtable w-full text-left text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] text-[var(--muted)]">
             <th className="py-2 pr-4">Employee</th>
@@ -37,9 +37,9 @@ export function EmployeeMappingTable({ rows, onChange, onSave, onDelete, savingE
         <tbody>
           {rows.map((row) => (
             <tr key={row.employee_id} className="border-b border-[var(--border)] last:border-0">
-              <td className="py-2 pr-4 font-medium">{row.employee_name}</td>
-              <td className="py-2 pr-4 text-[var(--muted)]">{row.employee_code}</td>
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-4 font-medium" data-label="Employee">{row.employee_name}</td>
+              <td className="py-2 pr-4 text-[var(--muted)]" data-label="Employee Code">{row.employee_code}</td>
+              <td className="py-2 pr-4" data-label="Device User ID">
                 <FormInput
                   className={inputClass}
                   value={row.device_user_id}
@@ -47,7 +47,7 @@ export function EmployeeMappingTable({ rows, onChange, onSave, onDelete, savingE
                   placeholder="e.g. 1042"
                 />
               </td>
-              <td className="py-2 pr-4">
+              <td className="py-2 pr-4" data-label="Card Number">
                 <FormInput
                   className={inputClass}
                   value={row.card_number}
@@ -55,7 +55,7 @@ export function EmployeeMappingTable({ rows, onChange, onSave, onDelete, savingE
                   placeholder="Optional"
                 />
               </td>
-              <td className="py-2 pr-4 text-right">
+              <td className="py-2 pr-4 text-right" data-label="Actions">
                 <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"

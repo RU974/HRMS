@@ -184,7 +184,7 @@ function TicketTable({ tickets }: { tickets: TicketType[] }) {
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-      <table className="w-full">
+      <table className="rtable w-full">
         <thead>
           <tr className="border-b border-[var(--border)] text-left text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
             <th className="p-3">Title</th>
@@ -203,20 +203,20 @@ function TicketTable({ tickets }: { tickets: TicketType[] }) {
               onClick={() => navigate(`/tickets/${ticket.id}`)}
               className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--background)] last:border-0"
             >
-              <td className="max-w-xs p-3">
+              <td className="max-w-xs p-3" data-label="Title">
                 <span className="block truncate font-medium text-[var(--text)]">{ticket.title}</span>
                 <span className="block text-xs text-[var(--muted)]">{ticket.createdBy?.name}</span>
               </td>
-              <td className="p-3 text-sm text-[var(--muted)]">{ticket.category}</td>
-              <td className="p-3">
+              <td className="p-3 text-sm text-[var(--muted)]" data-label="Category">{ticket.category}</td>
+              <td className="p-3" data-label="Priority">
                 <Badge label={ticket.priority} colorClass={PRIORITY_COLORS[ticket.priority] ?? ""} />
               </td>
-              <td className="p-3">
+              <td className="p-3" data-label="Status">
                 <Badge label={ticket.status.replace("_", " ")} colorClass={STATUS_COLORS[ticket.status] ?? ""} />
               </td>
-              <td className="p-3 text-sm text-[var(--muted)]">{ticket.department?.name ?? "—"}</td>
-              <td className="p-3 text-sm text-[var(--muted)]">{ticket.assignedTo?.name ?? "Unassigned"}</td>
-              <td className="p-3 text-sm text-[var(--muted)]">{fmtDate(ticket.created_at)}</td>
+              <td className="p-3 text-sm text-[var(--muted)]" data-label="Department">{ticket.department?.name ?? "—"}</td>
+              <td className="p-3 text-sm text-[var(--muted)]" data-label="Assigned To">{ticket.assignedTo?.name ?? "Unassigned"}</td>
+              <td className="p-3 text-sm text-[var(--muted)]" data-label="Created">{fmtDate(ticket.created_at)}</td>
             </tr>
           ))}
         </tbody>

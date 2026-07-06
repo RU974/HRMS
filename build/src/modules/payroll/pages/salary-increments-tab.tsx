@@ -59,7 +59,7 @@ export function SalaryIncrementsTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Employee</th>
@@ -76,15 +76,15 @@ export function SalaryIncrementsTab() {
               const pct = item.increment_percent_computed ?? (item.old_salary ? ((item.new_salary - item.old_salary) / item.old_salary * 100) : 0);
               return (
                 <tr key={item.id} className="border-b border-[var(--border)]/50">
-                  <td className="p-3">{item.employee?.name ?? `#${item.employee_id}`}</td>
-                  <td className="p-3">{String(item.effective_date).slice(0, 10)}</td>
-                  <td className="p-3">{fmt(item.old_salary)}</td>
-                  <td className="p-3 font-semibold">{fmt(item.new_salary)}</td>
-                  <td className="p-3">
+                  <td className="p-3" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                  <td className="p-3" data-label="Effective Date">{String(item.effective_date).slice(0, 10)}</td>
+                  <td className="p-3" data-label="Old Salary">{fmt(item.old_salary)}</td>
+                  <td className="p-3 font-semibold" data-label="New Salary">{fmt(item.new_salary)}</td>
+                  <td className="p-3" data-label="% Change">
                     <Badge label={`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`} tone={pct >= 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"} />
                   </td>
-                  <td className="max-w-[140px] truncate p-3 text-xs text-[var(--muted)]">{item.reason ?? "—"}</td>
-                  <td className="p-3">
+                  <td className="max-w-[140px] truncate p-3 text-xs text-[var(--muted)]" data-label="Reason">{item.reason ?? "—"}</td>
+                  <td className="p-3" data-label="Actions">
                     <div className="flex justify-end gap-1.5">
                       {canManage && (
                         <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setIncEdit(item); setIncForm({ employee_id: item.employee_id, effective_date: String(item.effective_date).slice(0, 10), old_salary: item.old_salary, new_salary: item.new_salary, reason: item.reason ?? "", notes: item.notes ?? "" }); setIncModal(true); }}>

@@ -204,7 +204,7 @@ export function EmployeesPage() {
         )}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                 <th className="p-3">Employee</th>
@@ -256,7 +256,7 @@ export function EmployeesPage() {
                   onClick={() => navigate(`/employees/${emp.id}`)}
                   className="cursor-pointer border-b border-[var(--border)]/50 transition hover:bg-[var(--border)]/15"
                 >
-                  <td className="p-3">
+                  <td className="p-3" data-label="Employee">
                     <div className="flex items-center gap-3">
                       {emp.profile_image ? (
                         <img src={emp.profile_image} alt={emp.name} className="h-8 w-8 rounded-full object-cover" />
@@ -271,13 +271,13 @@ export function EmployeesPage() {
                       </div>
                     </div>
                   </td>
-                  <td className="p-3 text-[var(--muted)]">{emp.department?.name ?? "—"}</td>
-                  <td className="p-3 text-[var(--muted)]">{emp.designation ?? "—"}</td>
-                  <td className="p-3 text-[var(--muted)] capitalize">{emp.employment_type?.replace("_", " ") ?? "—"}</td>
-                  <td className="p-3"><StatusBadge status={emp.status} /></td>
-                  <td className="p-3 text-[var(--muted)]">{emp.joining_date ?? "—"}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Department">{emp.department?.name ?? "—"}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Designation">{emp.designation ?? "—"}</td>
+                  <td className="p-3 text-[var(--muted)] capitalize" data-label="Type">{emp.employment_type?.replace("_", " ") ?? "—"}</td>
+                  <td className="p-3" data-label="Status"><StatusBadge status={emp.status} /></td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Joined">{emp.joining_date ?? "—"}</td>
                   {canManage && (
-                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="p-3 text-right" data-label="Action" onClick={(e) => e.stopPropagation()}>
                       <Link to={`/employees/${emp.id}`}>
                         <Button variant="outline" className="text-xs px-3 py-1.5">View</Button>
                       </Link>

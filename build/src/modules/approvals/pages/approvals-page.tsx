@@ -128,7 +128,7 @@ export function ApprovalsPage() {
       ) : null}
 
       <Card className="overflow-x-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <table className="min-w-full text-sm">
+        <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="p-3">ID</th>
@@ -157,21 +157,21 @@ export function ApprovalsPage() {
             ) : (
               approvals.map((approval) => (
                 <tr key={approval.id} className="border-b border-[var(--border)]/60">
-                  <td className="p-3 font-medium text-[var(--text)]"><button onClick={() => navigate(`/approvals/${approval.id}`)} className="text-blue-600 hover:underline">#{approval.id}</button></td>
-                  <td className="p-3">{approval.workflow?.name ?? approval.workflow?.module}</td>
-                  <td className="p-3">{approval.module}</td>
-                  <td className="p-3">{approval.module_id}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium text-[var(--text)]" data-label="ID"><button onClick={() => navigate(`/approvals/${approval.id}`)} className="text-blue-600 hover:underline">#{approval.id}</button></td>
+                  <td className="p-3" data-label="Workflow">{approval.workflow?.name ?? approval.workflow?.module}</td>
+                  <td className="p-3" data-label="Module">{approval.module}</td>
+                  <td className="p-3" data-label="Module ID">{approval.module_id}</td>
+                  <td className="p-3" data-label="Current step">
                     {approval.currentStep ? `#${approval.currentStep.step_order} ${approval.currentStep.approver_type}` : "N/A"}
                   </td>
-                  <td className="p-3 uppercase text-[var(--muted)]">
+                  <td className="p-3 uppercase text-[var(--muted)]" data-label="Status">
                     {approval.status}
                     {approval.escalated_at && (
                       <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700">ESCALATED</span>
                     )}
                   </td>
-                  <td className="p-3">{approval.created_at?.slice(0, 10) ?? "-"}</td>
-                  <td className="p-3 text-right">
+                  <td className="p-3" data-label="Requested">{approval.created_at?.slice(0, 10) ?? "-"}</td>
+                  <td className="p-3 text-right" data-label="Actions">
                     <div className="flex flex-wrap justify-end gap-2">
                       <Button
                         variant="outline"

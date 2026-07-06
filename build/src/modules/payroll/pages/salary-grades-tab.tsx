@@ -63,7 +63,7 @@ export function SalaryGradesTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Name</th>
@@ -77,12 +77,12 @@ export function SalaryGradesTab() {
           <tbody>
             {(salaryGradesQ.data ?? []).map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3 font-medium">{item.name}</td>
-                <td className="p-3">{fmt(item.min_salary)} – {fmt(item.max_salary)}</td>
-                <td className="p-3">{item.basic_percent ?? 50}%</td>
-                <td className="p-3">{item.hra_percent ?? 20}%</td>
-                <td className="p-3">{fmt(item.transport_allowance ?? 0)}</td>
-                <td className="p-3">
+                <td className="p-3 font-medium" data-label="Name">{item.name}</td>
+                <td className="p-3" data-label="Salary Range">{fmt(item.min_salary)} – {fmt(item.max_salary)}</td>
+                <td className="p-3" data-label="Basic %">{item.basic_percent ?? 50}%</td>
+                <td className="p-3" data-label="HRA %">{item.hra_percent ?? 20}%</td>
+                <td className="p-3" data-label="Transport">{fmt(item.transport_allowance ?? 0)}</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setGradeEdit(item); setGradeForm({ name: item.name, min_salary: item.min_salary, max_salary: item.max_salary, basic_percent: item.basic_percent ?? 50, hra_percent: item.hra_percent ?? 20, transport_allowance: item.transport_allowance ?? 0, other_allowance: item.other_allowance ?? 0, notes: item.notes ?? "" }); setGradeModal(true); }}>

@@ -96,7 +96,7 @@ export function SyncLogsPage() {
           <div className="py-10 text-center text-sm text-[var(--muted)]">No sync logs found for the selected filters.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="rtable w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted)]">
                   <th className="py-2 pr-4">Timestamp</th>
@@ -111,17 +111,17 @@ export function SyncLogsPage() {
               <tbody>
                 {logs.map((log) => (
                   <tr key={log.id} className="border-b border-[var(--border)] last:border-0">
-                    <td className="py-3 pr-4">{new Date(log.started_at).toLocaleString()}</td>
-                    <td className="py-3 pr-4">{log.device_name ?? `Device #${log.device_id}`}</td>
-                    <td className="py-3 pr-4">{log.records_fetched}</td>
-                    <td className="py-3 pr-4">{log.records_matched}</td>
-                    <td className="py-3 pr-4">{log.records_unmatched}</td>
-                    <td className="py-3 pr-4">
+                    <td className="py-3 pr-4" data-label="Timestamp">{new Date(log.started_at).toLocaleString()}</td>
+                    <td className="py-3 pr-4" data-label="Device">{log.device_name ?? `Device #${log.device_id}`}</td>
+                    <td className="py-3 pr-4" data-label="Fetched">{log.records_fetched}</td>
+                    <td className="py-3 pr-4" data-label="Matched">{log.records_matched}</td>
+                    <td className="py-3 pr-4" data-label="Unmatched">{log.records_unmatched}</td>
+                    <td className="py-3 pr-4" data-label="Status">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusStyles[log.status] ?? "bg-gray-50 text-gray-700"}`}>
                         {log.status.replace("_", " ")}
                       </span>
                     </td>
-                    <td className="py-3 pr-4 text-right">
+                    <td className="py-3 pr-4 text-right" data-label="Actions">
                       {log.records_unmatched > 0 && (
                         <Link to={`/attendance/biometric-devices/${log.device_id}/mapping`}>
                           <Button variant="outline">Resolve Unmatched</Button>

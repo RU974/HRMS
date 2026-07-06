@@ -298,16 +298,16 @@ function CategoriesTab() {
           <p className="text-sm text-[var(--muted)]">{query.data?.length ?? 0} categories</p>
           <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Category</Button>
         </div>
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <TableHead cols={["Name", "Description", "Items", "Actions"]} />
           <tbody>
             {query.isLoading && <tr><td colSpan={4} className="p-6 text-center"><LoadingSpinner /></td></tr>}
             {(query.data ?? []).map((cat) => (
               <tr key={cat.id} className="border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10">
-                <td className="p-3 font-medium">{cat.name}</td>
-                <td className="p-3 text-[var(--muted)]">{cat.description ?? "—"}</td>
-                <td className="p-3">{cat.items_count ?? 0}</td>
-                <td className="p-3">
+                <td className="p-3 font-medium" data-label="Name">{cat.name}</td>
+                <td className="p-3 text-[var(--muted)]" data-label="Description">{cat.description ?? "—"}</td>
+                <td className="p-3" data-label="Items">{cat.items_count ?? 0}</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => openEdit(cat)}><Edit2 className="h-3.5 w-3.5" /></Button>
                     <Button variant="outline" onClick={() => void deleteMutation.mutateAsync(cat.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -476,7 +476,7 @@ function ItemsTab() {
           <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Item</Button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <TableHead cols={["Name", "SKU", "Category", "Qty", "Available", "Cost", "Location", "Condition", "Actions"]} />
             <tbody>
               {itemsQ.isLoading && <tr><td colSpan={9} className="p-6 text-center"><LoadingSpinner /></td></tr>}
@@ -485,21 +485,21 @@ function ItemsTab() {
                   key={item.id}
                   className={`border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10 ${item.deleted_at ? "opacity-50" : ""}`}
                 >
-                  <td className="p-3 font-medium">{item.name}</td>
-                  <td className="p-3 text-[var(--muted)]">{item.sku ?? "—"}</td>
-                  <td className="p-3 text-[var(--muted)]">{item.category?.name ?? "—"}</td>
-                  <td className="p-3">{item.quantity}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium" data-label="Name">{item.name}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="SKU">{item.sku ?? "—"}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Category">{item.category?.name ?? "—"}</td>
+                  <td className="p-3" data-label="Qty">{item.quantity}</td>
+                  <td className="p-3" data-label="Available">
                     <span className={item.quantity_available === 0 ? "text-red-500 font-medium" : ""}>
                       {item.quantity_available}
                     </span>
                   </td>
-                  <td className="p-3">{formatAmount(Number(item.unit_cost))}</td>
-                  <td className="p-3 text-[var(--muted)]">{item.location ?? "—"}</td>
-                  <td className="p-3">
+                  <td className="p-3" data-label="Cost">{formatAmount(Number(item.unit_cost))}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Location">{item.location ?? "—"}</td>
+                  <td className="p-3" data-label="Condition">
                     <Badge label={CONDITION_LABELS[item.condition] ?? item.condition} colorClass={CONDITION_COLORS[item.condition] ?? ""} />
                   </td>
-                  <td className="p-3">
+                  <td className="p-3" data-label="Actions">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" onClick={() => setDetailId(item.id)} title="View Details"><Eye className="h-3.5 w-3.5" /></Button>
                       <Button variant="outline" onClick={() => setQrItem(item)} title="QR Code"><QrCode className="h-3.5 w-3.5" /></Button>
@@ -593,16 +593,16 @@ function ItemsTab() {
               <div>
                 <p className="mb-2 text-sm font-semibold">Assignment History</p>
                 <div className="overflow-auto rounded-xl border border-[var(--border)]">
-                  <table className="w-full text-sm">
+                  <table className="rtable w-full text-sm">
                     <thead><tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]"><th className="p-2">Employee</th><th className="p-2">Qty</th><th className="p-2">Assigned</th><th className="p-2">Returned</th><th className="p-2">Status</th></tr></thead>
                     <tbody>
                       {(detailQ.data.assignments ?? []).map((a) => (
                         <tr key={a.id} className="border-b border-[var(--border)]/60 last:border-0">
-                          <td className="p-2">{a.employee?.name ?? "—"}</td>
-                          <td className="p-2">{a.quantity}</td>
-                          <td className="p-2">{a.assigned_date}</td>
-                          <td className="p-2">{a.returned_date ?? "—"}</td>
-                          <td className="p-2"><StatusBadge status={a.status} /></td>
+                          <td className="p-2" data-label="Employee">{a.employee?.name ?? "—"}</td>
+                          <td className="p-2" data-label="Qty">{a.quantity}</td>
+                          <td className="p-2" data-label="Assigned">{a.assigned_date}</td>
+                          <td className="p-2" data-label="Returned">{a.returned_date ?? "—"}</td>
+                          <td className="p-2" data-label="Status"><StatusBadge status={a.status} /></td>
                         </tr>
                       ))}
                       {(detailQ.data.assignments ?? []).length === 0 && <tr><td colSpan={5} className="p-4 text-center text-[var(--muted)]">No assignments yet.</td></tr>}
@@ -703,21 +703,21 @@ function AssignmentsTab() {
           <Button onClick={() => setOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Assign Item</Button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <TableHead cols={["Item", "SKU", "Employee", "Qty", "Assigned", "Returned", "Status", "Notes", "Actions"]} />
             <tbody>
               {assignmentsQ.isLoading && <tr><td colSpan={9} className="p-6 text-center"><LoadingSpinner /></td></tr>}
               {assignments.map((a) => (
                 <tr key={a.id} className="border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10">
-                  <td className="p-3 font-medium">{a.item?.name ?? "—"}</td>
-                  <td className="p-3 text-[var(--muted)]">{a.item?.sku ?? "—"}</td>
-                  <td className="p-3">{a.employee?.name ?? "—"}</td>
-                  <td className="p-3">{a.quantity}</td>
-                  <td className="p-3">{a.assigned_date}</td>
-                  <td className="p-3 text-[var(--muted)]">{a.returned_date ?? "—"}</td>
-                  <td className="p-3"><StatusBadge status={a.status} /></td>
-                  <td className="p-3 text-[var(--muted)] max-w-[150px] truncate">{a.notes ?? "—"}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium" data-label="Item">{a.item?.name ?? "—"}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="SKU">{a.item?.sku ?? "—"}</td>
+                  <td className="p-3" data-label="Employee">{a.employee?.name ?? "—"}</td>
+                  <td className="p-3" data-label="Qty">{a.quantity}</td>
+                  <td className="p-3" data-label="Assigned">{a.assigned_date}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Returned">{a.returned_date ?? "—"}</td>
+                  <td className="p-3" data-label="Status"><StatusBadge status={a.status} /></td>
+                  <td className="p-3 text-[var(--muted)] max-w-[150px] truncate" data-label="Notes">{a.notes ?? "—"}</td>
+                  <td className="p-3" data-label="Actions">
                     {a.status === "assigned" && (
                       <div className="flex justify-end">
                         <Button

@@ -228,7 +228,7 @@ function AttritionRiskWidget({ employees }: { employees: import("@/services/dash
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="rtable w-full text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] text-left">
             <th className="p-2.5 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Employee</th>
@@ -241,9 +241,9 @@ function AttritionRiskWidget({ employees }: { employees: import("@/services/dash
             const riskColor = emp.absence_rate >= 50 ? "bg-rose-100 text-rose-700" : emp.absence_rate >= 35 ? "bg-amber-100 text-amber-700" : "bg-orange-100 text-orange-700";
             return (
               <tr key={emp.id} className="border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--background)]">
-                <td className="p-2.5 font-medium text-[var(--text)]">{emp.name}</td>
-                <td className="p-2.5 text-[var(--muted)]">{emp.department}</td>
-                <td className="p-2.5 text-right">
+                <td className="p-2.5 font-medium text-[var(--text)]" data-label="Employee">{emp.name}</td>
+                <td className="p-2.5 text-[var(--muted)]" data-label="Dept">{emp.department}</td>
+                <td className="p-2.5 text-right" data-label="Absence">
                   <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${riskColor}`}>
                     <TrendingDown className="h-3 w-3" />{emp.absence_rate}%
                   </span>

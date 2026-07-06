@@ -62,7 +62,7 @@ export function BonusesTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Employee</th>
@@ -76,12 +76,12 @@ export function BonusesTab() {
           <tbody>
             {bonuses.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3">{item.employee?.name ?? `#${item.employee_id}`}</td>
-                <td className="p-3 font-medium">{item.title}</td>
-                <td className="p-3">{fmt(Number(item.amount))}</td>
-                <td className="p-3"><Badge label={item.taxable ? "Yes" : "No"} tone={item.taxable ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-700"} /></td>
-                <td className="p-3">{item.effective_date.slice(0, 10)}</td>
-                <td className="p-3">
+                <td className="p-3" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                <td className="p-3 font-medium" data-label="Title">{item.title}</td>
+                <td className="p-3" data-label="Amount">{fmt(Number(item.amount))}</td>
+                <td className="p-3" data-label="Taxable"><Badge label={item.taxable ? "Yes" : "No"} tone={item.taxable ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-700"} /></td>
+                <td className="p-3" data-label="Date">{item.effective_date.slice(0, 10)}</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setBonusEdit(item); setBonusForm({ employee_id: item.employee_id, payroll_id: item.payroll_id ?? 0, title: item.title, amount: Number(item.amount), taxable: item.taxable, effective_date: item.effective_date.slice(0, 10), notes: item.notes ?? "" }); setBonusModal(true); }}>

@@ -236,7 +236,7 @@ function TeamView() {
 
         {!isLoading && rows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Employee</th>
@@ -260,28 +260,28 @@ function TeamView() {
                       className={`border-b border-[var(--border)]/50 transition
                         ${isAbsent ? "bg-red-50/30" : "hover:bg-[var(--border)]/10"}`}
                     >
-                      <td className="p-3">
+                      <td data-label="Employee" className="p-3">
                         <Link to={`/employees/${row.employee_id}`} className="font-medium text-[var(--primary)] hover:underline">
                           {row.name}
                         </Link>
                         {row.designation && <p className="text-xs text-[var(--muted)]">{row.designation}</p>}
                       </td>
-                      <td className="p-3 text-[var(--muted)]">{row.department ?? "—"}</td>
-                      <td className="p-3">
+                      <td data-label="Department" className="p-3 text-[var(--muted)]">{row.department ?? "—"}</td>
+                      <td data-label="Status" className="p-3">
                         {att ? <StatusBadge status={att.status} /> : (
                           <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">No record</span>
                         )}
                       </td>
-                      <td className="p-3">{att?.check_in ? att.check_in.slice(11, 16) : "—"}</td>
-                      <td className="p-3">{att?.check_out ? att.check_out.slice(11, 16) : "—"}</td>
-                      <td className="p-3">
+                      <td data-label="Check In" className="p-3">{att?.check_in ? att.check_in.slice(11, 16) : "—"}</td>
+                      <td data-label="Check Out" className="p-3">{att?.check_out ? att.check_out.slice(11, 16) : "—"}</td>
+                      <td data-label="Flags" className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {att?.work_from_home && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">WFH</span>}
                           {att?.biometric_device_id && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">Bio</span>}
                           {(att?.overtime_hours ?? 0) > 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">+{att?.overtime_hours?.toFixed(1)}h OT</span>}
                         </div>
                       </td>
-                      <td className="p-3">
+                      <td data-label="Monthly Abs." className="p-3">
                         <span className={`font-semibold ${highAbsence ? "text-red-600" : "text-[var(--muted)]"}`}>
                           {row.monthly_absences}
                           {highAbsence && <span className="ml-1 text-xs">⚠</span>}
@@ -570,7 +570,7 @@ export function AttendancePage() {
             {monthlyStats.isLoading ? (
               <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-4 animate-pulse rounded bg-[var(--border)]" />)}</div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   { label: "Present", value: stats?.present ?? 0, color: "text-emerald-600" },
                   { label: "Late",    value: stats?.late    ?? 0, color: "text-amber-600" },
@@ -608,7 +608,7 @@ export function AttendancePage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Employee</th>
@@ -637,25 +637,25 @@ export function AttendancePage() {
 
                 {records.map(item => (
                   <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                    <td className="p-3 font-medium">{item.employee?.name ?? `Employee #${item.employee_id}`}</td>
-                    <td className="p-3">{item.date?.slice(0, 10)}</td>
-                    <td className="p-3"><StatusBadge status={item.status} /></td>
-                    <td className="p-3">{item.check_in  ? item.check_in.slice(11,16)  : "—"}</td>
-                    <td className="p-3">{item.check_out ? item.check_out.slice(11,16) : "—"}</td>
-                    <td className="p-3 text-xs font-medium">
+                    <td data-label="Employee" className="p-3 font-medium">{item.employee?.name ?? `Employee #${item.employee_id}`}</td>
+                    <td data-label="Date" className="p-3">{item.date?.slice(0, 10)}</td>
+                    <td data-label="Status" className="p-3"><StatusBadge status={item.status} /></td>
+                    <td data-label="In" className="p-3">{item.check_in  ? item.check_in.slice(11,16)  : "—"}</td>
+                    <td data-label="Out" className="p-3">{item.check_out ? item.check_out.slice(11,16) : "—"}</td>
+                    <td data-label="OT" className="p-3 text-xs font-medium">
                       {(item.overtime_hours ?? 0) > 0
                         ? <span className="text-emerald-600">+{item.overtime_hours?.toFixed(1)}h</span>
                         : <span className="text-[var(--muted)]">—</span>}
                     </td>
-                    <td className="p-3">
+                    <td data-label="Flags" className="p-3">
                       <div className="flex flex-wrap gap-1">
                         {item.work_from_home   && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">WFH</span>}
                         {item.correction_status === "pending" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Correction pending</span>}
                       </div>
                     </td>
-                    <td className="p-3"><SourceBadge source={item.source} /></td>
+                    <td data-label="Source" className="p-3"><SourceBadge source={item.source} /></td>
                     {canManage && (
-                      <td className="p-3">
+                      <td data-label="Actions" className="p-3">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" className="text-xs px-2 py-1" onClick={() => openEdit(item)}>Edit</Button>
                           <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200 hover:bg-red-50"

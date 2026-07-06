@@ -119,7 +119,7 @@ export function DelegationsPage() {
       </Card>
 
       <Card className="overflow-x-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <table className="min-w-full text-sm">
+        <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="p-3">Delegate</th>
@@ -137,11 +137,11 @@ export function DelegationsPage() {
             ) : (
               delegations.map((d) => (
                 <tr key={d.id} className="border-b border-[var(--border)]/60">
-                  <td className="p-3">{d.delegate?.name ?? `User #${d.delegate_user_id}`}</td>
-                  <td className="p-3">{toDatetimeLocal(d.starts_at).replace("T", " ")}</td>
-                  <td className="p-3">{toDatetimeLocal(d.ends_at).replace("T", " ")}</td>
-                  <td className="p-3 text-[var(--muted)]">{d.notes ?? "-"}</td>
-                  <td className="p-3 text-right">
+                  <td className="p-3" data-label="Delegate">{d.delegate?.name ?? `User #${d.delegate_user_id}`}</td>
+                  <td className="p-3" data-label="Starts">{toDatetimeLocal(d.starts_at).replace("T", " ")}</td>
+                  <td className="p-3" data-label="Ends">{toDatetimeLocal(d.ends_at).replace("T", " ")}</td>
+                  <td className="p-3 text-[var(--muted)]" data-label="Notes">{d.notes ?? "-"}</td>
+                  <td className="p-3 text-right" data-label="Actions">
                     <Button
                       variant="outline"
                       disabled={deleteMutation.status === "pending"}

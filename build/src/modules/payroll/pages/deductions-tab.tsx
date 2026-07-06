@@ -74,7 +74,7 @@ export function DeductionsTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Employee</th>
@@ -88,12 +88,12 @@ export function DeductionsTab() {
           <tbody>
             {deductions.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3">{item.employee?.name ?? `#${item.employee_id}`}</td>
-                <td className="p-3 font-medium">{item.title}</td>
-                <td className="p-3 capitalize text-xs text-[var(--muted)]">{item.type.replace(/_/g, " ")}</td>
-                <td className="p-3">{fmt(Number(item.amount))}</td>
-                <td className="p-3">{item.effective_date.slice(0, 10)}</td>
-                <td className="p-3">
+                <td className="p-3" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                <td className="p-3 font-medium" data-label="Title">{item.title}</td>
+                <td className="p-3 capitalize text-xs text-[var(--muted)]" data-label="Type">{item.type.replace(/_/g, " ")}</td>
+                <td className="p-3" data-label="Amount">{fmt(Number(item.amount))}</td>
+                <td className="p-3" data-label="Date">{item.effective_date.slice(0, 10)}</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setDedEdit(item); setDedForm({ employee_id: item.employee_id, payroll_id: item.payroll_id ?? 0, title: item.title, amount: Number(item.amount), type: item.type, effective_date: item.effective_date.slice(0, 10), notes: item.notes ?? "" }); setDedModal(true); }}>

@@ -80,7 +80,7 @@ export function TableWidget({
     <div className={cn("flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm", className)}>
       <h3 className="mb-4 text-sm font-bold text-[var(--text)]">{title}</h3>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--background)]">
               {headers.map(h => (
@@ -93,7 +93,7 @@ export function TableWidget({
               ? <tr><td colSpan={headers.length} className="py-8 text-center text-xs text-[var(--muted)]">No data available</td></tr>
               : rows.map((row, i) => (
                 <tr key={i} className="border-b border-[var(--border)]/50 transition last:border-0 hover:bg-[var(--background)]">
-                  {row.map((cell, j) => <td key={j} className="px-3 py-3 text-[var(--text)]">{cell}</td>)}
+                  {row.map((cell, j) => <td key={j} className="px-3 py-3 text-[var(--text)]" data-label={headers[j]}>{cell}</td>)}
                 </tr>
               ))}
           </tbody>
@@ -193,7 +193,7 @@ export function AttendanceWidget({
       )}
 
       <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead className="bg-[var(--background)]">
             <tr>
               {["Date", "Status", "In / Out"].map(h => (
@@ -206,14 +206,14 @@ export function AttendanceWidget({
               ? <tr><td colSpan={3} className="px-3 py-8 text-center text-xs text-[var(--muted)]">No attendance history</td></tr>
               : recent.map(item => (
                 <tr key={item.date} className="border-t border-[var(--border)] hover:bg-[var(--background)]">
-                  <td className="px-3 py-2.5 text-[var(--text)]">{item.date}</td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 text-[var(--text)]" data-label="Date">{item.date}</td>
+                  <td className="px-3 py-2.5" data-label="Status">
                     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor(item.status)}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${statusDot(item.status)}`} />
                       {item.status}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--muted)]">
+                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--muted)]" data-label="In / Out">
                     {item.check_in?.slice(11, 16) ?? "—"} / {item.check_out?.slice(11, 16) ?? "—"}
                   </td>
                 </tr>

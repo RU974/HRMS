@@ -70,7 +70,7 @@ export function PayslipsTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Slip #</th>
@@ -85,13 +85,13 @@ export function PayslipsTab() {
           <tbody>
             {filtered.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3 font-medium">{item.slip_number}</td>
-                <td className="p-3">{item.employee?.name ?? `#${item.employee_id}`}</td>
-                <td className="p-3">{item.payroll ? `${item.payroll.month}/${item.payroll.year}` : `#${item.payroll_id}`}</td>
-                <td className="p-3">{item.issue_date.slice(0, 10)}</td>
-                <td className="p-3"><Badge label={item.status} tone={item.status === "issued" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.status === "cancelled" ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-100 text-slate-700"} /></td>
-                <td className="p-3">{item.file_url ? <a href={item.file_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--primary)] underline">Download</a> : "—"}</td>
-                <td className="p-3">
+                <td className="p-3 font-medium" data-label="Slip #">{item.slip_number}</td>
+                <td className="p-3" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
+                <td className="p-3" data-label="Period">{item.payroll ? `${item.payroll.month}/${item.payroll.year}` : `#${item.payroll_id}`}</td>
+                <td className="p-3" data-label="Issue Date">{item.issue_date.slice(0, 10)}</td>
+                <td className="p-3" data-label="Status"><Badge label={item.status} tone={item.status === "issued" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.status === "cancelled" ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-100 text-slate-700"} /></td>
+                <td className="p-3" data-label="File">{item.file_url ? <a href={item.file_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--primary)] underline">Download</a> : "—"}</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     <Button variant="outline" className="text-xs px-2 py-1" onClick={() => setPayslipDetail(item)}>View</Button>
                     {canManage && (

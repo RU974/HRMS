@@ -373,7 +373,7 @@ export function DeviceMappingPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="rtable w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--muted)]">
                     <th className="py-2 pr-4">Device User ID</th>
@@ -386,9 +386,9 @@ export function DeviceMappingPage() {
                 <tbody>
                   {deviceUsers.map((du) => (
                     <tr key={du.device_user_id} className="border-b border-[var(--border)] last:border-0">
-                      <td className="py-3 pr-4 font-mono text-xs">{du.device_user_id}</td>
-                      <td className="py-3 pr-4">{du.name ?? <span className="text-[var(--muted)]">—</span>}</td>
-                      <td className="py-3 pr-4">
+                      <td data-label="Device User ID" className="py-3 pr-4 font-mono text-xs">{du.device_user_id}</td>
+                      <td data-label="Name on Device" className="py-3 pr-4">{du.name ?? <span className="text-[var(--muted)]">—</span>}</td>
+                      <td data-label="Status" className="py-3 pr-4">
                         {du.mapped ? (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -401,10 +401,10 @@ export function DeviceMappingPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 pr-4">
+                      <td data-label="Mapped Employee" className="py-3 pr-4">
                         {du.employee_name ?? <span className="text-xs text-[var(--muted)]">Not assigned</span>}
                       </td>
-                      <td className="py-3 pr-4 text-right">
+                      <td data-label="Action" className="py-3 pr-4 text-right">
                         {du.mapped ? (
                           <Button
                             variant="ghost"

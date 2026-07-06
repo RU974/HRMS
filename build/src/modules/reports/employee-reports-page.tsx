@@ -74,7 +74,7 @@ export function EmployeeReportsPage() {
         <Card>
           <h3 className="mb-4 text-base font-semibold">Breakdown Table</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Status</th>
@@ -97,23 +97,23 @@ export function EmployeeReportsPage() {
                     className="cursor-pointer border-b border-[var(--border)]/50 hover:bg-[var(--border)]/20"
                     onClick={() => setDrillStatus(item.status)}
                   >
-                    <td className="p-3">
+                    <td className="p-3" data-label="Status">
                       <div className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: STATUS_COLORS[i % STATUS_COLORS.length] }} />
                         <span className="capitalize font-medium">{item.status}</span>
                       </div>
                     </td>
-                    <td className="p-3 text-right font-semibold">{item.count ?? 0}</td>
-                    <td className="p-3 text-right text-[var(--muted)]">
+                    <td className="p-3 text-right font-semibold" data-label="Count">{item.count ?? 0}</td>
+                    <td className="p-3 text-right text-[var(--muted)]" data-label="% of total">
                       {total > 0 ? `${Math.round(((item.count ?? 0) / total) * 100)}%` : "—"}
                     </td>
                   </tr>
                 ))}
                 {rows.length > 0 && (
                   <tr className="font-semibold">
-                    <td className="p-3">Total</td>
-                    <td className="p-3 text-right">{total}</td>
-                    <td className="p-3 text-right">100%</td>
+                    <td className="p-3" data-label="Status">Total</td>
+                    <td className="p-3 text-right" data-label="Count">{total}</td>
+                    <td className="p-3 text-right" data-label="% of total">100%</td>
                   </tr>
                 )}
               </tbody>

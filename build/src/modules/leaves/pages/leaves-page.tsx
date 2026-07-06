@@ -419,7 +419,7 @@ export function LeavesPage() {
         {/* Leave list tabs */}
         {(activeTab === "my-requests" || activeTab === "pending-approvals" || activeTab === "all-requests") && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Employee</th>
@@ -447,21 +447,21 @@ export function LeavesPage() {
                   const canDel    = item.status === "pending" && (hasApprove || isOwn);
                   return (
                     <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                      <td className="p-3 font-medium">
+                      <td className="p-3 font-medium" data-label="Employee">
                         <Link to={`/employees/${item.employee_id}`} className="hover:underline text-[var(--primary)]">
                           {nameMap.get(item.employee_id) ?? item.employee?.name ?? `#${item.employee_id}`}
                         </Link>
                       </td>
-                      <td className="p-3">
+                      <td className="p-3" data-label="Type">
                         {item.type}
                         {item.half_day && <span className="ml-1 rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700">½ day</span>}
                       </td>
-                      <td className="p-3">{item.from_date.slice(0,10)}</td>
-                      <td className="p-3">{item.to_date.slice(0,10)}</td>
-                      <td className="p-3 font-medium">{item.requested_days ?? "—"}</td>
-                      <td className="p-3"><StatusBadge status={item.status} /></td>
-                      <td className="p-3 max-w-[140px] truncate text-xs text-[var(--muted)]">{item.reason ?? "—"}</td>
-                      <td className="p-3">
+                      <td className="p-3" data-label="From">{item.from_date.slice(0,10)}</td>
+                      <td className="p-3" data-label="To">{item.to_date.slice(0,10)}</td>
+                      <td className="p-3 font-medium" data-label="Days">{item.requested_days ?? "—"}</td>
+                      <td className="p-3" data-label="Status"><StatusBadge status={item.status} /></td>
+                      <td className="p-3 max-w-[140px] truncate text-xs text-[var(--muted)]" data-label="Reason">{item.reason ?? "—"}</td>
+                      <td className="p-3" data-label="Actions">
                         <div className="flex justify-end flex-wrap gap-1.5">
                           {canApproveThis && (
                             <>
@@ -501,7 +501,7 @@ export function LeavesPage() {
                 <Button onClick={() => { setEditType(null); setTypeModal(true); }}>+ New Leave Type</Button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="rtable w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                       <th className="p-3">Name</th>
@@ -516,12 +516,12 @@ export function LeavesPage() {
                   <tbody>
                     {(typesQ.data ?? []).map(t => (
                       <tr key={t.id} className="border-b border-[var(--border)]/50">
-                        <td className="p-3 font-medium">{t.name}</td>
-                        <td className="p-3">{t.default_days}</td>
-                        <td className="p-3 text-xs text-[var(--muted)] capitalize">{t.accrual_frequency ?? "yearly"}{t.accrual_amount ? ` (${t.accrual_amount}d)` : ""}</td>
-                        <td className="p-3">{t.carry_forward_days ?? 0}d</td>
-                        <td className="p-3">{t.notice_period_days ? `${t.notice_period_days}d` : "—"}</td>
-                        <td className="p-3">
+                        <td className="p-3 font-medium" data-label="Name">{t.name}</td>
+                        <td className="p-3" data-label="Days">{t.default_days}</td>
+                        <td className="p-3 text-xs text-[var(--muted)] capitalize" data-label="Accrual">{t.accrual_frequency ?? "yearly"}{t.accrual_amount ? ` (${t.accrual_amount}d)` : ""}</td>
+                        <td className="p-3" data-label="CF">{t.carry_forward_days ?? 0}d</td>
+                        <td className="p-3" data-label="Notice">{t.notice_period_days ? `${t.notice_period_days}d` : "—"}</td>
+                        <td className="p-3" data-label="Flags">
                           <div className="flex flex-wrap gap-1">
                             {t.is_paid        && <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">Paid</span>}
                             {t.allow_half_day && <span className="rounded-full bg-violet-50 px-1.5 py-0.5 text-xs text-violet-700">½ day</span>}
@@ -529,7 +529,7 @@ export function LeavesPage() {
                             {!t.is_active     && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-xs text-red-600">Inactive</span>}
                           </div>
                         </td>
-                        <td className="p-3">
+                        <td className="p-3" data-label="Actions">
                           <div className="flex justify-end gap-2">
                             <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setEditType(t); setTypeModal(true); }}>Edit</Button>
                             <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200 hover:bg-red-50"

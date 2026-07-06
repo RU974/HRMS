@@ -77,7 +77,7 @@ export function PayrollProcessingTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Period</th>
@@ -90,11 +90,11 @@ export function PayrollProcessingTab() {
           <tbody>
             {(processingsQ.data ?? []).map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3 font-medium">{item.month}/{item.year}</td>
-                <td className="p-3"><Badge label={item.status} tone={payrollBadge(item.status)} /></td>
-                <td className="p-3">{item.processed_at?.slice(0, 10) ?? "—"}</td>
-                <td className="max-w-[260px] truncate p-3 text-xs text-[var(--muted)]">{item.notes ?? "—"}</td>
-                <td className="p-3">
+                <td className="p-3 font-medium" data-label="Period">{item.month}/{item.year}</td>
+                <td className="p-3" data-label="Status"><Badge label={item.status} tone={payrollBadge(item.status)} /></td>
+                <td className="p-3" data-label="Processed At">{item.processed_at?.slice(0, 10) ?? "—"}</td>
+                <td className="max-w-[260px] truncate p-3 text-xs text-[var(--muted)]" data-label="Notes">{item.notes ?? "—"}</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-2">
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setProcEdit(item); setProcForm({ month: item.month, year: item.year, status: item.status, processed_at: item.processed_at?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setProcModal(true); }}>

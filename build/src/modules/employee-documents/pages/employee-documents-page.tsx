@@ -222,7 +222,7 @@ export function EmployeeDocumentsPage() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
               <th className="p-3">Title</th>
@@ -235,11 +235,11 @@ export function EmployeeDocumentsPage() {
           <tbody>
             {group.items.map((document) => (
               <tr key={document.id} className="border-b border-[var(--border)]/60">
-                <td className="p-3">{document.title}</td>
-                <td className="p-3">{document.type ?? "Unspecified"}</td>
-                <td className="p-3">{visibilityOptions.find((item) => item.value === document.visibility)?.label ?? document.visibility}</td>
-                <td className="p-3">{document.expiry_date ? document.expiry_date.slice(0, 10) : "—"}</td>
-                <td className="p-3">
+                <td data-label="Title" className="p-3">{document.title}</td>
+                <td data-label="Category" className="p-3">{document.type ?? "Unspecified"}</td>
+                <td data-label="Visibility" className="p-3">{visibilityOptions.find((item) => item.value === document.visibility)?.label ?? document.visibility}</td>
+                <td data-label="Expiry" className="p-3">{document.expiry_date ? document.expiry_date.slice(0, 10) : "—"}</td>
+                <td data-label="Actions" className="p-3">
                   <div className="flex flex-wrap justify-end gap-2">
                     <Button variant="outline" onClick={() => void previewEmployeeDocument(document.id)}>
                       Preview
@@ -361,7 +361,7 @@ export function EmployeeDocumentsPage() {
               <p className="text-sm text-[var(--muted)]">No previous versions recorded.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="rtable w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                       <th className="p-3">Version</th>
@@ -373,16 +373,16 @@ export function EmployeeDocumentsPage() {
                   <tbody>
                     {[...(versionDoc.versions ?? [])].reverse().map((version, index) => (
                       <tr key={version.id} className="border-b border-[var(--border)]/60">
-                        <td className="p-3 font-medium">
+                        <td data-label="Version" className="p-3 font-medium">
                           v{(versionDoc.versions ?? []).length - index}
                         </td>
-                        <td className="p-3 text-[var(--muted)]">
+                        <td data-label="Replaced On" className="p-3 text-[var(--muted)]">
                           {version.created_at ? new Date(version.created_at).toLocaleDateString() : "—"}
                         </td>
-                        <td className="p-3 text-[var(--muted)]">
+                        <td data-label="Changed By" className="p-3 text-[var(--muted)]">
                           {version.changed_by ? `User #${version.changed_by}` : "—"}
                         </td>
-                        <td className="p-3 text-right">
+                        <td data-label="File" className="p-3 text-right">
                           <a
                             href={getStorageUrl(version.file_path)}
                             target="_blank"

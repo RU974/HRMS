@@ -63,7 +63,7 @@ export function TaxBracketsTab() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
               <th className="p-3">Name</th>
@@ -76,11 +76,11 @@ export function TaxBracketsTab() {
           <tbody>
             {(taxBracketsQ.data ?? []).map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
-                <td className="p-3 font-medium">{item.name}</td>
-                <td className="p-3">{fmt(item.min_income)}</td>
-                <td className="p-3">{item.max_income != null ? fmt(item.max_income) : "No limit"}</td>
-                <td className="p-3">{item.rate}%</td>
-                <td className="p-3">
+                <td className="p-3 font-medium" data-label="Name">{item.name}</td>
+                <td className="p-3" data-label="Min Income">{fmt(item.min_income)}</td>
+                <td className="p-3" data-label="Max Income">{item.max_income != null ? fmt(item.max_income) : "No limit"}</td>
+                <td className="p-3" data-label="Rate (%)">{item.rate}%</td>
+                <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setTaxEdit(item); setTaxForm({ name: item.name, min_income: item.min_income, max_income: item.max_income ?? "", rate: item.rate, sort_order: item.sort_order ?? 0 }); setTaxModal(true); }}>

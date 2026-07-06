@@ -143,7 +143,7 @@ export function JobsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
                 <th className="p-3">Title</th>
@@ -164,14 +164,14 @@ export function JobsPage() {
               )}
               {!jobsQuery.isLoading && jobs.map((item) => (
                 <tr key={item.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
-                  <td className="p-3 font-medium">{item.title}</td>
-                  <td className="p-3">{item.department?.name ?? "-"}</td>
-                  <td className="p-3 capitalize">{item.employment_type.replace("_", " ")}</td>
-                  <td className="p-3 capitalize">{item.status.replace("_", " ")}</td>
-                  <td className="p-3">{item.open_positions}</td>
-                  <td className="p-3">{item.location ?? "-"}</td>
-                  <td className="p-3">{formatRecruitmentDate(item.posted_at)}</td>
-                  <td className="p-3">
+                  <td className="p-3 font-medium" data-label="Title">{item.title}</td>
+                  <td className="p-3" data-label="Department">{item.department?.name ?? "-"}</td>
+                  <td className="p-3 capitalize" data-label="Type">{item.employment_type.replace("_", " ")}</td>
+                  <td className="p-3 capitalize" data-label="Status">{item.status.replace("_", " ")}</td>
+                  <td className="p-3" data-label="Positions">{item.open_positions}</td>
+                  <td className="p-3" data-label="Location">{item.location ?? "-"}</td>
+                  <td className="p-3" data-label="Posted">{formatRecruitmentDate(item.posted_at)}</td>
+                  <td className="p-3" data-label="Actions">
                     <div className="flex justify-end gap-2">
                       <Button
                         variant="outline"

@@ -237,7 +237,7 @@ export function DevicesListPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="rtable w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--muted)]">
                     <th className="py-2 pr-4">IP Address</th>
@@ -249,10 +249,10 @@ export function DevicesListPage() {
                 <tbody>
                   {unconfigured.map((d) => (
                     <tr key={d.id} className="border-b border-[var(--border)] last:border-0">
-                      <td className="py-2 pr-4 font-mono text-xs">{d.ip_address}:{d.port}</td>
-                      <td className="py-2 pr-4 text-[var(--muted)]">{d.device_model || "—"}</td>
-                      <td className="py-2 pr-4">{d.name}</td>
-                      <td className="py-2 pr-4 text-right">
+                      <td data-label="IP Address" className="py-2 pr-4 font-mono text-xs">{d.ip_address}:{d.port}</td>
+                      <td data-label="Model" className="py-2 pr-4 text-[var(--muted)]">{d.device_model || "—"}</td>
+                      <td data-label="Auto Name" className="py-2 pr-4">{d.name}</td>
+                      <td data-label="Action" className="py-2 pr-4 text-right">
                         <Button variant="primary" onClick={() => setClaimTarget(d)}>Add to My Devices</Button>
                       </td>
                     </tr>
@@ -301,7 +301,7 @@ export function DevicesListPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="rtable w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted)]">
                   <th className="py-2 pr-4">Name</th>
@@ -314,13 +314,13 @@ export function DevicesListPage() {
               <tbody>
                 {devices.map((device) => (
                   <tr key={device.id} className="border-b border-[var(--border)] last:border-0">
-                    <td className="py-3 pr-4 font-medium">{device.name}</td>
-                    <td className="py-3 pr-4">
+                    <td data-label="Name" className="py-3 pr-4 font-medium">{device.name}</td>
+                    <td data-label="Connection" className="py-3 pr-4">
                       {device.connection_type === "tcp" ? `${device.ip_address}:${device.port}` : "Cloud API"}
                     </td>
-                    <td className="py-3 pr-4"><DeviceStatusCard device={device} /></td>
-                    <td className="py-3 pr-4 capitalize">{device.sync_mode}</td>
-                    <td className="py-3 pr-4 text-right">
+                    <td data-label="Status" className="py-3 pr-4"><DeviceStatusCard device={device} /></td>
+                    <td data-label="Sync Mode" className="py-3 pr-4 capitalize">{device.sync_mode}</td>
+                    <td data-label="Actions" className="py-3 pr-4 text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => handleTestConnection(device.id)} disabled={testingId === device.id}>
                           {testingId === device.id ? "Testing..." : "Test"}

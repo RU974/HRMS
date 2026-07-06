@@ -31,7 +31,9 @@ export function Sidebar() {
     <motion.aside
       animate={{ width: open ? 272 : 72 }}
       transition={{ type: "spring", stiffness: 300, damping: 32 }}
-      className="fixed left-0 top-0 z-40 flex h-screen flex-col overflow-hidden"
+      className={`fixed left-0 top-0 z-40 flex h-screen flex-col overflow-hidden transition-transform duration-300 md:translate-x-0 ${
+        open ? "translate-x-0" : "-translate-x-full"
+      }`}
       style={{
         background: "linear-gradient(180deg, var(--card) 0%, color-mix(in srgb, var(--card) 92%, var(--primary)) 100%)",
         borderRight: "1px solid var(--border)",

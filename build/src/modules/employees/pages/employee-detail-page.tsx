@@ -123,7 +123,7 @@ function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: n
         {!isLoading && payslips.length === 0 && <p className="py-4 text-center text-sm text-[var(--muted)]">No payslips issued yet.</p>}
         {payslips.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Slip #</th>
@@ -137,14 +137,14 @@ function SalaryTab({ employee, employeeId }: { employee: Employee; employeeId: n
               <tbody>
                 {payslips.map(p => (
                   <tr key={p.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                    <td className="p-3 font-mono text-xs">{p.slip_number}</td>
-                    <td className="p-3">{p.payroll ? `${p.payroll.year}-${String(p.payroll.month).padStart(2, "0")}` : "—"}</td>
-                    <td className="p-3 font-semibold">{p.payroll ? formatAmount(Number(p.payroll.net_salary)) : "—"}</td>
-                    <td className="p-3">
+                    <td data-label="Slip #" className="p-3 font-mono text-xs">{p.slip_number}</td>
+                    <td data-label="Period" className="p-3">{p.payroll ? `${p.payroll.year}-${String(p.payroll.month).padStart(2, "0")}` : "—"}</td>
+                    <td data-label="Net Salary" className="p-3 font-semibold">{p.payroll ? formatAmount(Number(p.payroll.net_salary)) : "—"}</td>
+                    <td data-label="Status" className="p-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${p.status === "issued" ? "bg-emerald-50 text-emerald-700" : p.status === "cancelled" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{p.status}</span>
                     </td>
-                    <td className="p-3 text-[var(--muted)]">{p.issue_date}</td>
-                    <td className="p-3">
+                    <td data-label="Issue Date" className="p-3 text-[var(--muted)]">{p.issue_date}</td>
+                    <td data-label="File" className="p-3">
                       {p.file_url
                         ? <a href={p.file_url} target="_blank" rel="noreferrer" className="text-xs text-[var(--primary)] hover:underline">Download</a>
                         : <span className="text-xs text-[var(--muted)]">—</span>}
@@ -186,15 +186,15 @@ function PerformanceTab({ employeeId }: { employeeId: number }) {
         {!appraisalsQ.isLoading && appraisals.length === 0 && <p className="py-3 text-center text-sm text-[var(--muted)]">No appraisals recorded.</p>}
         {appraisals.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead><tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]"><th className="p-3">Cycle</th><th className="p-3">Score</th><th className="p-3">Strengths</th><th className="p-3">Date</th></tr></thead>
               <tbody>
                 {appraisals.map(a => (
                   <tr key={a.id} className="border-b border-[var(--border)]/50">
-                    <td className="p-3 font-medium">{a.cycle}</td>
-                    <td className="p-3"><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700">{a.overall_score}/5</span></td>
-                    <td className="p-3 max-w-xs truncate text-[var(--muted)]">{a.strengths ?? "—"}</td>
-                    <td className="p-3 text-[var(--muted)]">{a.created_at?.slice(0, 10)}</td>
+                    <td data-label="Cycle" className="p-3 font-medium">{a.cycle}</td>
+                    <td data-label="Score" className="p-3"><span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700">{a.overall_score}/5</span></td>
+                    <td data-label="Strengths" className="p-3 max-w-xs truncate text-[var(--muted)]">{a.strengths ?? "—"}</td>
+                    <td data-label="Date" className="p-3 text-[var(--muted)]">{a.created_at?.slice(0, 10)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -212,15 +212,15 @@ function PerformanceTab({ employeeId }: { employeeId: number }) {
         {!reviewsQ.isLoading && reviews.length === 0 && <p className="py-3 text-center text-sm text-[var(--muted)]">No reviews recorded.</p>}
         {reviews.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead><tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]"><th className="p-3">Period</th><th className="p-3">Rating</th><th className="p-3">Summary</th><th className="p-3">Date</th></tr></thead>
               <tbody>
                 {reviews.map(r => (
                   <tr key={r.id} className="border-b border-[var(--border)]/50">
-                    <td className="p-3 font-medium">{r.period}</td>
-                    <td className="p-3"><span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{r.rating}/5</span></td>
-                    <td className="p-3 max-w-xs truncate text-[var(--muted)]">{r.summary ?? "—"}</td>
-                    <td className="p-3 text-[var(--muted)]">{r.created_at?.slice(0, 10)}</td>
+                    <td data-label="Period" className="p-3 font-medium">{r.period}</td>
+                    <td data-label="Rating" className="p-3"><span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">{r.rating}/5</span></td>
+                    <td data-label="Summary" className="p-3 max-w-xs truncate text-[var(--muted)]">{r.summary ?? "—"}</td>
+                    <td data-label="Date" className="p-3 text-[var(--muted)]">{r.created_at?.slice(0, 10)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -732,7 +732,7 @@ export function EmployeeDetailPage() {
           <h3 className="mb-4 text-base font-semibold">Attendance Records</h3>
           {attendanceQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading attendance…</p>}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Date</th><th className="p-3">Status</th><th className="p-3">Check In</th><th className="p-3">Check Out</th>
@@ -744,12 +744,12 @@ export function EmployeeDetailPage() {
                 )}
                 {attendanceList.map((a) => (
                   <tr key={a.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                    <td className="p-3">{a.date}</td>
-                    <td className="p-3">
+                    <td data-label="Date" className="p-3">{a.date}</td>
+                    <td data-label="Status" className="p-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${a.status === "present" ? "bg-emerald-50 text-emerald-700" : a.status === "late" ? "bg-amber-50 text-amber-700" : a.status === "absent" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>{a.status}</span>
                     </td>
-                    <td className="p-3">{a.check_in ? a.check_in.slice(11, 16) : "—"}</td>
-                    <td className="p-3">{a.check_out ? a.check_out.slice(11, 16) : "—"}</td>
+                    <td data-label="Check In" className="p-3">{a.check_in ? a.check_in.slice(11, 16) : "—"}</td>
+                    <td data-label="Check Out" className="p-3">{a.check_out ? a.check_out.slice(11, 16) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -763,7 +763,7 @@ export function EmployeeDetailPage() {
           <h3 className="mb-4 text-base font-semibold">Leave Requests</h3>
           {leavesQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading leaves…</p>}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
                   <th className="p-3">Type</th><th className="p-3">From</th><th className="p-3">To</th><th className="p-3">Status</th>
@@ -772,10 +772,10 @@ export function EmployeeDetailPage() {
               <tbody>
                 {((leavesQuery.data as { data?: Array<{ id: number; type: string; from_date: string; to_date: string; status: string }> } | undefined)?.data ?? []).map((l) => (
                   <tr key={l.id} className="border-b border-[var(--border)]/50">
-                    <td className="p-3 capitalize">{l.type}</td>
-                    <td className="p-3">{l.from_date}</td>
-                    <td className="p-3">{l.to_date}</td>
-                    <td className="p-3">
+                    <td data-label="Type" className="p-3 capitalize">{l.type}</td>
+                    <td data-label="From" className="p-3">{l.from_date}</td>
+                    <td data-label="To" className="p-3">{l.to_date}</td>
+                    <td data-label="Status" className="p-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${l.status === "approved" ? "bg-emerald-50 text-emerald-700" : l.status === "pending" ? "bg-amber-50 text-amber-700" : l.status === "rejected" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700"}`}>{l.status}</span>
                     </td>
                   </tr>

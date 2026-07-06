@@ -547,7 +547,7 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
           </div>
         ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="rtable w-full text-sm">
             <thead>
               {activeTab === "reviews" && (
                 <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
@@ -603,11 +603,11 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
               {activeTab === "reviews" &&
                 (rows as PerformanceReview[]).map((item) => (
                   <tr key={item.id} className="border-b border-[var(--border)]/60">
-                    <td className="p-3">{employeeName(item.employee)}</td>
-                    <td className="p-3">{item.period}</td>
-                    <td className="p-3">{item.rating}/5</td>
-                    <td className="p-3">{item.summary ?? "-"}</td>
-                    <td className="p-3">
+                    <td className="p-3" data-label="Employee">{employeeName(item.employee)}</td>
+                    <td className="p-3" data-label="Period">{item.period}</td>
+                    <td className="p-3" data-label="Rating">{item.rating}/5</td>
+                    <td className="p-3" data-label="Summary">{item.summary ?? "-"}</td>
+                    <td className="p-3" data-label="Actions">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
@@ -629,12 +629,12 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
               {activeTab === "kpis" &&
                 (rows as PerformanceKpi[]).map((item) => (
                   <tr key={item.id} className="border-b border-[var(--border)]/60">
-                    <td className="p-3">{employeeName(item.employee)}</td>
-                    <td className="p-3">{item.name}</td>
-                    <td className="p-3">{item.target_value}</td>
-                    <td className="p-3">{item.current_value}</td>
-                    <td className="p-3">{item.unit}</td>
-                    <td className="p-3">
+                    <td className="p-3" data-label="Employee">{employeeName(item.employee)}</td>
+                    <td className="p-3" data-label="KPI">{item.name}</td>
+                    <td className="p-3" data-label="Target">{item.target_value}</td>
+                    <td className="p-3" data-label="Current">{item.current_value}</td>
+                    <td className="p-3" data-label="Unit">{item.unit}</td>
+                    <td className="p-3" data-label="Actions">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
@@ -656,12 +656,12 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
               {activeTab === "goals" &&
                 (rows as PerformanceGoal[]).map((item) => (
                   <tr key={item.id} className="border-b border-[var(--border)]/60">
-                    <td className="p-3">{employeeName(item.employee)}</td>
-                    <td className="p-3">{item.title}</td>
-                    <td className="p-3">{item.status.replace("_", " ")}</td>
-                    <td className="p-3">{item.progress}%</td>
-                    <td className="p-3">{item.due_date ?? "-"}</td>
-                    <td className="p-3">
+                    <td className="p-3" data-label="Employee">{employeeName(item.employee)}</td>
+                    <td className="p-3" data-label="Goal">{item.title}</td>
+                    <td className="p-3" data-label="Status">{item.status.replace("_", " ")}</td>
+                    <td className="p-3" data-label="Progress">{item.progress}%</td>
+                    <td className="p-3" data-label="Due Date">{item.due_date ?? "-"}</td>
+                    <td className="p-3" data-label="Actions">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
@@ -686,10 +686,10 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
                     <td className="p-3">
                       <input type="checkbox" checked={selectedAppraisalIds.includes(item.id)} onChange={() => toggleAppraisalSelection(item.id)} />
                     </td>
-                    <td className="p-3">{employeeName(item.employee)}</td>
-                    <td className="p-3">{item.cycle}</td>
-                    <td className="p-3">{item.overall_score}/5</td>
-                    <td className="p-3">
+                    <td className="p-3" data-label="Employee">{employeeName(item.employee)}</td>
+                    <td className="p-3" data-label="Cycle">{item.cycle}</td>
+                    <td className="p-3" data-label="Score">{item.overall_score}/5</td>
+                    <td className="p-3" data-label="Status">
                       <span
                         className={
                           "rounded-full px-2 py-0.5 text-xs font-medium " +
@@ -699,8 +699,8 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
                         {item.status}
                       </span>
                     </td>
-                    <td className="p-3">{item.strengths ?? "-"}</td>
-                    <td className="p-3">
+                    <td className="p-3" data-label="Strengths">{item.strengths ?? "-"}</td>
+                    <td className="p-3" data-label="Actions">
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button variant="outline" onClick={() => openIncrementModal(item)}>
                           To Increment
@@ -734,11 +734,11 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
               {activeTab === "templates" &&
                 (rows as PerformanceReviewTemplate[]).map((item) => (
                   <tr key={item.id} className="border-b border-[var(--border)]/60">
-                    <td className="p-3">{item.name}</td>
-                    <td className="p-3">{item.scale_min} - {item.scale_max}</td>
-                    <td className="p-3">{(item.criteria ?? []).join(", ") || "-"}</td>
-                    <td className="p-3">{item.is_active ? "Yes" : "No"}</td>
-                    <td className="p-3">
+                    <td className="p-3" data-label="Name">{item.name}</td>
+                    <td className="p-3" data-label="Scale">{item.scale_min} - {item.scale_max}</td>
+                    <td className="p-3" data-label="Criteria">{(item.criteria ?? []).join(", ") || "-"}</td>
+                    <td className="p-3" data-label="Active">{item.is_active ? "Yes" : "No"}</td>
+                    <td className="p-3" data-label="Actions">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"

@@ -29,3 +29,64 @@ body {
   backdrop-filter: blur(10px);
   background: color-mix(in srgb, var(--card) 72%, transparent);
 }
+
+/* Responsive tables: normal table at md:+, stacked cards below md */
+@media (max-width: 767px) {
+  table.rtable thead {
+    display: none;
+  }
+
+  table.rtable,
+  table.rtable tbody,
+  table.rtable tr,
+  table.rtable td {
+    display: block;
+    width: 100%;
+  }
+
+  table.rtable tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  table.rtable tr:last-child {
+    margin-bottom: 0;
+  }
+
+  table.rtable td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    padding: 0.625rem 0.75rem;
+    text-align: right;
+  }
+
+  table.rtable td:last-child {
+    border-bottom: none;
+  }
+
+  table.rtable td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    text-align: left;
+  }
+
+  /* Full-width message rows (loading/empty states) keep centered, no label */
+  table.rtable td[colspan] {
+    justify-content: center;
+    text-align: center;
+  }
+
+  table.rtable td[colspan]::before {
+    content: none;
+  }
+}
