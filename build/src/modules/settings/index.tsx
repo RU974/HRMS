@@ -198,7 +198,7 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? `Edit — ${user?.name}` : "Create User"} width="max-w-xl">
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Full Name">
             <input className={inputCls} placeholder="Ali Raza" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           </FormField>
@@ -219,7 +219,7 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
           </div>
         </FormField>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Company">
             <select className={inputCls} value={form.company_id}
               onChange={e => setForm(p => ({ ...p, company_id: e.target.value, branch_id: "" }))}>
@@ -418,7 +418,7 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
   return (
     <Modal open={open} onClose={onClose} title={role ? `Edit Role — ${role.name}` : "Create Role"} width="max-w-2xl">
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Role Name">
             <input className={inputCls} placeholder="HR Manager" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           </FormField>
@@ -451,7 +451,7 @@ function RoleModal({ open, onClose, role, permissions, onSave, busy }:
                       <span className="text-xs font-bold uppercase tracking-widest text-[var(--muted)]">{group.module}</span>
                       <span className="ml-auto text-xs text-[var(--muted)]">{ids.filter(id => form.permission_ids.includes(id)).length}/{ids.length}</span>
                     </button>
-                    <div className="ml-6 mt-1 grid grid-cols-2 gap-1">
+                    <div className="ml-6 mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1">
                       {(group.permissions ?? []).map(p => (
                         <button key={p.id} type="button" onClick={() => toggle(p.id)}
                           className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition text-left ${form.permission_ids.includes(p.id) ? "bg-[var(--primary)]/10 text-[var(--primary)]" : "hover:bg-[var(--border)]/40 text-[var(--text)]"}`}>
@@ -630,7 +630,7 @@ function CompanyModal({ open, onClose, company, onSave, busy }:
         <FormField label="Company Name">
           <input className={inputCls} placeholder="Acme Corp" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
         </FormField>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Email">
             <input className={inputCls} type="email" placeholder="hello@acme.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
           </FormField>
@@ -638,7 +638,7 @@ function CompanyModal({ open, onClose, company, onSave, busy }:
             <input className={inputCls} placeholder="+92 300 0000000" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
           </FormField>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Website">
             <input className={inputCls} type="url" placeholder="https://acme.com" value={form.website} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} />
           </FormField>
@@ -769,7 +769,7 @@ function BranchModal({ open, onClose, branch, companies, onSave, busy }:
   return (
     <Modal open={open} onClose={onClose} title={branch ? `Edit — ${branch.name}` : "Create Branch"}>
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Company">
             <select className={inputCls} value={form.company_id} onChange={e => setForm(p => ({ ...p, company_id: e.target.value }))}>
               <option value="">Select company</option>
@@ -783,7 +783,7 @@ function BranchModal({ open, onClose, branch, companies, onSave, busy }:
         <FormField label="Branch Name">
           <input className={inputCls} placeholder="Lahore Head Office" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
         </FormField>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Email">
             <input className={inputCls} type="email" placeholder="branch@company.com" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
           </FormField>

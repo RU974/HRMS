@@ -534,7 +534,7 @@ function RevokeModal({
         </div>
         <div className="p-5 space-y-4">
           {/* Revoke vs Suspend comparison */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
               <p className="font-bold text-amber-700 dark:text-amber-400 mb-1">Suspend (reversible)</p>
               <p className="text-amber-600 dark:text-amber-300 leading-relaxed">Temporarily blocks access. Can be lifted at any time. The key remains valid.</p>
@@ -841,7 +841,7 @@ function IssueModal({
           )}
 
           {/* ── Licensee name + email ── */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Licensee Name</label>
               <input className={inputCls} placeholder="Acme Corp" value={form.licensee_name} onChange={set("licensee_name")} />
@@ -853,7 +853,7 @@ function IssueModal({
           </div>
 
           {/* ── Edition + seat limits ── */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Edition</label>
               <select className={inputCls} value={form.edition} onChange={handleEditionChange}>
@@ -895,7 +895,7 @@ function IssueModal({
           </div>
 
           {/* ── Expiry + issued by ── */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className={labelCls}>Expires</label>
               <input className={inputCls} type="date" value={form.expires_at} onChange={set("expires_at")} />
@@ -918,7 +918,7 @@ function IssueModal({
               <label className={labelCls}>Module Access</label>
               <span className="text-[10px] text-[var(--muted)]">Auto-set by edition · customisable</span>
             </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
               {FEATURE_OPTIONS.map(({ value, label, minEdition }) => (
                 <label key={value} className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -1112,7 +1112,7 @@ function CompanyLicenseRow({
 
           {/* Seat usage bars */}
           {license && license.status !== "suspended" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
                 { label: "Employees",   used: row.total_employees, max: license.max_employees, pct: empPct },
                 ...(license.max_users !== null
@@ -1909,7 +1909,7 @@ export function LicensingTab() {
                 return features.length > 0 ? (
                   <div className="mt-4">
                     <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">Licensed Modules</p>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {features.map((f) => (
                         <div key={f} className="flex items-center gap-2 rounded-lg bg-[var(--background)] px-2.5 py-1.5 text-xs font-medium text-[var(--text)]">
                           <Check className="h-3 w-3 text-emerald-500 shrink-0" /> {FEATURE_LABEL[f] ?? f}

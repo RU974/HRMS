@@ -443,7 +443,7 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
       {/* ── Quick actions ── */}
       <section>
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">Quick Actions</p>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-8">
           {quickActions.map(a => <QuickAction key={a.to} {...a} />)}
         </div>
       </section>

@@ -318,4 +318,47 @@ class AuthController extends Controller
 
         return $this->ok(null, 'Password reset successfully');
     }
+
+    /**
+     * Change password for the authenticated user
+     */
+    public function changePassword(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => 'required|string',
+            'password' => ['required', 'confirmed', PasswordRule::min(8)->letters()->mixedCase()->numbers()],
+        ]);
+
+        if (!Hash::check($validated['current_password'], $user->password)) {
+            $this->auditLogService->recordRequest(
+                $request,
+                'change_password_failed',
+                'auth',
+                'Change password failed: current password mismatch',
+                null,
+                ['user_id' => $user->id],
+                400
+            );
+
+            return $this->fail('Current password is incorrect', 400);
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($validated['password']),
+        ])->save();
+
+        $this->auditLogService->recordRequest(
+            $request,
+            'change_password_success',
+            'auth',
+            'Password changed successfully',
+            null,
+            ['user_id' => $user->id],
+            200
+        );
+
+        return $this->ok(null, 'Password changed successfully');
+    }
 }

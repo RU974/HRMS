@@ -50,7 +50,7 @@ export function LoginPage() {
 
       {popup && (
         <div
-          className="toast-enter fixed top-6 right-6 z-50 w-[320px] overflow-hidden rounded-2xl border bg-[var(--card)] shadow-2xl"
+          className="toast-enter fixed top-6 right-6 left-6 z-50 w-auto max-w-[320px] sm:left-auto overflow-hidden rounded-2xl border bg-[var(--card)] shadow-2xl"
           style={{
             borderColor: popup.type === "success" ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)",
             boxShadow: popup.type === "success"

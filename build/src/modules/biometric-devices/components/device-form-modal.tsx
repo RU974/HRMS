@@ -93,7 +93,7 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
 
         {isTcp ? (
           <>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="IP Address">
                 <FormInput
                   className={inputClass}
@@ -155,7 +155,7 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
           </>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <FormField label="Sync Mode">
             <select
               className={inputClass}

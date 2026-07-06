@@ -167,7 +167,7 @@ export function AttendanceWidget({
 
   return (
     <ChartCard title={title} subtitle="Current day status and recent history">
-      <div className="mb-4 grid grid-cols-3 gap-3">
+      <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
           { label: "Date",      value: today?.date ?? "—" },
           { label: "Check In",  value: today?.check_in?.slice(11, 16) ?? "—" },

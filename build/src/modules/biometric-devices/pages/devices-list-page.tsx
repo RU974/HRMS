@@ -90,7 +90,7 @@ function ClaimModal({ device, onClose, onClaimed }: ClaimModalProps) {
               {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Comm Key (0 = none)</label>
               <FormInput className={inputClass} value={commKey} onChange={(e) => setCommKey(e.target.value)} placeholder="0" />

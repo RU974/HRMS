@@ -124,7 +124,7 @@ export function ApprovalDetailPage() {
               <p className="text-sm text-[var(--muted)]">Request ID #{approval.id}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="font-medium text-[var(--muted)]">Module</p>
                 <p className="text-[var(--text)]">{approval.module}</p>
@@ -170,7 +170,7 @@ export function ApprovalDetailPage() {
                 <h3 className="text-lg font-semibold">Current Step</h3>
                 <p className="text-sm text-[var(--muted)]">Workflow approval progression</p>
               </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="font-medium text-[var(--muted)]">Step Order</p>
                   <p className="text-[var(--text)]">#{approval.currentStep.step_order}</p>

@@ -232,7 +232,7 @@ function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; co
     <Modal title={`Print All QR Codes (${activeItems.length} items)`} onClose={onClose}>
       <div className="space-y-4">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 max-h-64 overflow-y-auto">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {activeItems.map((item) => (
               <div key={item.id} className="flex flex-col items-center gap-1 rounded-lg border border-[var(--border)] p-2">
                 <QRCodeSVG value={buildQRPayload(item, companyId)} size={64} level="M" />
@@ -525,8 +525,8 @@ function ItemsTab() {
       {open && (
         <Modal title={editId ? "Edit Item" : "New Item"} onClose={() => setOpen(false)}>
           <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void saveMutation.mutateAsync(); }}>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="col-span-1 sm:col-span-2">
                 <label className="mb-1 block text-sm font-medium">Name <span className="text-red-500">*</span></label>
                 <FormInput value={form.name} onChange={f("name")} required />
               </div>
@@ -559,7 +559,7 @@ function ItemsTab() {
                   {CONDITIONS.map((c) => <option key={c} value={c}>{CONDITION_LABELS[c]}</option>)}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <label className="mb-1 block text-sm font-medium">Description</label>
                 <textarea className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={form.description} onChange={f("description")} />
               </div>
@@ -769,7 +769,7 @@ function AssignmentsTab() {
                 {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium">Quantity <span className="text-red-500">*</span></label>
                 <FormInput type="number" min={1} value={assignForm.quantity} onChange={(e) => setAssignForm((p) => ({ ...p, quantity: e.target.value }))} required />

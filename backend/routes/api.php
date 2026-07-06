@@ -93,6 +93,7 @@ $registerRoutes = function (): void {
             Route::get('/me', [AuthController::class, 'me']);
             Route::post('/refresh', [AuthController::class, 'refresh']);
             Route::post('/profile', [AuthController::class, 'updateProfile']);
+            Route::post('/change-password', [AuthController::class, 'changePassword']);
         });
 
         // Company seat-meter — no special permission, any authenticated user needs this

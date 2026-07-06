@@ -179,7 +179,7 @@ export function CreateTicketModal({ onClose, onCreated }: Props) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--text)]">Category</label>
             <select
