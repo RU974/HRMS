@@ -29,6 +29,7 @@ class RolePermissionSeeder extends Seeder
                 'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:delete', 'tickets:assign', 'tickets:manage_settings',
                 'biometric:view', 'biometric:sync', 'biometric:manage_mapping',
                 'licenses:view', 'licenses:manage_settings',
+                'chat:view', 'chat:create', 'chat:edit', 'chat:delete', 'chat:manage_settings',
             ],
             'HR Manager' => [
                 'dashboard:view',
@@ -54,6 +55,7 @@ class RolePermissionSeeder extends Seeder
                 'approvals:view', 'approvals:approve',
                 'announcement:view',
                 'performance:view',
+                'chat:view', 'chat:create',
             ],
             'Payroll Manager' => [
                 'dashboard:view',
@@ -65,6 +67,7 @@ class RolePermissionSeeder extends Seeder
                 'performance:view',
                 'announcement:view',
                 'notification:view',
+                'chat:view', 'chat:create',
             ],
             'Attendance Manager' => [
                 'dashboard:view',
@@ -75,6 +78,7 @@ class RolePermissionSeeder extends Seeder
                 'reports:view',
                 'announcement:view',
                 'notification:view',
+                'chat:view', 'chat:create',
             ],
             'Recruiter' => [
                 'dashboard:view',
@@ -95,6 +99,7 @@ class RolePermissionSeeder extends Seeder
                 'performance:view', 'performance:edit',
                 'announcement:view',
                 'notification:view',
+                'chat:view', 'chat:create',
             ],
             'IT Support' => [
                 'dashboard:view',
@@ -106,6 +111,7 @@ class RolePermissionSeeder extends Seeder
                 'biometric:view', 'biometric:sync', 'biometric:manage_mapping',
                 'announcement:view',
                 'notification:view',
+                'chat:view', 'chat:create',
             ],
             'Employee' => [
                 'dashboard:view',
