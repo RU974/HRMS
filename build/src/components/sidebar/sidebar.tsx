@@ -23,9 +23,11 @@ function useCompanyName() {
 }
 
 export function Sidebar() {
-  const open    = useLayoutStore((s) => s.sidebarOpen);
-  const company = useCompanyName();
-  const letter  = company.slice(0, 1).toUpperCase();
+  const open      = useLayoutStore((s) => s.sidebarOpen);
+  const company   = useCompanyName();
+  const letter    = company.slice(0, 1).toUpperCase();
+  const user      = useAuthStore((s) => s.user);
+  const avatarUrl = (user as any)?.profile_image ?? (user as any)?.employee?.profile_image ?? null;
 
   return (
     <motion.aside
@@ -68,24 +70,28 @@ export function Sidebar() {
       >
         {/* Glossy logo mark */}
         <div
-          className="relative grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-[14px] font-black text-white"
+          className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-2xl text-[14px] font-black text-white"
           style={{
             background: "linear-gradient(145deg, #3b82f6 0%, #1d4ed8 60%, #1e40af 100%)",
             boxShadow: "0 4px 16px rgba(37,99,235,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
           }}
         >
-          {/* Shine overlay */}
-          <div
-            className="absolute inset-0 rounded-2xl pointer-events-none overflow-hidden"
-          >
-            <div
-              className="absolute inset-x-0 top-0 h-1/2"
-              style={{
-                background: "linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%)",
-              }}
-            />
-          </div>
-          {letter}
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={user?.name ?? "User"} className="h-full w-full object-cover" />
+          ) : (
+            <>
+              {/* Shine overlay */}
+              <div className="absolute inset-0 rounded-2xl pointer-events-none overflow-hidden">
+                <div
+                  className="absolute inset-x-0 top-0 h-1/2"
+                  style={{
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%)",
+                  }}
+                />
+              </div>
+              {letter}
+            </>
+          )}
         </div>
 
         {/* Company name */}

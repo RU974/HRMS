@@ -38,9 +38,10 @@ export function TopNavbar() {
     setSearchOpen(false);
   }
 
-  const initials = getInitials(user?.name);
-  const hue      = getAvatarHue(user?.name);
-  const role     = user?.rolesRelation?.[0]?.name ?? user?.roles?.[0]?.name ?? "Employee";
+  const initials   = getInitials(user?.name);
+  const hue        = getAvatarHue(user?.name);
+  const role       = user?.rolesRelation?.[0]?.name ?? user?.roles?.[0]?.name ?? "Employee";
+  const avatarUrl  = user?.profile_image ?? user?.employee?.profile_image ?? null;
 
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--card)]/80 backdrop-blur-md">
@@ -127,12 +128,20 @@ export function TopNavbar() {
             onClick={() => navigate("/profile")}
             className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] py-1.5 pl-1.5 pr-3 transition hover:border-[var(--primary)]/30 hover:bg-[var(--primary)]/5"
           >
-            <div
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-black text-white shadow-sm"
-              style={{ background: `hsl(${hue},60%,45%)` }}
-            >
-              {initials}
-            </div>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={user?.name ?? "User"}
+                className="h-6 w-6 shrink-0 rounded-lg object-cover shadow-sm"
+              />
+            ) : (
+              <div
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-lg text-[10px] font-black text-white shadow-sm"
+                style={{ background: `hsl(${hue},60%,45%)` }}
+              >
+                {initials}
+              </div>
+            )}
             <div className="hidden flex-col items-start sm:flex">
               <span className="text-[11px] font-bold leading-tight text-[var(--text)]">
                 {user?.name?.split(" ")[0] ?? "User"}
