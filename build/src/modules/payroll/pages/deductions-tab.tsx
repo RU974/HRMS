@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
@@ -29,6 +32,23 @@ const DEDUCTION_TYPES: { value: DeductionType; label: string }[] = [
   { value: "other",            label: "Other" },
 ];
 
+const deductionTypeValues = DEDUCTION_TYPES.map(t => t.value) as [DeductionType, ...DeductionType[]];
+
+const deductionSchema = z.object({
+  employee_id: z.coerce.number().min(1, "Employee is required"),
+  payroll_id: z.coerce.number().optional(),
+  title: z.string().min(1, "Title is required"),
+  amount: z.coerce.number().gt(0, "Amount must be greater than 0"),
+  type: z.enum(deductionTypeValues),
+  effective_date: z.string().min(1, "Effective date is required"),
+  notes: z.string().optional(),
+});
+
+type DeductionFormInput = z.input<typeof deductionSchema>;
+type DeductionFormValues = z.output<typeof deductionSchema>;
+
+const emptyDedForm: DeductionFormInput = { employee_id: 0, payroll_id: 0, title: "", amount: 0, type: "other", effective_date: "", notes: "" };
+
 export function DeductionsTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
@@ -43,16 +63,28 @@ export function DeductionsTab() {
 
   const [dedModal, setDedModal] = useState(false);
   const [dedEdit,  setDedEdit]  = useState<Deduction | null>(null);
-  const [dedForm,  setDedForm]  = useState({ employee_id: 0, payroll_id: 0, title: "", amount: 0, type: "other" as DeductionType, effective_date: "", notes: "" });
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<DeductionFormInput, any, DeductionFormValues>({
+    resolver: zodResolver(deductionSchema),
+    defaultValues: emptyDedForm,
+  });
+
+  const selectedEmployeeId = watch("employee_id");
 
   const dedCreate = useMutation({
-    mutationFn: () => createDeduction({ ...dedForm, payroll_id: dedForm.payroll_id || null, notes: dedForm.notes || null }),
+    mutationFn: (values: DeductionFormValues) => createDeduction({ ...values, payroll_id: values.payroll_id || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "deductions"] }); toast.success("Deduction added", "Deduction record saved."); setDedModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const dedUpdate = useMutation({
-    mutationFn: () => updateDeduction(dedEdit!.id, { title: dedForm.title, amount: dedForm.amount, type: dedForm.type, effective_date: dedForm.effective_date, notes: dedForm.notes || null, payroll_id: dedForm.payroll_id || null }),
+    mutationFn: (values: DeductionFormValues) => updateDeduction(dedEdit!.id, { title: values.title, amount: values.amount, type: values.type, effective_date: values.effective_date, notes: values.notes || null, payroll_id: values.payroll_id || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "deductions"] }); toast.success("Deduction updated", "Deduction record updated."); setDedModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -63,11 +95,15 @@ export function DeductionsTab() {
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
+  function onSubmit(values: DeductionFormValues) {
+    (dedEdit ? dedUpdate : dedCreate).mutate(values);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         {canManage && (
-          <Button className="text-xs" onClick={() => { setDedEdit(null); setDedForm({ employee_id: 0, payroll_id: 0, title: "", amount: 0, type: "other", effective_date: "", notes: "" }); setDedModal(true); }}>
+          <Button className="text-xs" onClick={() => { setDedEdit(null); reset(emptyDedForm); setDedModal(true); }}>
             + New Deduction
           </Button>
         )}
@@ -96,7 +132,7 @@ export function DeductionsTab() {
                 <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setDedEdit(item); setDedForm({ employee_id: item.employee_id, payroll_id: item.payroll_id ?? 0, title: item.title, amount: Number(item.amount), type: item.type, effective_date: item.effective_date.slice(0, 10), notes: item.notes ?? "" }); setDedModal(true); }}>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setDedEdit(item); reset({ employee_id: item.employee_id, payroll_id: item.payroll_id ?? 0, title: item.title, amount: Number(item.amount), type: item.type, effective_date: item.effective_date.slice(0, 10), notes: item.notes ?? "" }); setDedModal(true); }}>
                         Edit
                       </Button>
                     )}
@@ -118,31 +154,41 @@ export function DeductionsTab() {
 
       {dedModal && (
         <Modal title={`${dedEdit ? "Edit" : "New"} Deduction`} onClose={() => setDedModal(false)}>
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (dedEdit ? dedUpdate : dedCreate).mutateAsync(); }}>
+          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Employee">
-                <select required className={sel} value={dedForm.employee_id} onChange={e => setDedForm(p => ({ ...p, employee_id: Number(e.target.value) }))}>
+                <select className={sel} {...register("employee_id")}>
                   <option value={0}>Select employee</option>
                   {employees.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                 </select>
+                {errors.employee_id && <p className="mt-1 text-xs text-red-500">{errors.employee_id.message}</p>}
               </FormField>
               <FormField label="Type">
-                <select required className={sel} value={dedForm.type} onChange={e => setDedForm(p => ({ ...p, type: e.target.value as DeductionType }))}>
+                <select className={sel} {...register("type")}>
                   {DEDUCTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </FormField>
-              <FormField label="Title"><FormInput required value={dedForm.title} onChange={e => setDedForm(p => ({ ...p, title: e.target.value }))} /></FormField>
-              <FormField label="Amount"><FormInput required type="number" min={0} step="0.01" value={dedForm.amount} onChange={e => setDedForm(p => ({ ...p, amount: Number(e.target.value) }))} /></FormField>
-              <FormField label="Effective Date"><FormInput required type="date" value={dedForm.effective_date} onChange={e => setDedForm(p => ({ ...p, effective_date: e.target.value }))} /></FormField>
+              <FormField label="Title">
+                <FormInput {...register("title")} />
+                {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+              </FormField>
+              <FormField label="Amount">
+                <FormInput type="number" min={0} step="0.01" {...register("amount")} />
+                {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount.message}</p>}
+              </FormField>
+              <FormField label="Effective Date">
+                <FormInput type="date" {...register("effective_date")} />
+                {errors.effective_date && <p className="mt-1 text-xs text-red-500">{errors.effective_date.message}</p>}
+              </FormField>
               <FormField label="Payroll (optional)">
-                <select className={sel} value={dedForm.payroll_id} onChange={e => setDedForm(p => ({ ...p, payroll_id: Number(e.target.value) }))}>
+                <select className={sel} {...register("payroll_id")}>
                   <option value={0}>No linked payroll</option>
-                  {payrolls.filter(p => !dedForm.employee_id || p.employee_id === dedForm.employee_id).map(x => <option key={x.id} value={x.id}>#{x.id} — {x.month}/{x.year}</option>)}
+                  {payrolls.filter(p => !selectedEmployeeId || p.employee_id === selectedEmployeeId).map(x => <option key={x.id} value={x.id}>#{x.id} — {x.month}/{x.year}</option>)}
                 </select>
               </FormField>
             </div>
             <FormField label="Notes">
-              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={dedForm.notes} onChange={e => setDedForm(p => ({ ...p, notes: e.target.value }))} maxLength={1000} />
+              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" {...register("notes")} maxLength={1000} />
             </FormField>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setDedModal(false)}>Cancel</Button>

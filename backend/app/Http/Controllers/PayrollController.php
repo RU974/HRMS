@@ -2,23 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Attendance;
-use App\Models\Bonus;
-use App\Models\Deduction;
+use App\Jobs\GeneratePayrollJob;
+use App\Models\BackgroundRun;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\User;
-use App\Services\PayrollCalculator;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class PayrollController extends Controller
 {
-    public function __construct(private readonly PayrollCalculator $calculator)
-    {
-    }
-
     // ──────────────────────────────────────────────────────────────
     //  GET /api/payroll
     //  Filters: employee_id, status, month, year, page
@@ -216,9 +209,10 @@ class PayrollController extends Controller
     // ──────────────────────────────────────────────────────────────
     //  POST /api/payroll/generate          (payroll:manage_settings)
     //  Body: { month, year, department_id? }
-    //  Auto-calculates payroll for all eligible employees using
-    //  PayrollCalculator, skips employees that already have a record
-    //  for the period.
+    //  Queues payroll generation for all eligible employees using
+    //  PayrollCalculator (via GeneratePayrollJob) so a large company
+    //  doesn't time out a synchronous web request. Returns a
+    //  background_run id the frontend polls for progress.
     // ──────────────────────────────────────────────────────────────
     public function generatePayroll(Request $request)
     {
@@ -233,8 +227,7 @@ class PayrollController extends Controller
         $month = (int) $validated['month'];
         $year  = (int) $validated['year'];
 
-        // Build employee query
-        $employeeQuery = Employee::with(['shift'])
+        $employeeQuery = Employee::query()
             ->where('status', 'active');
 
         $this->scopeToCompany($request, $employeeQuery);
@@ -243,91 +236,18 @@ class PayrollController extends Controller
             $employeeQuery->where('department_id', (int) $validated['department_id']);
         }
 
-        $employees = $employeeQuery->get();
+        $employeeIds = $employeeQuery->pluck('id')->all();
 
-        // Find employees that already have a record for this period
-        $existingEmployeeIds = Payroll::where('month', $month)
-            ->where('year', $year)
-            ->pluck('employee_id')
-            ->flip();
+        $run = BackgroundRun::create([
+            'type'         => BackgroundRun::TYPE_PAYROLL_GENERATE,
+            'status'       => BackgroundRun::STATUS_QUEUED,
+            'company_id'   => $request->user()?->company_id,
+            'requested_by' => $request->user()?->id,
+        ]);
 
-        // Bulk-load all three datasets for the period — eliminates N+1
-        $employeeIds = $employees->pluck('id')->all();
+        GeneratePayrollJob::dispatch($run->id, $employeeIds, $month, $year);
 
-        $allBonuses = Bonus::whereIn('employee_id', $employeeIds)
-            ->whereYear('effective_date', $year)
-            ->whereMonth('effective_date', $month)
-            ->get()
-            ->groupBy('employee_id');
-
-        $allDeductions = Deduction::whereIn('employee_id', $employeeIds)
-            ->whereYear('effective_date', $year)
-            ->whereMonth('effective_date', $month)
-            ->get()
-            ->groupBy('employee_id');
-
-        $allAttendances = Attendance::whereIn('employee_id', $employeeIds)
-            ->whereYear('date', $year)
-            ->whereMonth('date', $month)
-            ->whereNotNull('check_out')
-            ->get()
-            ->groupBy('employee_id');
-
-        $created = 0;
-        $skipped = 0;
-        $failed  = 0;
-
-        DB::transaction(function () use (
-            $employees, $existingEmployeeIds, $month, $year,
-            $allBonuses, $allDeductions, $allAttendances,
-            &$created, &$skipped, &$failed
-        ) {
-            foreach ($employees as $employee) {
-                // Skip if already generated
-                if (isset($existingEmployeeIds[$employee->id])) {
-                    $skipped++;
-                    continue;
-                }
-
-                try {
-                    $components = $this->calculator->calculateForEmployee(
-                        $employee, $month, $year,
-                        $allBonuses->get($employee->id, collect()),
-                        $allDeductions->get($employee->id, collect()),
-                        $allAttendances->get($employee->id, collect()),
-                    );
-
-                    Payroll::create([
-                        'employee_id'  => $employee->id,
-                        'month'        => $month,
-                        'year'         => $year,
-                        'base_salary'  => $components['base_salary'],
-                        'bonus'        => $components['bonuses'],
-                        'deductions'   => $components['deductions'],
-                        'tax'          => $components['tax'],
-                        'net_salary'   => $components['net_salary'],
-                        'status'       => Payroll::STATUS_DRAFT,
-                        'payment_date' => null,
-                    ]);
-
-                    $created++;
-                } catch (\Throwable $e) {
-                    // Log and continue so one bad record doesn't abort the whole batch
-                    \Illuminate\Support\Facades\Log::warning('Payroll generation failed for employee', [
-                        'employee_id' => $employee->id,
-                        'month'       => $month,
-                        'year'        => $year,
-                        'error'       => $e->getMessage(),
-                    ]);
-                    $failed++;
-                }
-            }
-        });
-
-        return $this->ok(
-            compact('created', 'skipped', 'failed'),
-            "Payroll generation complete: {$created} created, {$skipped} skipped, {$failed} failed."
-        );
+        return $this->ok(['background_run_id' => $run->id], 'Payroll generation has been queued.', 202);
     }
 
     // ──────────────────────────────────────────────────────────────

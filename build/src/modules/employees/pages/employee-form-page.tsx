@@ -1,6 +1,9 @@
 import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "@/components/notifications/toast";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
@@ -9,7 +12,6 @@ import { FormInput } from "@/components/forms/form-input";
 import {
   createEmployee,
   getEmployees,
-  type Employee,
 } from "@/services/employee-service";
 import {
   listDepartments,
@@ -42,32 +44,70 @@ const roleOptions = [
 
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
 
+const employeeSchema = z.object({
+  first_name: z.string().min(1, "First name is required"),
+  last_name: z.string().min(1, "Last name is required"),
+  email: z.string().min(1, "Email is required").email("Enter a valid email"),
+  phone: z.string().optional(),
+  cnic: z.string().optional(),
+  date_of_birth: z.string().optional(),
+  gender: z.string().optional(),
+  address: z.string().optional(),
+  employee_number: z.string().optional(),
+  department_id: z.string().min(1, "Department is required"),
+  designation_id: z.string().optional(),
+  joining_date: z.string().optional(),
+  employment_type: z.string().optional(),
+  shift_id: z.string().optional(),
+  manager_id: z.string().optional(),
+  basic_salary: z
+    .string()
+    .min(1, "Basic salary is required")
+    .refine((v) => Number.isFinite(Number.parseFloat(v)), "Enter a valid amount"),
+  allowances: z
+    .string()
+    .optional()
+    .refine((v) => !v || Number.isFinite(Number.parseFloat(v)), "Enter a valid amount"),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  role: z.string().min(1, "Role is required"),
+});
+
+type EmployeeFormValues = z.infer<typeof employeeSchema>;
+
 export function EmployeeFormPage() {
   const navigate = useNavigate();
-  const [submitting, setSubmitting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<File | null>(null);
-  const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    cnic: "",
-    date_of_birth: "",
-    gender: "",
-    address: "",
-    employee_number: "",
-    department_id: "",
-    designation_id: "",
-    joining_date: "",
-    employment_type: "",
-    shift_id: "",
-    manager_id: "",
-    basic_salary: "",
-    allowances: "",
-    username: "",
-    password: "",
-    role: "Employee",
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<EmployeeFormValues>({
+    resolver: zodResolver(employeeSchema),
+    defaultValues: {
+      first_name: "",
+      last_name: "",
+      email: "",
+      phone: "",
+      cnic: "",
+      date_of_birth: "",
+      gender: "",
+      address: "",
+      employee_number: "",
+      department_id: "",
+      designation_id: "",
+      joining_date: "",
+      employment_type: "",
+      shift_id: "",
+      manager_id: "",
+      basic_salary: "",
+      allowances: "",
+      username: "",
+      password: "",
+      role: "Employee",
+    },
   });
 
   const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: listDepartments, retry: false });
@@ -81,10 +121,6 @@ export function EmployeeFormPage() {
     onError: (e: Error) => toast.error("Failed to save", e.message),
   });
 
-  function handleChange<K extends keyof typeof form>(key: K, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     setProfileImage(file);
@@ -93,41 +129,32 @@ export function EmployeeFormPage() {
     }
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
+  function onSubmit(values: EmployeeFormValues) {
+    const payload = new FormData();
+    const name = [values.first_name.trim(), values.last_name.trim()].filter(Boolean).join(" ");
+    const basicSalary = Number.parseFloat(values.basic_salary);
+    const allowances = Number.parseFloat(values.allowances || "0");
 
-    try {
-      const payload = new FormData();
-      const name = [form.first_name.trim(), form.last_name.trim()].filter(Boolean).join(" ");
-      const basicSalary = Number.parseFloat(form.basic_salary);
-      const allowances = Number.parseFloat(form.allowances || "0");
-
-      if (name) {
-        payload.append("name", name);
-      }
-
-      Object.entries(form).forEach(([key, value]) => {
-        if (value !== "") {
-          payload.append(key, value);
-        }
-      });
-
-      payload.append(
-        "salary",
-        String((Number.isFinite(basicSalary) ? basicSalary : 0) + (Number.isFinite(allowances) ? allowances : 0)),
-      );
-
-      if (profileImage) {
-        payload.append("profile_image", profileImage);
-      }
-
-      await mutation.mutateAsync(payload);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setSubmitting(false);
+    if (name) {
+      payload.append("name", name);
     }
+
+    Object.entries(values).forEach(([key, value]) => {
+      if (value !== "") {
+        payload.append(key, value);
+      }
+    });
+
+    payload.append(
+      "salary",
+      String((Number.isFinite(basicSalary) ? basicSalary : 0) + (Number.isFinite(allowances) ? allowances : 0)),
+    );
+
+    if (profileImage) {
+      payload.append("profile_image", profileImage);
+    }
+
+    mutation.mutate(payload);
   }
 
   const departmentOptions = departmentsQuery.data ?? [];
@@ -138,7 +165,7 @@ export function EmployeeFormPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="New Employee" subtitle="Capture employee profile, company, salary, and account details." />
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -149,31 +176,34 @@ export function EmployeeFormPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">First Name</label>
-              <FormInput value={form.first_name} onChange={(event) => handleChange("first_name", event.target.value)} required />
+              <FormInput {...register("first_name")} />
+              {errors.first_name && <p className="text-xs text-red-500">{errors.first_name.message}</p>}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Last Name</label>
-              <FormInput value={form.last_name} onChange={(event) => handleChange("last_name", event.target.value)} required />
+              <FormInput {...register("last_name")} />
+              {errors.last_name && <p className="text-xs text-red-500">{errors.last_name.message}</p>}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Email</label>
-              <FormInput type="email" value={form.email} onChange={(event) => handleChange("email", event.target.value)} required />
+              <FormInput type="email" {...register("email")} />
+              {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Phone</label>
-              <FormInput value={form.phone} onChange={(event) => handleChange("phone", event.target.value)} />
+              <FormInput {...register("phone")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">CNIC</label>
-              <FormInput value={form.cnic} onChange={(event) => handleChange("cnic", event.target.value)} />
+              <FormInput {...register("cnic")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Date of Birth</label>
-              <FormInput type="date" value={form.date_of_birth} onChange={(event) => handleChange("date_of_birth", event.target.value)} />
+              <FormInput type="date" {...register("date_of_birth")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Gender</label>
-              <select className={inputClass} value={form.gender} onChange={(event) => handleChange("gender", event.target.value)}>
+              <select className={inputClass} {...register("gender")}>
                 <option value="">Select gender</option>
                 {genderOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -184,8 +214,7 @@ export function EmployeeFormPage() {
               <label className="text-sm font-medium">Address</label>
               <textarea
                 className="h-28 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
-                value={form.address}
-                onChange={(event) => handleChange("address", event.target.value)}
+                {...register("address")}
               />
             </div>
           </div>
@@ -201,20 +230,21 @@ export function EmployeeFormPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Employee ID</label>
-              <FormInput value={form.employee_number} onChange={(event) => handleChange("employee_number", event.target.value)} />
+              <FormInput {...register("employee_number")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Department</label>
-              <select className={inputClass} value={form.department_id} onChange={(event) => handleChange("department_id", event.target.value)} required>
+              <select className={inputClass} {...register("department_id")}>
                 <option value="">Select department</option>
                 {departmentOptions.map((dept) => (
                   <option key={dept.id} value={dept.id}>{dept.name}</option>
                 ))}
               </select>
+              {errors.department_id && <p className="text-xs text-red-500">{errors.department_id.message}</p>}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Designation</label>
-              <select className={inputClass} value={form.designation_id} onChange={(event) => handleChange("designation_id", event.target.value)}>
+              <select className={inputClass} {...register("designation_id")}>
                 <option value="">Select designation</option>
                 {designationOptions.map((designation) => (
                   <option key={designation.id} value={designation.id}>{designation.name}</option>
@@ -223,11 +253,11 @@ export function EmployeeFormPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Joining Date</label>
-              <FormInput type="date" value={form.joining_date} onChange={(event) => handleChange("joining_date", event.target.value)} />
+              <FormInput type="date" {...register("joining_date")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Employment Type</label>
-              <select className={inputClass} value={form.employment_type} onChange={(event) => handleChange("employment_type", event.target.value)}>
+              <select className={inputClass} {...register("employment_type")}>
                 <option value="">Select employment type</option>
                 {employmentTypeOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -236,7 +266,7 @@ export function EmployeeFormPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Shift</label>
-              <select className={inputClass} value={form.shift_id} onChange={(event) => handleChange("shift_id", event.target.value)}>
+              <select className={inputClass} {...register("shift_id")}>
                 <option value="">Select shift</option>
                 {shiftOptions.map((shift) => (
                   <option key={shift.id} value={shift.id}>{shift.name}</option>
@@ -245,7 +275,7 @@ export function EmployeeFormPage() {
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Manager</label>
-              <select className={inputClass} value={form.manager_id} onChange={(event) => handleChange("manager_id", event.target.value)}>
+              <select className={inputClass} {...register("manager_id")}>
                 <option value="">Select manager</option>
                 {managerOptions.map((manager) => (
                   <option key={manager.id} value={manager.id}>{manager.name}</option>
@@ -265,11 +295,13 @@ export function EmployeeFormPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Basic Salary</label>
-              <FormInput type="number" step="0.01" value={form.basic_salary} onChange={(event) => handleChange("basic_salary", event.target.value)} required />
+              <FormInput type="number" step="0.01" {...register("basic_salary")} />
+              {errors.basic_salary && <p className="text-xs text-red-500">{errors.basic_salary.message}</p>}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Allowances</label>
-              <FormInput type="number" step="0.01" value={form.allowances} onChange={(event) => handleChange("allowances", event.target.value)} />
+              <FormInput type="number" step="0.01" {...register("allowances")} />
+              {errors.allowances && <p className="text-xs text-red-500">{errors.allowances.message}</p>}
             </div>
           </div>
         </Card>
@@ -284,15 +316,15 @@ export function EmployeeFormPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Username</label>
-              <FormInput value={form.username} onChange={(event) => handleChange("username", event.target.value)} />
+              <FormInput {...register("username")} />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Password</label>
-              <FormInput type="password" value={form.password} onChange={(event) => handleChange("password", event.target.value)} />
+              <FormInput type="password" {...register("password")} />
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Role</label>
-              <select className={inputClass} value={form.role} onChange={(event) => handleChange("role", event.target.value)}>
+              <select className={inputClass} {...register("role")}>
                 {roleOptions.map((role) => (
                   <option key={role.value} value={role.value}>{role.label}</option>
                 ))}
@@ -322,8 +354,8 @@ export function EmployeeFormPage() {
         </Card>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={submitting || mutation.isPending}>
-            {submitting || mutation.isPending ? "Saving..." : "Create Employee"}
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? "Saving..." : "Create Employee"}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/employees")}>Cancel</Button>
           {mutation.error instanceof Error && (

@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BackgroundRunController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeePromotionController;
 use App\Http\Controllers\DepartmentController;
@@ -75,9 +76,11 @@ $registerRoutes = function (): void {
     // Public authentication routes
     Route::prefix('auth')->group(function () {
         // Local biometric agent — authenticated by shared secret, no session required
-        Route::post('/biometric-agent/push', [BiometricDeviceController::class, 'agentPush']);
-        Route::post('/biometric-agent/sync-users', [BiometricDeviceController::class, 'agentSyncUsers']);
-        Route::post('/biometric-agent/discovered-devices', [BiometricDeviceController::class, 'agentDiscoverDevices']);
+        Route::middleware('throttle:biometric-agent')->group(function (): void {
+            Route::post('/biometric-agent/push', [BiometricDeviceController::class, 'agentPush']);
+            Route::post('/biometric-agent/sync-users', [BiometricDeviceController::class, 'agentSyncUsers']);
+            Route::post('/biometric-agent/discovered-devices', [BiometricDeviceController::class, 'agentDiscoverDevices']);
+        });
 
         Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
         Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
@@ -193,13 +196,19 @@ $registerRoutes = function (): void {
             Route::get('employees/search', [EmployeeController::class, 'search']);
             Route::get('employees/department/{departmentId}', [EmployeeController::class, 'getByDepartment']);
             Route::post('employees/bulk-action', [EmployeeController::class, 'bulkAction']);
-            Route::get('employees/export/csv', [EmployeeController::class, 'export']);
+            Route::post('employees/export/csv', [EmployeeController::class, 'export']);
             Route::post('employees/import', [EmployeeController::class, 'import']);
             Route::post('employees/{id}/set-password', [EmployeeController::class, 'setUserPassword']);
             Route::apiResource('employees', EmployeeController::class);
             Route::get('employees/{employeeId}/promotions', [EmployeePromotionController::class, 'index']);
             Route::post('employees/{employeeId}/promotions', [EmployeePromotionController::class, 'store']);
             Route::delete('employees/{employeeId}/promotions/{id}', [EmployeePromotionController::class, 'destroy']);
+        });
+
+        // Background job tracking (payroll generation, employee import/export)
+        Route::group([], function () {
+            Route::get('background-runs/{id}', [BackgroundRunController::class, 'show']);
+            Route::get('background-runs/{id}/download', [BackgroundRunController::class, 'download']);
         });
 
         // Department routes
@@ -246,6 +255,7 @@ $registerRoutes = function (): void {
         Route::middleware('permission:biometric:edit')->group(function () {
         Route::put('biometric-devices/{id}', [BiometricDeviceController::class, 'update']);
         Route::post('biometric-devices/{id}/test-connection', [BiometricDeviceController::class, 'testConnection']);
+        Route::post('biometric-devices/{id}/regenerate-token', [BiometricDeviceController::class, 'regenerateAgentToken']);
         });
         Route::middleware('permission:biometric:delete')->delete('biometric-devices/{id}', [BiometricDeviceController::class, 'destroy']);
         Route::middleware('permission:biometric:sync')->post('biometric-devices/{id}/sync', [BiometricDeviceController::class, 'sync']);

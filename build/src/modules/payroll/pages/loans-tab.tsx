@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
@@ -16,6 +19,22 @@ import {
 import { useAuthStore } from "@/store/auth-store";
 import { Badge, fmt, loanBadge, sel } from "./payroll-shared";
 
+const loanSchema = z.object({
+  employee_id: z.coerce.number().min(1, "Employee is required"),
+  title: z.string().min(1, "Title is required"),
+  amount: z.coerce.number().gt(0, "Amount must be greater than 0"),
+  outstanding_balance: z.coerce.number().min(0, "Outstanding balance is required"),
+  emi_amount: z.string().optional().refine((v) => !v || Number.isFinite(Number(v)), "Enter a valid amount"),
+  start_date: z.string().min(1, "Start date is required"),
+  end_date: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+type LoanFormInput = z.input<typeof loanSchema>;
+type LoanFormValues = z.output<typeof loanSchema>;
+
+const emptyLoanForm: LoanFormInput = { employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "", start_date: "", end_date: "", notes: "" };
+
 export function LoansTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
@@ -28,16 +47,26 @@ export function LoansTab() {
 
   const [loanModal, setLoanModal] = useState(false);
   const [loanEdit,  setLoanEdit]  = useState<LoanAdvance | null>(null);
-  const [loanForm,  setLoanForm]  = useState({ employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "" as number | "", start_date: "", end_date: "", notes: "" });
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    reset,
+    formState: { errors },
+  } = useForm<LoanFormInput, any, LoanFormValues>({
+    resolver: zodResolver(loanSchema),
+    defaultValues: emptyLoanForm,
+  });
 
   const loanCreate = useMutation({
-    mutationFn: () => createLoanAdvance({ ...loanForm, emi_amount: loanForm.emi_amount === "" ? null : Number(loanForm.emi_amount), end_date: loanForm.end_date || null, notes: loanForm.notes || null, status: "active" }),
+    mutationFn: (values: LoanFormValues) => createLoanAdvance({ ...values, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null, status: "active" }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans"] }); toast.success("Loan added", "Loan / advance record saved."); setLoanModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const loanUpdate = useMutation({
-    mutationFn: () => updateLoanAdvance(loanEdit!.id, { title: loanForm.title, outstanding_balance: loanForm.outstanding_balance, emi_amount: loanForm.emi_amount === "" ? null : Number(loanForm.emi_amount), end_date: loanForm.end_date || null, notes: loanForm.notes || null }),
+    mutationFn: (values: LoanFormValues) => updateLoanAdvance(loanEdit!.id, { title: values.title, outstanding_balance: values.outstanding_balance, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans"] }); toast.success("Loan updated", "Loan / advance record updated."); setLoanModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -48,11 +77,15 @@ export function LoansTab() {
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
+  function onSubmit(values: LoanFormValues) {
+    (loanEdit ? loanUpdate : loanCreate).mutate(values);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         {canManage && (
-          <Button className="text-xs" onClick={() => { setLoanEdit(null); setLoanForm({ employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "", start_date: "", end_date: "", notes: "" }); setLoanModal(true); }}>
+          <Button className="text-xs" onClick={() => { setLoanEdit(null); reset(emptyLoanForm); setLoanModal(true); }}>
             + New Loan / Advance
           </Button>
         )}
@@ -83,7 +116,7 @@ export function LoansTab() {
                 <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setLoanEdit(item); setLoanForm({ employee_id: item.employee_id, title: item.title, amount: item.amount, outstanding_balance: item.outstanding_balance, emi_amount: item.emi_amount ?? "", start_date: item.start_date.slice(0, 10), end_date: item.end_date?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setLoanModal(true); }}>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setLoanEdit(item); reset({ employee_id: item.employee_id, title: item.title, amount: item.amount, outstanding_balance: item.outstanding_balance, emi_amount: item.emi_amount != null ? String(item.emi_amount) : "", start_date: item.start_date.slice(0, 10), end_date: item.end_date?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setLoanModal(true); }}>
                         Edit
                       </Button>
                     )}
@@ -105,23 +138,44 @@ export function LoansTab() {
 
       {loanModal && (
         <Modal title={`${loanEdit ? "Edit" : "New"} Loan / Advance`} onClose={() => setLoanModal(false)}>
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (loanEdit ? loanUpdate : loanCreate).mutateAsync(); }}>
+          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <FormField label="Employee">
-              <select required disabled={!!loanEdit} className={sel} value={loanForm.employee_id} onChange={e => setLoanForm(p => ({ ...p, employee_id: Number(e.target.value) }))}>
+              <select disabled={!!loanEdit} className={sel} {...register("employee_id")}>
                 <option value={0}>Select employee</option>
                 {employees.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
+              {errors.employee_id && <p className="mt-1 text-xs text-red-500">{errors.employee_id.message}</p>}
             </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Title"><FormInput required value={loanForm.title} onChange={e => setLoanForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Medical Emergency Advance" /></FormField>
-              <FormField label="Principal Amount"><FormInput required type="number" min={0} step="0.01" value={loanForm.amount} onChange={e => setLoanForm(p => ({ ...p, amount: Number(e.target.value), outstanding_balance: loanEdit ? p.outstanding_balance : Number(e.target.value) }))} /></FormField>
-              <FormField label="Outstanding Balance"><FormInput required type="number" min={0} step="0.01" value={loanForm.outstanding_balance} onChange={e => setLoanForm(p => ({ ...p, outstanding_balance: Number(e.target.value) }))} /></FormField>
-              <FormField label="Monthly EMI (optional)"><FormInput type="number" min={0} step="0.01" value={loanForm.emi_amount} onChange={e => setLoanForm(p => ({ ...p, emi_amount: e.target.value ? Number(e.target.value) : "" }))} /></FormField>
-              <FormField label="Start Date"><FormInput required type="date" value={loanForm.start_date} onChange={e => setLoanForm(p => ({ ...p, start_date: e.target.value }))} /></FormField>
-              <FormField label="End Date (optional)"><FormInput type="date" value={loanForm.end_date} onChange={e => setLoanForm(p => ({ ...p, end_date: e.target.value }))} /></FormField>
+              <FormField label="Title">
+                <FormInput {...register("title")} placeholder="e.g. Medical Emergency Advance" />
+                {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+              </FormField>
+              <FormField label="Principal Amount">
+                <FormInput
+                  type="number" min={0} step="0.01"
+                  {...register("amount", { onChange: (e) => { if (!loanEdit) setValue("outstanding_balance", Number(e.target.value)); } })}
+                />
+                {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount.message}</p>}
+              </FormField>
+              <FormField label="Outstanding Balance">
+                <FormInput type="number" min={0} step="0.01" {...register("outstanding_balance")} />
+                {errors.outstanding_balance && <p className="mt-1 text-xs text-red-500">{errors.outstanding_balance.message}</p>}
+              </FormField>
+              <FormField label="Monthly EMI (optional)">
+                <FormInput type="number" min={0} step="0.01" {...register("emi_amount")} />
+                {errors.emi_amount && <p className="mt-1 text-xs text-red-500">{errors.emi_amount.message}</p>}
+              </FormField>
+              <FormField label="Start Date">
+                <FormInput type="date" {...register("start_date")} />
+                {errors.start_date && <p className="mt-1 text-xs text-red-500">{errors.start_date.message}</p>}
+              </FormField>
+              <FormField label="End Date (optional)">
+                <FormInput type="date" {...register("end_date")} />
+              </FormField>
             </div>
             <FormField label="Notes">
-              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={loanForm.notes} onChange={e => setLoanForm(p => ({ ...p, notes: e.target.value }))} maxLength={1000} />
+              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" {...register("notes")} maxLength={1000} />
             </FormField>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setLoanModal(false)}>Cancel</Button>

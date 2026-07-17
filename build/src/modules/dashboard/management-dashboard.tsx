@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { TicketStatsWidget } from "@/modules/tickets/ticket-stats-widget";
 import { useChartJs } from "./use-chart-js";
+import { Chart } from "@/lib/chart-setup";
 
 // ─── Line chart ──────────────────────────────────────────────────────────────
 function AttendanceTrendChart({ points }: { points: Array<{ label: string; rate: number }> }) {
@@ -23,7 +24,7 @@ function AttendanceTrendChart({ points }: { points: Array<{ label: string; rate:
   useChartJs(() => {
     if (!ref.current || !points.length) return;
     if (inst.current) inst.current.destroy();
-    inst.current = new window.Chart(ref.current, {
+    inst.current = new Chart(ref.current, {
       type: "line",
       data: {
         labels: points.map(p => p.label),
@@ -66,7 +67,7 @@ function DeptBarChart({ items }: { items: Array<{ label: string; value: number }
   useChartJs(() => {
     if (!ref.current || !items.length) return;
     if (inst.current) inst.current.destroy();
-    inst.current = new window.Chart(ref.current, {
+    inst.current = new Chart(ref.current, {
       type: "bar",
       data: {
         labels: items.map(i => i.label),
@@ -106,7 +107,7 @@ function LeaveDonut({ items }: { items: Array<{ label: string; value: number }> 
   useChartJs(() => {
     if (!ref.current || !items.length) return;
     if (inst.current) inst.current.destroy();
-    inst.current = new window.Chart(ref.current, {
+    inst.current = new Chart(ref.current, {
       type: "doughnut",
       data: {
         labels: items.map(i => i.label),
@@ -140,7 +141,7 @@ function TrendLineChart({ points, label, color = "#10b981", prefix = "" }: {
   useChartJs(() => {
     if (!ref.current || !points.length) return;
     if (inst.current) inst.current.destroy();
-    inst.current = new window.Chart(ref.current, {
+    inst.current = new Chart(ref.current, {
       type: "line",
       data: {
         labels: points.map(p => p.label),

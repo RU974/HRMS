@@ -4,28 +4,8 @@ import { AlertCircle, CheckCircle2, Clock, Ticket } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import { getTicketStats } from "@/services/ticket-service";
 import { SummaryCard, ChartCard } from "@/modules/dashboard/dashboard-widgets";
-
-declare const Chart: any;
-
-// ─── Chart.js CDN loader ──────────────────────────────────────────────────────
-
-function useChartJs(cb: () => void, deps: unknown[]) {
-  useEffect(() => {
-    if (typeof Chart !== "undefined") { cb(); return; }
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src*="chart.umd.min.js"]'
-    );
-    if (existing) {
-      existing.addEventListener("load", cb);
-      return () => existing.removeEventListener("load", cb);
-    }
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    s.onload = cb;
-    document.head.appendChild(s);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-}
+import { Chart } from "@/lib/chart-setup";
+import { useChartJs } from "@/modules/dashboard/use-chart-js";
 
 // ─── Department bar chart ─────────────────────────────────────────────────────
 

@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
@@ -17,6 +20,23 @@ import {
 import { useAuthStore } from "@/store/auth-store";
 import { Badge, SummaryCard, fmt, sel } from "./payroll-shared";
 
+const payslipStatuses = ["draft", "issued", "cancelled"] as const;
+
+const payslipSchema = z.object({
+  employee_id: z.coerce.number().min(1, "Employee is required"),
+  payroll_id: z.coerce.number().min(1, "Payroll is required"),
+  slip_number: z.string().min(1, "Slip number is required"),
+  issue_date: z.string().min(1, "Issue date is required"),
+  status: z.enum(payslipStatuses),
+  file_url: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+type PayslipFormInput = z.input<typeof payslipSchema>;
+type PayslipFormValues = z.output<typeof payslipSchema>;
+
+const emptyPayslipForm: PayslipFormInput = { employee_id: 0, payroll_id: 0, slip_number: "", issue_date: "", status: "draft", file_url: "", notes: "" };
+
 export function PayslipsTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
@@ -33,16 +53,25 @@ export function PayslipsTab() {
   const [payslipModal,  setPayslipModal]  = useState(false);
   const [payslipEdit,   setPayslipEdit]   = useState<Payslip | null>(null);
   const [payslipDetail, setPayslipDetail] = useState<Payslip | null>(null);
-  const [payslipForm,   setPayslipForm]   = useState({ employee_id: 0, payroll_id: 0, slip_number: "", issue_date: "", status: "draft" as Payslip["status"], file_url: "", notes: "" });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<PayslipFormInput, any, PayslipFormValues>({
+    resolver: zodResolver(payslipSchema),
+    defaultValues: emptyPayslipForm,
+  });
 
   const payslipCreate = useMutation({
-    mutationFn: () => createPayslip({ ...payslipForm, file_url: payslipForm.file_url || null, notes: payslipForm.notes || null }),
+    mutationFn: (values: PayslipFormValues) => createPayslip({ ...values, file_url: values.file_url || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "payslips"] }); toast.success("Payslip created", "Payslip saved successfully."); setPayslipModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const payslipUpdate = useMutation({
-    mutationFn: () => updatePayslip(payslipEdit!.id, { status: payslipForm.status, issue_date: payslipForm.issue_date, file_url: payslipForm.file_url || undefined, notes: payslipForm.notes || undefined }),
+    mutationFn: (values: PayslipFormValues) => updatePayslip(payslipEdit!.id, { status: values.status, issue_date: values.issue_date, file_url: values.file_url || undefined, notes: values.notes || undefined }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "payslips"] }); toast.success("Payslip updated", "Payslip updated successfully."); setPayslipModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -55,15 +84,19 @@ export function PayslipsTab() {
 
   const filtered = payslips.filter(i => !payslipStatF || i.status === payslipStatF);
 
+  function onSubmit(values: PayslipFormValues) {
+    (payslipEdit ? payslipUpdate : payslipCreate).mutate(values);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <select className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm" value={payslipStatF} onChange={e => setPayslipStatF((e.target.value as Payslip["status"]) || "")}>
           <option value="">All statuses</option>
-          {["draft", "issued", "cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
+          {payslipStatuses.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         {canManage && (
-          <Button className="text-xs" onClick={() => { setPayslipEdit(null); setPayslipForm({ employee_id: 0, payroll_id: 0, slip_number: "", issue_date: "", status: "draft", file_url: "", notes: "" }); setPayslipModal(true); }}>
+          <Button className="text-xs" onClick={() => { setPayslipEdit(null); reset(emptyPayslipForm); setPayslipModal(true); }}>
             + New Payslip
           </Button>
         )}
@@ -95,7 +128,7 @@ export function PayslipsTab() {
                   <div className="flex justify-end gap-1.5">
                     <Button variant="outline" className="text-xs px-2 py-1" onClick={() => setPayslipDetail(item)}>View</Button>
                     {canManage && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayslipEdit(item); setPayslipForm({ employee_id: item.employee_id, payroll_id: item.payroll_id, slip_number: item.slip_number, issue_date: item.issue_date.slice(0, 10), status: item.status, file_url: item.file_url ?? "", notes: item.notes ?? "" }); setPayslipModal(true); }}>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayslipEdit(item); reset({ employee_id: item.employee_id, payroll_id: item.payroll_id, slip_number: item.slip_number, issue_date: item.issue_date.slice(0, 10), status: item.status, file_url: item.file_url ?? "", notes: item.notes ?? "" }); setPayslipModal(true); }}>
                         Edit
                       </Button>
                     )}
@@ -142,35 +175,45 @@ export function PayslipsTab() {
       {/* Form modal */}
       {payslipModal && (
         <Modal title={`${payslipEdit ? "Edit" : "New"} Payslip`} onClose={() => setPayslipModal(false)}>
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (payslipEdit ? payslipUpdate : payslipCreate).mutateAsync(); }}>
+          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             {!payslipEdit && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField label="Employee">
-                  <select required className={sel} value={payslipForm.employee_id} onChange={e => setPayslipForm(p => ({ ...p, employee_id: Number(e.target.value) }))}>
+                  <select className={sel} {...register("employee_id")}>
                     <option value={0}>Select employee</option>
                     {employees.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
+                  {errors.employee_id && <p className="mt-1 text-xs text-red-500">{errors.employee_id.message}</p>}
                 </FormField>
                 <FormField label="Payroll">
-                  <select required className={sel} value={payslipForm.payroll_id} onChange={e => setPayslipForm(p => ({ ...p, payroll_id: Number(e.target.value) }))}>
+                  <select className={sel} {...register("payroll_id")}>
                     <option value={0}>Select payroll</option>
                     {payrolls.map(x => <option key={x.id} value={x.id}>#{x.id} — {x.month}/{x.year}</option>)}
                   </select>
+                  {errors.payroll_id && <p className="mt-1 text-xs text-red-500">{errors.payroll_id.message}</p>}
                 </FormField>
-                <FormField label="Slip Number"><FormInput required value={payslipForm.slip_number} onChange={e => setPayslipForm(p => ({ ...p, slip_number: e.target.value }))} /></FormField>
+                <FormField label="Slip Number">
+                  <FormInput {...register("slip_number")} />
+                  {errors.slip_number && <p className="mt-1 text-xs text-red-500">{errors.slip_number.message}</p>}
+                </FormField>
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Issue Date"><FormInput required type="date" value={payslipForm.issue_date} onChange={e => setPayslipForm(p => ({ ...p, issue_date: e.target.value }))} /></FormField>
+              <FormField label="Issue Date">
+                <FormInput type="date" {...register("issue_date")} />
+                {errors.issue_date && <p className="mt-1 text-xs text-red-500">{errors.issue_date.message}</p>}
+              </FormField>
               <FormField label="Status">
-                <select className={sel} value={payslipForm.status} onChange={e => setPayslipForm(p => ({ ...p, status: e.target.value as Payslip["status"] }))}>
-                  {["draft", "issued", "cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
+                <select className={sel} {...register("status")}>
+                  {payslipStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </FormField>
-              <FormField label="File URL (optional)"><FormInput type="url" value={payslipForm.file_url} onChange={e => setPayslipForm(p => ({ ...p, file_url: e.target.value }))} placeholder="https://…" /></FormField>
+              <FormField label="File URL (optional)">
+                <FormInput type="url" {...register("file_url")} placeholder="https://…" />
+              </FormField>
             </div>
             <FormField label="Notes">
-              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={payslipForm.notes} onChange={e => setPayslipForm(p => ({ ...p, notes: e.target.value }))} maxLength={1000} />
+              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" {...register("notes")} maxLength={1000} />
             </FormField>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setPayslipModal(false)}>Cancel</Button>

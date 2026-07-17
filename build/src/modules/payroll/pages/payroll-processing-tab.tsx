@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
@@ -14,6 +17,21 @@ import {
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
 import { Badge, payrollBadge, sel } from "./payroll-shared";
+
+const processingStatuses = ["draft", "processing", "completed", "cancelled"] as const;
+
+const processingSchema = z.object({
+  month: z.coerce.number().min(1, "Month must be between 1 and 12").max(12, "Month must be between 1 and 12"),
+  year: z.coerce.number().min(2020, "Enter a valid year"),
+  status: z.enum(processingStatuses),
+  processed_at: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+type ProcessingFormInput = z.input<typeof processingSchema>;
+type ProcessingFormValues = z.output<typeof processingSchema>;
+
+const emptyProcForm: ProcessingFormInput = { month: new Date().getMonth() + 1, year: new Date().getFullYear(), status: "draft", processed_at: "", notes: "" };
 
 export function PayrollProcessingTab() {
   const queryClient = useQueryClient();
@@ -30,16 +48,25 @@ export function PayrollProcessingTab() {
 
   const [procModal, setProcModal] = useState(false);
   const [procEdit,  setProcEdit]  = useState<PayrollProcessing | null>(null);
-  const [procForm,  setProcForm]  = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), status: "draft" as PayrollProcessing["status"], processed_at: "", notes: "" });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ProcessingFormInput, any, ProcessingFormValues>({
+    resolver: zodResolver(processingSchema),
+    defaultValues: emptyProcForm,
+  });
 
   const procCreate = useMutation({
-    mutationFn: () => createPayrollProcessing({ ...procForm, processed_at: procForm.processed_at || null, notes: procForm.notes || null }),
+    mutationFn: (values: ProcessingFormValues) => createPayrollProcessing({ ...values, processed_at: values.processed_at || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "processings"] }); toast.success("Processing created", "Payroll processing record saved."); setProcModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const procUpdate = useMutation({
-    mutationFn: () => updatePayrollProcessing(procEdit!.id, { status: procForm.status, processed_at: procForm.processed_at || null, notes: procForm.notes || null }),
+    mutationFn: (values: ProcessingFormValues) => updatePayrollProcessing(procEdit!.id, { status: values.status, processed_at: values.processed_at || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "processings"] }); toast.success("Processing updated", "Payroll processing record updated."); setProcModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -49,6 +76,10 @@ export function PayrollProcessingTab() {
     onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "processings"] }); toast.success("Deleted", "Processing record removed."); },
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
+
+  function onSubmit(values: ProcessingFormValues) {
+    (procEdit ? procUpdate : procCreate).mutate(values);
+  }
 
   return (
     <div className="space-y-4">
@@ -65,12 +96,12 @@ export function PayrollProcessingTab() {
           <label className="text-xs text-[var(--muted)]">Status</label>
           <select className="mt-1 h-9 w-36 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm" value={procStatF} onChange={e => setProcStatF((e.target.value as PayrollProcessing["status"]) || "")}>
             <option value="">All</option>
-            {["draft", "processing", "completed", "cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
+            {processingStatuses.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <Button variant="outline" className="text-xs" onClick={() => { setProcMonthF(""); setProcYearF(new Date().getFullYear()); setProcStatF(""); }}>Reset</Button>
         {canManage && (
-          <Button className="ml-auto text-xs" onClick={() => { setProcEdit(null); setProcForm({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), status: "draft", processed_at: "", notes: "" }); setProcModal(true); }}>
+          <Button className="ml-auto text-xs" onClick={() => { setProcEdit(null); reset(emptyProcForm); setProcModal(true); }}>
             + New Run
           </Button>
         )}
@@ -97,7 +128,7 @@ export function PayrollProcessingTab() {
                 <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-2">
                     {canManage && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setProcEdit(item); setProcForm({ month: item.month, year: item.year, status: item.status, processed_at: item.processed_at?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setProcModal(true); }}>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setProcEdit(item); reset({ month: item.month, year: item.year, status: item.status, processed_at: item.processed_at?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setProcModal(true); }}>
                         Edit
                       </Button>
                     )}
@@ -119,19 +150,27 @@ export function PayrollProcessingTab() {
 
       {procModal && (
         <Modal title={`${procEdit ? "Edit" : "New"} Processing Run`} onClose={() => setProcModal(false)}>
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (procEdit ? procUpdate : procCreate).mutateAsync(); }}>
+          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Month"><FormInput required type="number" min={1} max={12} value={procForm.month} onChange={e => setProcForm(p => ({ ...p, month: Number(e.target.value) }))} /></FormField>
-              <FormField label="Year"><FormInput required type="number" min={2020} value={procForm.year} onChange={e => setProcForm(p => ({ ...p, year: Number(e.target.value) }))} /></FormField>
+              <FormField label="Month">
+                <FormInput type="number" min={1} max={12} {...register("month")} />
+                {errors.month && <p className="mt-1 text-xs text-red-500">{errors.month.message}</p>}
+              </FormField>
+              <FormField label="Year">
+                <FormInput type="number" min={2020} {...register("year")} />
+                {errors.year && <p className="mt-1 text-xs text-red-500">{errors.year.message}</p>}
+              </FormField>
               <FormField label="Status">
-                <select className={sel} value={procForm.status} onChange={e => setProcForm(p => ({ ...p, status: e.target.value as PayrollProcessing["status"] }))}>
-                  {["draft", "processing", "completed", "cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
+                <select className={sel} {...register("status")}>
+                  {processingStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </FormField>
-              <FormField label="Processed At"><FormInput type="date" value={procForm.processed_at} onChange={e => setProcForm(p => ({ ...p, processed_at: e.target.value }))} /></FormField>
+              <FormField label="Processed At">
+                <FormInput type="date" {...register("processed_at")} />
+              </FormField>
             </div>
             <FormField label="Notes">
-              <textarea className="min-h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={procForm.notes} onChange={e => setProcForm(p => ({ ...p, notes: e.target.value }))} maxLength={1000} />
+              <textarea className="min-h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" {...register("notes")} maxLength={1000} />
             </FormField>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setProcModal(false)}>Cancel</Button>

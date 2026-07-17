@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { Outlet } from "react-router-dom";
+import { PageLoader } from "@/app/components/page-loader";
 
 const features = [
   "Employee lifecycle management",
@@ -93,7 +95,9 @@ export function AuthLayout() {
 
       {/* ── Right login panel ── */}
       <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6 py-10">
-        <Outlet />
+        <Suspense fallback={<PageLoader />}>
+          <Outlet />
+        </Suspense>
       </div>
     </div>
   );

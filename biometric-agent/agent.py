@@ -58,6 +58,7 @@ TIMEOUT          = int(os.environ.get("DEVICE_TIMEOUT", "10"))
 
 API_URL          = os.environ.get("API_URL",    "https://your-server.com/api/v1/auth/biometric-agent/push")
 API_SECRET       = os.environ.get("API_SECRET", "your-agent-secret-here")
+DEVICE_TOKEN     = os.environ.get("DEVICE_TOKEN", "")
 SYNC_USERS_URL   = os.environ.get("SYNC_USERS_URL", "")
 
 SCAN_SUBNET      = os.environ.get("SCAN_SUBNET", "")
@@ -102,6 +103,16 @@ def _check_config() -> None:
             "  Set API_SECRET in your .env file to the token from HRMS → Settings → Biometric Agent."
         )
         sys.exit(1)
+
+
+def _agent_headers() -> dict:
+    """Auth headers for every HRMS API call: shared agent secret plus this
+    device's own token (if one has been issued from HRMS → Biometric Devices).
+    Older devices without a token still work off the shared secret alone."""
+    headers = {"Authorization": f"Bearer {API_SECRET}", "Accept": "application/json"}
+    if DEVICE_TOKEN:
+        headers["X-Device-Token"] = DEVICE_TOKEN
+    return headers
 
 
 def _post(url: str, **kwargs) -> requests.Response:
@@ -210,7 +221,7 @@ def discover_devices() -> None:
     resp = _post(
         discover_url,
         json={"devices": found},
-        headers={"Authorization": f"Bearer {API_SECRET}", "Accept": "application/json"},
+        headers=_agent_headers(),
         timeout=30,
     )
 
@@ -257,7 +268,7 @@ def sync_users_to_hrms() -> None:
         resp = _post(
             target_url,
             json={"device_ip": DEVICE_IP, "device_port": DEVICE_PORT, "users": payload},
-            headers={"Authorization": f"Bearer {API_SECRET}", "Accept": "application/json"},
+            headers=_agent_headers(),
             timeout=30,
         )
 
@@ -319,7 +330,7 @@ def main():
         resp = _post(
             API_URL,
             json={"device_ip": DEVICE_IP, "device_port": DEVICE_PORT, "punches": punches},
-            headers={"Authorization": f"Bearer {API_SECRET}", "Accept": "application/json"},
+            headers=_agent_headers(),
             timeout=30,
         )
 

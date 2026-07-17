@@ -1,4 +1,5 @@
 import { apiClient, API_BASE_URL } from "./api-client";
+import { pollBackgroundRun } from "./background-run-service";
 import { useAuthStore } from "@/store/auth-store";
 
 export interface Employee {
@@ -89,13 +90,19 @@ export function getEmployeeDirectReports(employeeId: number) {
 }
 
 export interface EmployeeImportResult { imported: number; skipped: number; errors: string[] }
+interface BackgroundRunHandle { background_run_id: number }
+interface EmployeeExportSummary { file_path: string; row_count: number }
 
 export async function exportEmployeesCsv(): Promise<void> {
+  const { background_run_id } = await apiClient<BackgroundRunHandle>("/employees/export/csv", { method: "POST" });
+  const run = await pollBackgroundRun<EmployeeExportSummary>(background_run_id);
+  if (run.status === "failed") throw new Error(run.error ?? "Export failed");
+
   const token = useAuthStore.getState().token;
-  const res = await fetch(`${API_BASE_URL}/employees/export/csv`, {
+  const res = await fetch(`${API_BASE_URL}/background-runs/${background_run_id}/download`, {
     headers: { Authorization: `Bearer ${token ?? ""}`, Accept: "text/csv" },
   });
-  if (!res.ok) throw new Error("Export failed");
+  if (!res.ok) throw new Error("Export download failed");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -106,17 +113,12 @@ export async function exportEmployeesCsv(): Promise<void> {
 }
 
 export async function importEmployeesCsv(file: File): Promise<EmployeeImportResult> {
-  const token = useAuthStore.getState().token;
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`${API_BASE_URL}/employees/import`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token ?? ""}`, Accept: "application/json" },
-    body: fd,
-  });
-  const json = (await res.json()) as { success?: boolean; data?: EmployeeImportResult; message?: string };
-  if (!res.ok) throw new Error(json.message ?? "Import failed");
-  return json.data ?? { imported: 0, skipped: 0, errors: [] };
+  const { background_run_id } = await apiClient<BackgroundRunHandle>("/employees/import", { method: "POST", body: fd });
+  const run = await pollBackgroundRun<EmployeeImportResult>(background_run_id);
+  if (run.status === "failed") throw new Error(run.error ?? "Import failed");
+  return run.summary ?? { imported: 0, skipped: 0, errors: [] };
 }
 
 export interface Payslip {

@@ -54,6 +54,10 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by(sprintf('%s|%s', (string) $request->ip(), (string) $userId));
         });
 
+        RateLimiter::for('biometric-agent', function (Request $request): Limit {
+            return Limit::perMinute(30)->by((string) $request->ip());
+        });
+
         ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
             $frontendUrl = rtrim((string) config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173')), '/');
             $email = urlencode((string) $notifiable->getEmailForPasswordReset());

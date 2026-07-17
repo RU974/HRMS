@@ -1,4 +1,5 @@
 import { apiClient, API_BASE_URL } from "@/services/api-client";
+import { pollBackgroundRun } from "@/services/background-run-service";
 import { useAuthStore } from "@/store/auth-store";
 
 export type PayrollStatus = "draft" | "reviewed" | "approved" | "pending" | "processed" | "paid" | "cancelled";
@@ -56,6 +57,10 @@ export interface PayrollGenerateResult {
   created: number;
   skipped: number;
   failed: number;
+}
+
+export interface BackgroundRunHandle {
+  background_run_id: number;
 }
 
 export interface PayrollSummaryItem {
@@ -206,7 +211,16 @@ export function markPayrollPaid(id: number) {
 }
 
 export function generatePayroll(payload: PayrollGeneratePayload) {
-  return apiClient<PayrollGenerateResult>("/payroll/generate", { method: "POST", body: JSON.stringify(payload) });
+  return apiClient<BackgroundRunHandle>("/payroll/generate", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function generatePayrollAndWait(payload: PayrollGeneratePayload): Promise<PayrollGenerateResult> {
+  const { background_run_id } = await generatePayroll(payload);
+  const run = await pollBackgroundRun<PayrollGenerateResult>(background_run_id);
+  if (run.status === "failed") {
+    throw new Error(run.error ?? "Payroll generation failed.");
+  }
+  return run.summary ?? { created: 0, skipped: 0, failed: 0 };
 }
 
 export function getPayrollMonthlySummary(month: number, year: number) {

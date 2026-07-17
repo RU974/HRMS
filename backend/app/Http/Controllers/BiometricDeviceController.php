@@ -52,7 +52,29 @@ class BiometricDeviceController extends Controller
         $device->status = 'never_synced';
         $device->save();
 
-        return $this->ok($device, 'Device created successfully.', 201);
+        $agentToken = $device->rotateAgentToken();
+
+        return $this->ok(
+            array_merge($device->toArray(), ['agent_token' => $agentToken]),
+            'Device created successfully. Copy the agent token now — it will not be shown again.',
+            201
+        );
+    }
+
+    public function regenerateAgentToken(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'biometric:edit');
+
+        $query = BiometricDevice::query()->whereKey($id);
+        $this->scopeToCompany($request, $query);
+        $device = $query->firstOrFail();
+
+        $agentToken = $device->rotateAgentToken();
+
+        return $this->ok(
+            array_merge($device->toArray(), ['agent_token' => $agentToken]),
+            'Agent token regenerated. Copy it now and update the on-prem agent config — it will not be shown again.'
+        );
     }
 
     public function update(Request $request, $id)
@@ -313,8 +335,7 @@ class BiometricDeviceController extends Controller
 
     public function agentPush(Request $request)
     {
-        $secret = config('services.biometric_agent.secret');
-        if (empty($secret) || $request->bearerToken() !== $secret) {
+        if (!$this->verifyAgentSecret($request)) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
 
@@ -331,6 +352,10 @@ class BiometricDeviceController extends Controller
         $device = $this->resolveAgentDevice($validated);
         if (!$device) {
             return response()->json(['message' => 'Device not found.'], 422);
+        }
+
+        if (!$this->verifyDeviceToken($request, $device)) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
         }
 
         $matched   = 0;
@@ -372,6 +397,24 @@ class BiometricDeviceController extends Controller
             'records_unmatched' => $unmatched,
         ]);
 
+        \App\Models\AuditLog::create([
+            'user_id'    => null,
+            'method'     => $request->method(),
+            'user_role'  => 'biometric-agent',
+            'action'     => 'push_attendance',
+            'module'     => 'biometric',
+            'company_id' => $device->company_id,
+            'ip_address' => $request->ip(),
+            'old_value'  => null,
+            'new_value'  => [
+                'device_id' => $device->id,
+                'matched'   => $matched,
+                'unmatched' => $unmatched,
+                'punches'   => count($validated['punches']),
+            ],
+            'immutable'  => true,
+        ]);
+
         return response()->json([
             'matched'   => $matched,
             'unmatched' => $unmatched,
@@ -380,8 +423,7 @@ class BiometricDeviceController extends Controller
 
     public function agentSyncUsers(Request $request)
     {
-        $secret = config('services.biometric_agent.secret');
-        if (empty($secret) || $request->bearerToken() !== $secret) {
+        if (!$this->verifyAgentSecret($request)) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
 
@@ -399,6 +441,10 @@ class BiometricDeviceController extends Controller
             return response()->json(['message' => 'Device not found.'], 422);
         }
 
+        if (!$this->verifyDeviceToken($request, $device)) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
         $upserted = 0;
         foreach ($validated['users'] as $u) {
             BiometricDeviceUser::updateOrCreate(
@@ -413,6 +459,22 @@ class BiometricDeviceController extends Controller
             );
             $upserted++;
         }
+
+        \App\Models\AuditLog::create([
+            'user_id'    => null,
+            'method'     => $request->method(),
+            'user_role'  => 'biometric-agent',
+            'action'     => 'sync_users',
+            'module'     => 'biometric',
+            'company_id' => $device->company_id,
+            'ip_address' => $request->ip(),
+            'old_value'  => null,
+            'new_value'  => [
+                'device_id' => $device->id,
+                'upserted'  => $upserted,
+            ],
+            'immutable'  => true,
+        ]);
 
         return response()->json(['upserted' => $upserted]);
     }
@@ -449,8 +511,7 @@ class BiometricDeviceController extends Controller
 
     public function agentDiscoverDevices(Request $request)
     {
-        $secret = config('services.biometric_agent.secret');
-        if (empty($secret) || $request->bearerToken() !== $secret) {
+        if (!$this->verifyAgentSecret($request)) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
 
@@ -499,6 +560,26 @@ class BiometricDeviceController extends Controller
             $created++;
         }
 
+        \App\Models\AuditLog::create([
+            'user_id'    => null,
+            'method'     => $request->method(),
+            'user_role'  => 'biometric-agent',
+            'action'     => 'discover_devices',
+            'module'     => 'biometric',
+            'company_id' => null,
+            'ip_address' => $request->ip(),
+            'old_value'  => null,
+            'new_value'  => [
+                'created'  => $created,
+                'existing' => $existing,
+                'devices'  => array_map(
+                    fn (array $d) => ['ip_address' => $d['ip_address'], 'port' => $d['port']],
+                    $validated['devices']
+                ),
+            ],
+            'immutable'  => true,
+        ]);
+
         return response()->json(['created' => $created, 'existing' => $existing]);
     }
 
@@ -536,7 +617,36 @@ class BiometricDeviceController extends Controller
         ]);
         $device->save();
 
-        return $this->ok($device, 'Device claimed successfully.');
+        $agentToken = $device->rotateAgentToken();
+
+        return $this->ok(
+            array_merge($device->toArray(), ['agent_token' => $agentToken]),
+            'Device claimed successfully. Copy the agent token now — it will not be shown again.'
+        );
+    }
+
+    private function verifyAgentSecret(Request $request): bool
+    {
+        $secret = (string) config('services.biometric_agent.secret');
+        $provided = (string) $request->bearerToken();
+
+        return $secret !== '' && hash_equals($secret, $provided);
+    }
+
+    /**
+     * Devices claimed after the per-device token rollout must present their own
+     * token (X-Device-Token) on top of the shared agent secret, so a leaked
+     * global secret alone can no longer push data for a specific company's
+     * device. Legacy devices with no token yet (created before this rollout)
+     * fall back to the shared secret only, until an admin rotates their token.
+     */
+    private function verifyDeviceToken(Request $request, BiometricDevice $device): bool
+    {
+        if (!$device->hasAgentToken()) {
+            return true;
+        }
+
+        return $device->verifyAgentToken($request->header('X-Device-Token'));
     }
 
     private function resolveAgentDevice(array $data): ?BiometricDevice

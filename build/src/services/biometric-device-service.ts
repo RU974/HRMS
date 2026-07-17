@@ -119,7 +119,7 @@ export const getBiometricDevice = (id: number) =>
   apiClient<BiometricDevice>(`/biometric-devices/${id}`);
 
 export const createBiometricDevice = (payload: CreateBiometricDevicePayload) =>
-  apiClient<BiometricDevice>("/biometric-devices", {
+  apiClient<BiometricDeviceWithToken>("/biometric-devices", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -215,7 +215,17 @@ export const claimDiscoveredDevice = (
     sync_interval_minutes?: number;
   }
 ) =>
-  apiClient<BiometricDevice>(`/biometric-devices/${id}/claim`, {
+  apiClient<BiometricDeviceWithToken>(`/biometric-devices/${id}/claim`, {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+
+// Agent token — shown once by the API right after create/claim/regenerate.
+export interface BiometricDeviceWithToken extends BiometricDevice {
+  agent_token?: string;
+}
+
+export const regenerateAgentToken = (id: number) =>
+  apiClient<BiometricDeviceWithToken>(`/biometric-devices/${id}/regenerate-token`, {
+    method: "POST",
   });

@@ -138,6 +138,7 @@ class CandidateWorkflowService
 
             $employee = Employee::create([
                 'user_id' => $user->id,
+                'company_id' => $companyId,
                 'name' => $candidate->full_name,
                 'email' => $candidate->email,
                 'phone' => $candidate->phone,

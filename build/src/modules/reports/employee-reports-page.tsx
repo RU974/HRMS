@@ -7,8 +7,7 @@ import { getEmployeesPage } from "@/services/employee-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
 import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
 import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
-
-declare global { interface Window { Chart: any; } }
+import { Chart } from "@/lib/chart-setup";
 
 const STATUS_COLORS = ["#22c55e", "#ef4444", "#f59e0b", "#6366f1", "#0ea5e9"];
 
@@ -17,29 +16,22 @@ function EmployeeDonut({ rows }: { rows: { status: string; count: number }[] }) 
   const instanceRef = useRef<any>(null);
 
   useEffect(() => {
-    const init = () => {
-      if (!ref.current || !rows.length) return;
-      if (instanceRef.current) instanceRef.current.destroy();
-      instanceRef.current = new window.Chart(ref.current, {
-        type: "doughnut",
-        data: {
-          labels: rows.map((r) => r.status),
-          datasets: [{ data: rows.map((r) => r.count), backgroundColor: STATUS_COLORS, borderWidth: 2, hoverOffset: 6 }],
+    if (!ref.current || !rows.length) return;
+    if (instanceRef.current) instanceRef.current.destroy();
+    instanceRef.current = new Chart(ref.current, {
+      type: "doughnut",
+      data: {
+        labels: rows.map((r) => r.status),
+        datasets: [{ data: rows.map((r) => r.count), backgroundColor: STATUS_COLORS, borderWidth: 2, hoverOffset: 6 }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: "65%",
+        plugins: {
+          legend: { position: "right", labels: { font: { size: 11 }, usePointStyle: true } },
+          tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.label}: ${ctx.parsed}` } },
         },
-        options: {
-          responsive: true, maintainAspectRatio: false, cutout: "65%",
-          plugins: {
-            legend: { position: "right", labels: { font: { size: 11 }, usePointStyle: true } },
-            tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.label}: ${ctx.parsed}` } },
-          },
-        },
-      });
-    };
-    if (window.Chart) { init(); return; }
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    script.onload = init;
-    document.head.appendChild(script);
+      },
+    });
     return () => { if (instanceRef.current) instanceRef.current.destroy(); };
   }, [rows]);
 

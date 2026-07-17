@@ -8,8 +8,7 @@ import { ReportCrudSection } from "@/modules/reports/report-crud-section";
 import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
 import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
 import { formatMonthYear, monthNames } from "@/modules/reports/report-utils";
-
-declare global { interface Window { Chart: any; } }
+import { Chart } from "@/lib/chart-setup";
 
 const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).filter((y) => y >= 2000);
 
@@ -25,36 +24,29 @@ function AttendanceTrendChart({ trendRows }: { trendRows: { label: string; total
   const instanceRef = useRef<any>(null);
 
   useEffect(() => {
-    const init = () => {
-      if (!ref.current) return;
-      if (instanceRef.current) instanceRef.current.destroy();
-      instanceRef.current = new window.Chart(ref.current, {
-        type: "bar",
-        data: {
-          labels: trendRows.map((r) => r.label),
-          datasets: [{
-            label: "Total records",
-            data: trendRows.map((r) => r.total),
-            backgroundColor: "rgba(99,102,241,0.75)",
-            borderRadius: 6,
-            borderSkipped: false,
-          }],
+    if (!ref.current) return;
+    if (instanceRef.current) instanceRef.current.destroy();
+    instanceRef.current = new Chart(ref.current, {
+      type: "bar",
+      data: {
+        labels: trendRows.map((r) => r.label),
+        datasets: [{
+          label: "Total records",
+          data: trendRows.map((r) => r.total),
+          backgroundColor: "rgba(99,102,241,0.75)",
+          borderRadius: 6,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.parsed.y} records` } } },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 11 } }, grid: { color: "rgba(0,0,0,0.05)" } },
+          x: { ticks: { font: { size: 11 } }, grid: { display: false } },
         },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.parsed.y} records` } } },
-          scales: {
-            y: { beginAtZero: true, ticks: { font: { size: 11 } }, grid: { color: "rgba(0,0,0,0.05)" } },
-            x: { ticks: { font: { size: 11 } }, grid: { display: false } },
-          },
-        },
-      });
-    };
-    if (window.Chart) { init(); return; }
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    script.onload = init;
-    document.head.appendChild(script);
+      },
+    });
     return () => { if (instanceRef.current) instanceRef.current.destroy(); };
   }, [trendRows]);
 

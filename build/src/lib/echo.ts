@@ -1,5 +1,6 @@
 import Echo from 'laravel-echo';
 import Pusher, { type ChannelAuthorizationCallback } from 'pusher-js';
+import { useAuthStore } from '@/store/auth-store';
 (window as any).Pusher = Pusher;
 
 export const echo = new Echo({
@@ -18,7 +19,7 @@ export const echo = new Echo({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('hrms_token') ?? ''}`,
+          Authorization: `Bearer ${useAuthStore.getState().token ?? ''}`,
         },
         body: JSON.stringify({ socket_id: socketId, channel_name: channel.name }),
       })

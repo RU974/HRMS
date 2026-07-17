@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ExportEmployeesJob;
+use App\Jobs\ImportEmployeesJob;
+use App\Models\BackgroundRun;
 use App\Models\Designation;
 use App\Models\Employee;
 use App\Models\Role;
@@ -340,45 +343,35 @@ class EmployeeController extends Controller
         return $this->ok(null, 'Bulk action executed successfully');
     }
 
+    // ──────────────────────────────────────────────────────────────
+    //  POST /api/employees/export          (employees:export)
+    //  Queues the CSV export (ExportEmployeesJob) so exporting a large
+    //  headcount doesn't block the request. Returns a background_run
+    //  id the frontend polls; the run's summary carries the download path.
+    // ──────────────────────────────────────────────────────────────
     public function export(Request $request)
     {
         $this->authorizePermission($request, 'employees:export');
 
         $rows = Employee::query()
-            ->with(['department', 'designationRef'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
             ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id));
 
         $this->scopeToCompany($request, $rows);
         $this->applyManagedEmployeeScope($request, $rows);
 
-        $rows = $rows->orderBy('created_at', 'desc')->get();
+        $employeeIds = $rows->pluck('id')->all();
 
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="employees.csv"',
-        ];
+        $run = BackgroundRun::create([
+            'type'         => BackgroundRun::TYPE_EMPLOYEE_EXPORT,
+            'status'       => BackgroundRun::STATUS_QUEUED,
+            'company_id'   => $request->user()?->company_id,
+            'requested_by' => $request->user()?->id,
+        ]);
 
-        $callback = function () use ($rows): void {
-            $out = fopen('php://output', 'w');
-            fputcsv($out, ['ID', 'Name', 'Email', 'Phone', 'Department', 'Designation', 'Status', 'Salary', 'Created At']);
-            foreach ($rows as $row) {
-                fputcsv($out, [
-                    $row->id,
-                    $row->name,
-                    $row->email,
-                    $row->phone,
-                    $row->department?->name,
-                    $row->designationRef?->name ?? $row->designation,
-                    $row->status,
-                    $row->salary,
-                    $row->created_at,
-                ]);
-            }
-            fclose($out);
-        };
+        ExportEmployeesJob::dispatch($run->id, $employeeIds);
 
-        return response()->stream($callback, 200, $headers);
+        return $this->ok(['background_run_id' => $run->id], 'Employee export has been queued.', 202);
     }
 
 
@@ -434,103 +427,31 @@ class EmployeeController extends Controller
         }
     }
 
+    // ──────────────────────────────────────────────────────────────
+    //  POST /api/employees/import          (employees:create)
+    //  Stores the uploaded CSV and queues ImportEmployeesJob so a
+    //  large file doesn't block the request. Returns a background_run
+    //  id the frontend polls for progress.
+    // ──────────────────────────────────────────────────────────────
     public function import(Request $request)
     {
         $this->authorizePermission($request, 'employees:create');
 
         $request->validate(['file' => 'required|file|mimes:csv,txt|max:2048']);
 
-        $file    = $request->file('file');
-        $handle  = fopen($file->getRealPath(), 'r');
-        $headers = fgetcsv($handle); // skip header row
+        $companyId = $request->user()?->company_id;
+        $storedPath = $request->file('file')->store('imports');
 
-        if (!$headers) {
-            return $this->fail('CSV file is empty or has no header row.');
-        }
+        $run = BackgroundRun::create([
+            'type'         => BackgroundRun::TYPE_EMPLOYEE_IMPORT,
+            'status'       => BackgroundRun::STATUS_QUEUED,
+            'company_id'   => $companyId,
+            'requested_by' => $request->user()?->id,
+        ]);
 
-        $companyId      = $request->user()?->company_id;
-        $licenseService = app(\App\Services\LicenseService::class);
+        ImportEmployeesJob::dispatch($run->id, $storedPath, $companyId);
 
-        // Pre-flight: reject the whole import if the license blocks new adds
-        // (expired or suspended). Per-row seat checks run inside the loop.
-        try {
-            $licenseService->assertCanAddEmployee($companyId);
-        } catch (\RuntimeException $e) {
-            fclose($handle);
-            return response()->json(['message' => $e->getMessage()], 403);
-        }
-
-        $imported     = 0;
-        $skipped      = 0;
-        $errors       = [];
-        $defaultDeptId = \App\Models\Department::query()->value('id');
-
-        while (($row = fgetcsv($handle)) !== false) {
-            $data = array_combine(array_map('strtolower', array_map('trim', $headers)), array_map('trim', $row));
-
-            $email = $data['email'] ?? null;
-            if (!$email || !\Illuminate\Support\Facades\Validator::make(['email' => $email], ['email' => 'email'])->passes()) {
-                $skipped++;
-                $errors[] = "Row skipped — invalid or missing email: " . ($email ?? '(empty)');
-                continue;
-            }
-
-            if (Employee::where('email', $email)->exists()) {
-                $skipped++;
-                $errors[] = "Row skipped — email already exists: {$email}";
-                continue;
-            }
-
-            $deptName = $data['department'] ?? null;
-            $deptId   = $defaultDeptId;
-            if ($deptName) {
-                $dept = \App\Models\Department::query()
-                    ->where('name', 'like', $deptName)
-                    ->value('id');
-                if ($dept) $deptId = $dept;
-            }
-
-            if (!$deptId) {
-                $skipped++;
-                $errors[] = "Row skipped — no department found for: {$email}";
-                continue;
-            }
-
-            try {
-                $licenseService->assertCanAddEmployee($companyId);
-            } catch (\RuntimeException $e) {
-                $skipped++;
-                $errors[] = "Row skipped — {$e->getMessage()}";
-                continue;
-            }
-
-            $name = $data['name'] ?? (trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? '')) ?: null);
-
-            Employee::create([
-                'name'            => $name ?? $email,
-                'first_name'      => $data['first_name'] ?? null,
-                'last_name'       => $data['last_name'] ?? null,
-                'email'           => $email,
-                'phone'           => $data['phone'] ?? null,
-                'department_id'   => $deptId,
-                'designation'     => $data['designation'] ?? null,
-                'joining_date'    => !empty($data['joining_date']) ? $data['joining_date'] : null,
-                'employment_type' => $data['employment_type'] ?? 'full_time',
-                'basic_salary'    => is_numeric($data['basic_salary'] ?? null) ? $data['basic_salary'] : 0,
-                'status'          => 'active',
-                'salary'          => is_numeric($data['basic_salary'] ?? null) ? $data['basic_salary'] : 0,
-            ]);
-
-            $imported++;
-        }
-
-        fclose($handle);
-
-        return $this->ok([
-            'imported' => $imported,
-            'skipped'  => $skipped,
-            'errors'   => $errors,
-        ], "{$imported} employee(s) imported successfully.");
+        return $this->ok(['background_run_id' => $run->id], 'Employee import has been queued.', 202);
     }
 
     private function assignRoleToUser(User $user, ?string $roleName): void

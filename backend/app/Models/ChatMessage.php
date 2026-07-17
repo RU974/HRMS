@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasCompany;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ChatMessage extends Model
 {
+    use HasCompany;
+
     protected $fillable = [
         'company_id',
         'conversation_id',
@@ -38,11 +41,6 @@ class ChatMessage extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(ChatConversation::class, 'conversation_id');
-    }
-
-    public function company(): BelongsTo
-    {
-        return $this->belongsTo(Company::class);
     }
 
     public function hasAttachment(): bool

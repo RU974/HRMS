@@ -4,12 +4,15 @@ import { RouterProvider } from "react-router-dom";
 import "./index.css";
 import { AppProviders } from "./app/providers/app-providers";
 import { appRouter } from "./app/routes/app-routes";
+import { ErrorBoundary } from "./app/error/error-boundary";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppProviders>
-      <RouterProvider router={appRouter} />
-    </AppProviders>
+    <ErrorBoundary>
+      <AppProviders>
+        <RouterProvider router={appRouter} />
+      </AppProviders>
+    </ErrorBoundary>
   </StrictMode>
 );
 

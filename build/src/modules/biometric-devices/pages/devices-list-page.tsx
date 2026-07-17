@@ -16,12 +16,14 @@ import {
   deleteBiometricDevice,
   listBiometricDevices,
   listUnconfiguredDevices,
+  regenerateAgentToken,
   testBiometricDeviceConnection,
   triggerBiometricDeviceSync,
   updateBiometricDevice,
 } from "@/services/biometric-device-service";
 import { DeviceStatusCard } from "../components/device-status-card";
 import { DeviceFormModal } from "../components/device-form-modal";
+import { TokenRevealModal } from "../components/token-reveal-modal";
 
 const inputClass = "h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
 const TIMEZONES  = ["Asia/Karachi", "UTC", "Asia/Dubai", "Asia/Riyadh", "Asia/Kolkata"];
@@ -29,7 +31,7 @@ const TIMEZONES  = ["Asia/Karachi", "UTC", "Asia/Dubai", "Asia/Riyadh", "Asia/Ko
 const SETUP_STEPS = [
   { n: 1, title: "Add this device in HRMS",          desc: 'Use "Scan for Devices" below (recommended) or click "Add Device" manually and enter IP, port, timezone.' },
   { n: 2, title: "Install the local agent on a LAN PC", desc: "Copy agent.py to any Windows/Linux machine on the same network as the biometric device. Run: pip install pyzk requests" },
-  { n: 3, title: "Configure agent .env",              desc: "Set DEVICE_IP, DEVICE_PORT, API_URL (your HRMS server URL), and API_SECRET in the .env file next to agent.py." },
+  { n: 3, title: "Configure agent .env",              desc: "Set DEVICE_IP, DEVICE_PORT, API_URL (your HRMS server URL), API_SECRET, and DEVICE_TOKEN (shown once after adding this device — see \"Regenerate Token\" if you missed it) in the .env file next to agent.py." },
   { n: 4, title: "Sync enrolled users from device",   desc: "Run:  python agent.py --sync-users  — imports fingerprint/face users from the device into HRMS so you can map them to employees." },
   { n: 5, title: "Map employees → device users",      desc: 'Open Mapping for this device → click "Fetch from Device" → assign each device user to an HRMS employee → Save.' },
   { n: 6, title: "Schedule agent for attendance",     desc: "Use Windows Task Scheduler or cron to run  python agent.py  every 15 minutes. Attendance punches will sync automatically." },
@@ -56,7 +58,7 @@ function SetupChecklist() {
 interface ClaimModalProps {
   device: DiscoveredDevice;
   onClose: () => void;
-  onClaimed: () => void;
+  onClaimed: (token?: string, deviceName?: string) => void;
 }
 
 function ClaimModal({ device, onClose, onClaimed }: ClaimModalProps) {
@@ -67,7 +69,7 @@ function ClaimModal({ device, onClose, onClaimed }: ClaimModalProps) {
 
   const claimMutation = useMutation({
     mutationFn: () => claimDiscoveredDevice(device.id, { name, timezone, comm_key: commKey || "0", sync_interval_minutes: interval }),
-    onSuccess: () => { toast.success("Device added", `${name} has been added to your account.`); onClaimed(); },
+    onSuccess: (result) => { toast.success("Device added", `${name} has been added to your account.`); onClaimed(result.agent_token, result.name); },
     onError: (e: Error) => toast.error("Claim failed", e.message),
   });
 
@@ -128,6 +130,7 @@ export function DevicesListPage() {
   const [guideOpen,    setGuideOpen]    = useState(false);
   const [showDiscover, setShowDiscover] = useState(false);
   const [claimTarget,  setClaimTarget]  = useState<DiscoveredDevice | null>(null);
+  const [revealToken,  setRevealToken]  = useState<{ deviceName: string; token: string } | null>(null);
 
   const query = useQuery({ queryKey: ["biometric-devices"], queryFn: listBiometricDevices });
 
@@ -139,12 +142,22 @@ export function DevicesListPage() {
 
   const createMutation = useMutation({
     mutationFn: createBiometricDevice,
-    onSuccess: () => {
+    onSuccess: (device) => {
       queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
       setModalOpen(false);
       toast.success("Device added", "Biometric device added successfully.");
+      if (device.agent_token) setRevealToken({ deviceName: device.name, token: device.agent_token });
     },
     onError: (e: Error) => { toast.error("Save failed", e.message); setError(e.message); },
+  });
+
+  const regenerateTokenMutation = useMutation({
+    mutationFn: regenerateAgentToken,
+    onSuccess: (device) => {
+      queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
+      if (device.agent_token) setRevealToken({ deviceName: device.name, token: device.agent_token });
+    },
+    onError: (e: Error) => toast.error("Regenerate failed", e.message),
   });
 
   const updateMutation = useMutation({
@@ -180,10 +193,11 @@ export function DevicesListPage() {
     } finally { setTestingId(null); }
   }
 
-  function handleClaimed() {
+  function handleClaimed(token?: string, deviceName?: string) {
     setClaimTarget(null);
     queryClient.invalidateQueries({ queryKey: ["biometric-devices"] });
     queryClient.invalidateQueries({ queryKey: ["biometric-devices-unconfigured"] });
+    if (token) setRevealToken({ deviceName: deviceName ?? "device", token });
   }
 
   const devices      = query.data ?? [];
@@ -341,6 +355,15 @@ export function DevicesListPage() {
                             <Button variant="outline">Mapping</Button>
                           </Link>
                         )}
+                        {canEdit && device.connection_type === "tcp" && (
+                          <Button
+                            variant="outline"
+                            onClick={() => { if (confirm(`Regenerate the agent token for "${device.name}"? The old token will stop working immediately.`)) regenerateTokenMutation.mutate(device.id); }}
+                            disabled={regenerateTokenMutation.isPending}
+                          >
+                            Regenerate Token
+                          </Button>
+                        )}
                         {canEdit && (
                           <Button variant="outline" onClick={() => { setEditing(device); setModalOpen(true); }}>Edit</Button>
                         )}
@@ -370,6 +393,14 @@ export function DevicesListPage() {
 
       {claimTarget && (
         <ClaimModal device={claimTarget} onClose={() => setClaimTarget(null)} onClaimed={handleClaimed} />
+      )}
+
+      {revealToken && (
+        <TokenRevealModal
+          deviceName={revealToken.deviceName}
+          token={revealToken.token}
+          onClose={() => setRevealToken(null)}
+        />
       )}
     </div>
   );

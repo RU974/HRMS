@@ -1,13 +1,7 @@
 import { isSuperAdminRole } from "@/config/rbac";
+import type { AuthUser } from "@/store/auth-store";
 
 type PermissionLike = string | { key?: string | null; name?: string | null; module?: string | null; action?: string | null };
-type RoleLike = { permissions?: PermissionLike[] | null };
-type AuthLike = {
-  permissions?: PermissionLike[] | null;
-  roles?: RoleLike[] | null;
-  rolesRelation?: RoleLike[] | null;
-  roles_relation?: RoleLike[] | null;
-};
 
 export function normalizePermissionKey(permission: PermissionLike): string {
   if (typeof permission === "string") {
@@ -18,7 +12,7 @@ export function normalizePermissionKey(permission: PermissionLike): string {
   return key.trim().toLowerCase().replaceAll(":", ".");
 }
 
-export function collectPermissionKeys(user?: AuthLike | null): string[] {
+export function collectPermissionKeys(user?: AuthUser | null): string[] {
   if (!user) {
     return [];
   }
@@ -32,25 +26,22 @@ export function collectPermissionKeys(user?: AuthLike | null): string[] {
   ].filter(Boolean);
 }
 
-export function hasPermission(user: AuthLike | null | undefined, permission: string): boolean {
+export function hasPermission(user: AuthUser | null | undefined, permission: string): boolean {
   // Super admin bypass
-  try {
-    if (isSuperAdminRole(user as any)) {
-      return true;
-    }
-  } catch (e) {
-    // ignore
+  if (isSuperAdminRole(user)) {
+    return true;
   }
+
   const normalized = normalizePermissionKey(permission);
   const permissions = collectPermissionKeys(user);
 
   return permissions.includes("*") || permissions.includes("*.*") || permissions.includes(normalized);
 }
 
-export function hasAnyPermission(user: AuthLike | null | undefined, permissions: string[]): boolean {
+export function hasAnyPermission(user: AuthUser | null | undefined, permissions: string[]): boolean {
   return permissions.some((permission) => hasPermission(user, permission));
 }
 
-export function hasAllPermissions(user: AuthLike | null | undefined, permissions: string[]): boolean {
+export function hasAllPermissions(user: AuthUser | null | undefined, permissions: string[]): boolean {
   return permissions.every((permission) => hasPermission(user, permission));
 }

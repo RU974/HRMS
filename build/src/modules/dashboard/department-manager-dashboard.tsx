@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { useChartJs } from "./use-chart-js";
+import { Chart } from "@/lib/chart-setup";
 
 function TeamAttendanceTrendChart({ points }: { points: Array<{ label: string; rate: number }> }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -20,7 +21,7 @@ function TeamAttendanceTrendChart({ points }: { points: Array<{ label: string; r
   useChartJs(() => {
     if (!ref.current || !points.length) return;
     if (inst.current) inst.current.destroy();
-    inst.current = new window.Chart(ref.current, {
+    inst.current = new Chart(ref.current, {
       type: "line",
       data: {
         labels: points.map(p => p.label),

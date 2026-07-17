@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
@@ -16,6 +19,20 @@ import {
 import { useAuthStore } from "@/store/auth-store";
 import { Badge, fmt, sel } from "./payroll-shared";
 
+const incrementSchema = z.object({
+  employee_id: z.coerce.number().min(1, "Employee is required"),
+  effective_date: z.string().min(1, "Effective date is required"),
+  old_salary: z.coerce.number().gt(0, "Old salary must be greater than 0"),
+  new_salary: z.coerce.number().gt(0, "New salary must be greater than 0"),
+  reason: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+type IncrementFormInput = z.input<typeof incrementSchema>;
+type IncrementFormValues = z.output<typeof incrementSchema>;
+
+const emptyIncForm: IncrementFormInput = { employee_id: 0, effective_date: "", old_salary: 0, new_salary: 0, reason: "", notes: "" };
+
 export function SalaryIncrementsTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
@@ -28,16 +45,30 @@ export function SalaryIncrementsTab() {
 
   const [incModal, setIncModal] = useState(false);
   const [incEdit,  setIncEdit]  = useState<SalaryIncrement | null>(null);
-  const [incForm,  setIncForm]  = useState({ employee_id: 0, effective_date: "", old_salary: 0, new_salary: 0, reason: "", notes: "" });
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    formState: { errors },
+  } = useForm<IncrementFormInput, any, IncrementFormValues>({
+    resolver: zodResolver(incrementSchema),
+    defaultValues: emptyIncForm,
+  });
+
+  const [oldSalaryRaw, newSalaryRaw] = watch(["old_salary", "new_salary"]);
+  const oldSalary = Number(oldSalaryRaw);
+  const newSalary = Number(newSalaryRaw);
 
   const incCreate = useMutation({
-    mutationFn: () => createSalaryIncrement({ ...incForm, reason: incForm.reason || null, notes: incForm.notes || null }),
+    mutationFn: (values: IncrementFormValues) => createSalaryIncrement({ ...values, reason: values.reason || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "increments"] }); toast.success("Increment saved", "Salary increment recorded successfully."); setIncModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const incUpdate = useMutation({
-    mutationFn: () => updateSalaryIncrement(incEdit!.id, { effective_date: incForm.effective_date, old_salary: incForm.old_salary, new_salary: incForm.new_salary, reason: incForm.reason || null, notes: incForm.notes || null }),
+    mutationFn: (values: IncrementFormValues) => updateSalaryIncrement(incEdit!.id, { effective_date: values.effective_date, old_salary: values.old_salary, new_salary: values.new_salary, reason: values.reason || null, notes: values.notes || null }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "increments"] }); toast.success("Increment updated", "Salary increment updated."); setIncModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -48,11 +79,15 @@ export function SalaryIncrementsTab() {
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
+  function onSubmit(values: IncrementFormValues) {
+    (incEdit ? incUpdate : incCreate).mutate(values);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
         {canManage && (
-          <Button className="text-xs" onClick={() => { setIncEdit(null); setIncForm({ employee_id: 0, effective_date: "", old_salary: 0, new_salary: 0, reason: "", notes: "" }); setIncModal(true); }}>
+          <Button className="text-xs" onClick={() => { setIncEdit(null); reset(emptyIncForm); setIncModal(true); }}>
             + Record Increment
           </Button>
         )}
@@ -87,7 +122,7 @@ export function SalaryIncrementsTab() {
                   <td className="p-3" data-label="Actions">
                     <div className="flex justify-end gap-1.5">
                       {canManage && (
-                        <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setIncEdit(item); setIncForm({ employee_id: item.employee_id, effective_date: String(item.effective_date).slice(0, 10), old_salary: item.old_salary, new_salary: item.new_salary, reason: item.reason ?? "", notes: item.notes ?? "" }); setIncModal(true); }}>
+                        <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setIncEdit(item); reset({ employee_id: item.employee_id, effective_date: String(item.effective_date).slice(0, 10), old_salary: item.old_salary, new_salary: item.new_salary, reason: item.reason ?? "", notes: item.notes ?? "" }); setIncModal(true); }}>
                           Edit
                         </Button>
                       )}
@@ -110,29 +145,39 @@ export function SalaryIncrementsTab() {
 
       {incModal && (
         <Modal title={`${incEdit ? "Edit" : "Record"} Salary Increment`} onClose={() => setIncModal(false)}>
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (incEdit ? incUpdate : incCreate).mutateAsync(); }}>
+          <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <FormField label="Employee">
-              <select required disabled={!!incEdit} className={sel} value={incForm.employee_id} onChange={e => setIncForm(p => ({ ...p, employee_id: Number(e.target.value) }))}>
+              <select disabled={!!incEdit} className={sel} {...register("employee_id")}>
                 <option value={0}>Select employee</option>
                 {employees.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
+              {errors.employee_id && <p className="mt-1 text-xs text-red-500">{errors.employee_id.message}</p>}
             </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Effective Date"><FormInput required type="date" value={incForm.effective_date} onChange={e => setIncForm(p => ({ ...p, effective_date: e.target.value }))} /></FormField>
-              <FormField label="Old Salary"><FormInput required type="number" min={0} step="0.01" value={incForm.old_salary} onChange={e => setIncForm(p => ({ ...p, old_salary: Number(e.target.value) }))} /></FormField>
-              <FormField label="New Salary"><FormInput required type="number" min={0} step="0.01" value={incForm.new_salary} onChange={e => setIncForm(p => ({ ...p, new_salary: Number(e.target.value) }))} /></FormField>
+              <FormField label="Effective Date">
+                <FormInput type="date" {...register("effective_date")} />
+                {errors.effective_date && <p className="mt-1 text-xs text-red-500">{errors.effective_date.message}</p>}
+              </FormField>
+              <FormField label="Old Salary">
+                <FormInput type="number" min={0} step="0.01" {...register("old_salary")} />
+                {errors.old_salary && <p className="mt-1 text-xs text-red-500">{errors.old_salary.message}</p>}
+              </FormField>
+              <FormField label="New Salary">
+                <FormInput type="number" min={0} step="0.01" {...register("new_salary")} />
+                {errors.new_salary && <p className="mt-1 text-xs text-red-500">{errors.new_salary.message}</p>}
+              </FormField>
               <FormField label="Reason">
-                <select className={sel} value={incForm.reason} onChange={e => setIncForm(p => ({ ...p, reason: e.target.value }))}>
+                <select className={sel} {...register("reason")}>
                   <option value="">Select reason</option>
                   {["Annual review", "Promotion", "Market correction", "Performance-based", "Probation completion", "Other"].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </FormField>
             </div>
-            {incForm.old_salary > 0 && incForm.new_salary > 0 && (
-              <p className="text-sm text-[var(--muted)]">Change: <strong className={incForm.new_salary >= incForm.old_salary ? "text-emerald-600" : "text-red-600"}>{incForm.new_salary >= incForm.old_salary ? "+" : ""}{(((incForm.new_salary - incForm.old_salary) / incForm.old_salary) * 100).toFixed(2)}%</strong></p>
+            {oldSalary > 0 && newSalary > 0 && (
+              <p className="text-sm text-[var(--muted)]">Change: <strong className={newSalary >= oldSalary ? "text-emerald-600" : "text-red-600"}>{newSalary >= oldSalary ? "+" : ""}{(((newSalary - oldSalary) / oldSalary) * 100).toFixed(2)}%</strong></p>
             )}
             <FormField label="Notes">
-              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={incForm.notes} onChange={e => setIncForm(p => ({ ...p, notes: e.target.value }))} maxLength={1000} />
+              <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" {...register("notes")} maxLength={1000} />
             </FormField>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIncModal(false)}>Cancel</Button>

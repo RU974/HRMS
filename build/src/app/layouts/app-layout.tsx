@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { TopNavbar } from "@/components/navbar/top-navbar";
 import { Breadcrumbs } from "@/components/breadcrumbs/breadcrumbs";
-import { ErrorBoundary } from "@/app/error/error-boundary";
+import { PageLoader } from "@/app/components/page-loader";
 import { useLayoutStore } from "@/store/layout-store";
 
 export function AppLayout() {
@@ -49,20 +49,19 @@ export function AppLayout() {
         <main className="mx-auto max-w-[1600px] p-4 md:p-8">
           <Breadcrumbs />
 
-          {/* Error boundary wraps every page */}
-          <ErrorBoundary>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={typeof window !== "undefined" ? window.location.pathname : "page"}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
-              >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={typeof window !== "undefined" ? window.location.pathname : "page"}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              <Suspense fallback={<PageLoader />}>
                 <Outlet />
-              </motion.div>
-            </AnimatePresence>
-          </ErrorBoundary>
+              </Suspense>
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 

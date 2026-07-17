@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
@@ -12,13 +15,42 @@ import {
   createPayroll,
   deletePayroll,
   downloadBankExport,
-  generatePayroll,
+  generatePayrollAndWait,
   listPayroll,
   markPayrollPaid,
   updatePayroll,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
 import { Badge, SummaryCard, fmt, payrollBadge, sel } from "./payroll-shared";
+
+const payrollRecordStatuses = ["draft", "reviewed", "approved", "pending", "processed", "paid", "cancelled"] as const;
+
+const payrollRecordSchema = z.object({
+  employee_id: z.coerce.number().min(1, "Employee is required"),
+  month: z.coerce.number().min(1, "Month must be between 1 and 12").max(12, "Month must be between 1 and 12"),
+  year: z.coerce.number().min(2020, "Enter a valid year"),
+  base_salary: z.coerce.number().min(0, "Base salary is required"),
+  bonus: z.coerce.number().min(0),
+  deductions: z.coerce.number().min(0),
+  tax: z.coerce.number().min(0),
+  payment_date: z.string(),
+  status: z.enum(payrollRecordStatuses),
+});
+
+type PayrollRecordFormInput = z.input<typeof payrollRecordSchema>;
+type PayrollRecordFormValues = z.output<typeof payrollRecordSchema>;
+
+const emptyPayrollForm: PayrollRecordFormInput = {
+  employee_id: 0,
+  month: new Date().getMonth() + 1,
+  year: new Date().getFullYear(),
+  base_salary: 0,
+  bonus: 0,
+  deductions: 0,
+  tax: 0,
+  payment_date: "",
+  status: "draft",
+};
 
 export function PayrollRecordsTab() {
   const queryClient = useQueryClient();
@@ -35,10 +67,10 @@ export function PayrollRecordsTab() {
   const [genMonth, setGenMonth] = useState(new Date().getMonth() + 1);
   const [genYear,  setGenYear]  = useState(new Date().getFullYear());
   const genMut = useMutation({
-    mutationFn: () => generatePayroll({ month: genMonth, year: genYear }),
-    onSuccess: async () => {
+    mutationFn: () => generatePayrollAndWait({ month: genMonth, year: genYear }),
+    onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] });
-      toast.success("Payroll generated", "Payroll records have been generated successfully.");
+      toast.success("Payroll generated", `${result.created} created, ${result.skipped} skipped, ${result.failed} failed.`);
       setGenModal(false);
     },
     onError: (e: Error) => toast.error("Generation failed", e.message),
@@ -59,26 +91,29 @@ export function PayrollRecordsTab() {
   const [payrollModal,  setPayrollModal]  = useState(false);
   const [payrollEdit,   setPayrollEdit]   = useState<PayrollRecord | null>(null);
   const [payrollDetail, setPayrollDetail] = useState<PayrollRecord | null>(null);
-  const [payrollForm,   setPayrollForm]   = useState({
-    employee_id: 0,
-    month:        new Date().getMonth() + 1,
-    year:         new Date().getFullYear(),
-    base_salary:  0,
-    bonus:        0,
-    deductions:   0,
-    tax:          0,
-    payment_date: "",
-    status:       "draft" as PayrollRecord["status"],
+
+  const {
+    register: registerPayroll,
+    handleSubmit: handlePayrollSubmit,
+    watch: watchPayroll,
+    reset: resetPayroll,
+    formState: { errors: payrollErrors },
+  } = useForm<PayrollRecordFormInput, any, PayrollRecordFormValues>({
+    resolver: zodResolver(payrollRecordSchema),
+    defaultValues: emptyPayrollForm,
   });
 
+  const [watchedBase, watchedBonus, watchedDeductions, watchedTax] = watchPayroll(["base_salary", "bonus", "deductions", "tax"]);
+  const previewNet = Math.max(0, Number(watchedBase) + Number(watchedBonus) - Number(watchedDeductions) - Number(watchedTax));
+
   const payrollCreate = useMutation({
-    mutationFn: () => createPayroll({ ...payrollForm, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax) }),
+    mutationFn: (values: PayrollRecordFormValues) => createPayroll({ ...values, net_salary: Math.max(0, values.base_salary + values.bonus - values.deductions - values.tax) }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll created", "Payroll record created successfully."); setPayrollModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const payrollUpdate = useMutation({
-    mutationFn: () => updatePayroll(payrollEdit!.id, { bonus: payrollForm.bonus, deductions: payrollForm.deductions, tax: payrollForm.tax, net_salary: Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax), payment_date: payrollForm.payment_date, status: payrollForm.status }),
+    mutationFn: (values: PayrollRecordFormValues) => updatePayroll(payrollEdit!.id, { bonus: values.bonus, deductions: values.deductions, tax: values.tax, net_salary: Math.max(0, values.base_salary + values.bonus - values.deductions - values.tax), payment_date: values.payment_date, status: values.status }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll updated", "Payroll record updated successfully."); setPayrollModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -111,7 +146,7 @@ export function PayrollRecordsTab() {
             <Button variant="outline" className="text-xs" onClick={() => void handleExport()} disabled={exporting}>{exporting ? "Exporting…" : "⬇ Bank CSV Export"}</Button>
           </div>
           <Button variant="outline" className="text-xs" onClick={() => setGenModal(true)}>⚡ Generate Payroll</Button>
-          <Button className="ml-auto text-xs" onClick={() => { setPayrollEdit(null); setPayrollForm({ employee_id: 0, month: new Date().getMonth() + 1, year: new Date().getFullYear(), base_salary: 0, bonus: 0, deductions: 0, tax: 0, payment_date: "", status: "draft" }); setPayrollModal(true); }}>+ Manual Entry</Button>
+          <Button className="ml-auto text-xs" onClick={() => { setPayrollEdit(null); resetPayroll(emptyPayrollForm); setPayrollModal(true); }}>+ Manual Entry</Button>
         </div>
       )}
 
@@ -152,7 +187,7 @@ export function PayrollRecordsTab() {
                       <Button variant="outline" className="text-xs px-2 py-1 border-emerald-200 text-emerald-700" onClick={() => void payrollPaid.mutateAsync(item.id)}>✓ Mark Paid</Button>
                     )}
                     {canManage && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayrollEdit(item); setPayrollForm({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date?.slice(0, 10) ?? "", status: item.status }); setPayrollModal(true); }}>Edit</Button>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayrollEdit(item); resetPayroll({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date?.slice(0, 10) ?? "", status: item.status }); setPayrollModal(true); }}>Edit</Button>
                     )}
                     {canManage && (
                       <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200" onClick={() => { if (window.confirm("Delete payroll?")) void payrollDelete.mutateAsync(item.id); }}>Delete</Button>
@@ -211,29 +246,47 @@ export function PayrollRecordsTab() {
       {/* Payroll record form modal */}
       {payrollModal && (
         <Modal title={`${payrollEdit ? "Edit" : "New"} Payroll Record`} onClose={() => setPayrollModal(false)}>
-          <form className="space-y-4" onSubmit={e => { e.preventDefault(); void (payrollEdit ? payrollUpdate : payrollCreate).mutateAsync(); }}>
+          <form className="space-y-4" onSubmit={handlePayrollSubmit(values => (payrollEdit ? payrollUpdate : payrollCreate).mutate(values))}>
             <FormField label="Employee">
-              <select required disabled={!!payrollEdit} className={sel} value={payrollForm.employee_id} onChange={e => setPayrollForm(p => ({ ...p, employee_id: Number(e.target.value) }))}>
+              <select disabled={!!payrollEdit} className={sel} {...registerPayroll("employee_id")}>
                 <option value={0}>Select employee</option>
                 {employees.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select>
+              {payrollErrors.employee_id && <p className="mt-1 text-xs text-red-500">{payrollErrors.employee_id.message}</p>}
             </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="Month"><FormInput disabled={!!payrollEdit} type="number" min={1} max={12} value={payrollForm.month} onChange={e => setPayrollForm(p => ({ ...p, month: Number(e.target.value) }))} /></FormField>
-              <FormField label="Year"><FormInput disabled={!!payrollEdit} type="number" min={2020} value={payrollForm.year} onChange={e => setPayrollForm(p => ({ ...p, year: Number(e.target.value) }))} /></FormField>
-              <FormField label="Base Salary"><FormInput disabled={!!payrollEdit} type="number" min={0} step="0.01" value={payrollForm.base_salary} onChange={e => setPayrollForm(p => ({ ...p, base_salary: Number(e.target.value) }))} /></FormField>
-              <FormField label="Bonus"><FormInput type="number" min={0} step="0.01" value={payrollForm.bonus} onChange={e => setPayrollForm(p => ({ ...p, bonus: Number(e.target.value) }))} /></FormField>
-              <FormField label="Deductions"><FormInput type="number" min={0} step="0.01" value={payrollForm.deductions} onChange={e => setPayrollForm(p => ({ ...p, deductions: Number(e.target.value) }))} /></FormField>
-              <FormField label="Tax"><FormInput type="number" min={0} step="0.01" value={payrollForm.tax} onChange={e => setPayrollForm(p => ({ ...p, tax: Number(e.target.value) }))} /></FormField>
-              <FormField label="Payment Date"><FormInput type="date" value={payrollForm.payment_date} onChange={e => setPayrollForm(p => ({ ...p, payment_date: e.target.value }))} /></FormField>
+              <FormField label="Month">
+                <FormInput disabled={!!payrollEdit} type="number" min={1} max={12} {...registerPayroll("month")} />
+                {payrollErrors.month && <p className="mt-1 text-xs text-red-500">{payrollErrors.month.message}</p>}
+              </FormField>
+              <FormField label="Year">
+                <FormInput disabled={!!payrollEdit} type="number" min={2020} {...registerPayroll("year")} />
+                {payrollErrors.year && <p className="mt-1 text-xs text-red-500">{payrollErrors.year.message}</p>}
+              </FormField>
+              <FormField label="Base Salary">
+                <FormInput disabled={!!payrollEdit} type="number" min={0} step="0.01" {...registerPayroll("base_salary")} />
+                {payrollErrors.base_salary && <p className="mt-1 text-xs text-red-500">{payrollErrors.base_salary.message}</p>}
+              </FormField>
+              <FormField label="Bonus">
+                <FormInput type="number" min={0} step="0.01" {...registerPayroll("bonus")} />
+              </FormField>
+              <FormField label="Deductions">
+                <FormInput type="number" min={0} step="0.01" {...registerPayroll("deductions")} />
+              </FormField>
+              <FormField label="Tax">
+                <FormInput type="number" min={0} step="0.01" {...registerPayroll("tax")} />
+              </FormField>
+              <FormField label="Payment Date">
+                <FormInput type="date" {...registerPayroll("payment_date")} />
+              </FormField>
               <FormField label="Status">
-                <select className={sel} value={payrollForm.status} onChange={e => setPayrollForm(p => ({ ...p, status: e.target.value as PayrollRecord["status"] }))}>
-                  {["draft", "reviewed", "approved", "pending", "processed", "paid", "cancelled"].map(s => <option key={s} value={s}>{s}</option>)}
+                <select className={sel} {...registerPayroll("status")}>
+                  {payrollRecordStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </FormField>
             </div>
             <div className="rounded-lg bg-[var(--background)] p-2 text-sm text-[var(--muted)]">
-              Net: <strong className="text-[var(--text)]">{fmt(Math.max(0, payrollForm.base_salary + payrollForm.bonus - payrollForm.deductions - payrollForm.tax))}</strong>
+              Net: <strong className="text-[var(--text)]">{fmt(previewNet)}</strong>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setPayrollModal(false)}>Cancel</Button>
