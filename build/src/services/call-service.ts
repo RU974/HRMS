@@ -64,8 +64,24 @@ export function getIncomingCalls() {
   return apiClient<Call[]>("/calls/incoming");
 }
 
-export function getCallHistory() {
-  return apiClient<Call[]>("/calls/history");
+export interface CallHistoryPage {
+  data: Call[];
+  current_page: number;
+  last_page: number;
+  total: number;
+}
+
+export function getCallHistory(filters?: {
+  status?: "all" | "ended" | "missed";
+  type?: "all" | "audio" | "video";
+  page?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.type) params.set("type", filters.type);
+  if (filters?.page) params.set("page", String(filters.page));
+  const qs = params.toString();
+  return apiClient<CallHistoryPage>(`/calls/history${qs ? `?${qs}` : ""}`);
 }
 
 export function getCall(id: number) {
@@ -82,6 +98,21 @@ export function rejectCall(id: number) {
 
 export function endCall(id: number) {
   return apiClient<null>(`/calls/${id}/end`, { method: "POST" });
+}
+
+export function addCallParticipant(callId: number, userId: number) {
+  return apiClient<Call>(`/calls/${callId}/participants`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
+export function removeCallParticipant(callId: number, userId: number) {
+  return apiClient<Call>(`/calls/${callId}/participants/${userId}`, { method: "DELETE" });
+}
+
+export function muteCallParticipant(callId: number, userId: number) {
+  return apiClient<null>(`/calls/${callId}/participants/${userId}/mute`, { method: "POST" });
 }
 
 export function sendSignal(

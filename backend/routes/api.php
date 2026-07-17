@@ -373,6 +373,9 @@ $registerRoutes = function (): void {
                 Route::post('calls/{id}/answer', [CallController::class, 'answer']);
                 Route::post('calls/{id}/reject', [CallController::class, 'reject']);
                 Route::post('calls/{id}/end', [CallController::class, 'end']);
+                Route::post('calls/{id}/participants', [CallController::class, 'addParticipant']);
+                Route::delete('calls/{id}/participants/{userId}', [CallController::class, 'removeParticipant']);
+                Route::post('calls/{id}/participants/{userId}/mute', [CallController::class, 'muteParticipant']);
                 Route::post('calls/{id}/signals', [CallController::class, 'sendSignal']);
                 Route::get('calls/{id}/signals', [CallController::class, 'getSignals']);
             });

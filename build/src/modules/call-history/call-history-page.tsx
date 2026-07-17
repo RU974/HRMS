@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Phone, Video, PhoneMissed, PhoneIncoming, PhoneOutgoing, Clock } from "lucide-react";
 import { getCallHistory, Call } from "@/services/call-service";
@@ -87,22 +87,42 @@ export function CallHistoryPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [accumulated, setAccumulated] = useState<Call[]>([]);
+  const [appendedPage, setAppendedPage] = useState(0);
 
-  const { data: calls = [], isLoading } = useQuery({
-    queryKey: ["call-history"],
-    queryFn: getCallHistory,
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["call-history", statusFilter, typeFilter, page] as const,
+    queryFn: ({ queryKey }) => {
+      const [, status, type, p] = queryKey;
+      return getCallHistory({ status, type, page: p });
+    },
   });
 
-  const filtered = calls.filter((c) => {
-    if (statusFilter !== "all" && c.status !== statusFilter) return false;
-    if (typeFilter !== "all" && c.type !== typeFilter) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const names = c.participants.map((p) => p.user.name.toLowerCase()).join(" ");
-      if (!names.includes(q)) return false;
-    }
-    return true;
-  });
+  // Filters changing invalidates any previously accumulated pages.
+  useEffect(() => {
+    setAccumulated([]);
+    setAppendedPage(0);
+  }, [statusFilter, typeFilter]);
+
+  // Reset/append the accumulated list once per fetched page (guards against
+  // re-running on every render since `data` identity changes each fetch).
+  useEffect(() => {
+    if (!data || data.current_page === appendedPage) return;
+    setAccumulated((prev) => (data.current_page === 1 ? data.data : [...prev, ...data.data]));
+    setAppendedPage(data.current_page);
+  }, [data, appendedPage]);
+
+  const calls = accumulated;
+  const hasMore = (data?.current_page ?? 1) < (data?.last_page ?? 1);
+
+  const filtered = search.trim()
+    ? calls.filter((c) => {
+        const q = search.toLowerCase();
+        const names = c.participants.map((p) => p.user.name.toLowerCase()).join(" ");
+        return names.includes(q);
+      })
+    : calls;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -125,7 +145,10 @@ export function CallHistoryPage() {
           {(["all", "ended", "missed"] as StatusFilter[]).map((s) => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => {
+                setStatusFilter(s);
+                setPage(1);
+              }}
               className={`rounded-full px-3 py-1 text-xs font-medium transition ${
                 statusFilter === s
                   ? "bg-[var(--primary)] text-white"
@@ -141,7 +164,10 @@ export function CallHistoryPage() {
           {(["all", "audio", "video"] as TypeFilter[]).map((t) => (
             <button
               key={t}
-              onClick={() => setTypeFilter(t)}
+              onClick={() => {
+                setTypeFilter(t);
+                setPage(1);
+              }}
               className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
                 typeFilter === t
                   ? "bg-[var(--primary)] text-white"
@@ -176,8 +202,20 @@ export function CallHistoryPage() {
 
       {filtered.length > 0 && (
         <p className="mt-3 text-center text-xs text-[var(--muted)]">
-          Showing {filtered.length} of {calls.length} call{calls.length !== 1 ? "s" : ""}
+          Showing {calls.length} of {data?.total ?? calls.length} call{data?.total !== 1 ? "s" : ""}
         </p>
+      )}
+
+      {hasMore && (
+        <div className="mt-3 flex justify-center">
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={isFetching}
+            className="rounded-full border border-[var(--border)] px-4 py-1.5 text-xs font-medium text-[var(--muted)] transition hover:bg-[var(--hover)] disabled:opacity-50"
+          >
+            {isFetching ? "Loading…" : "Load more"}
+          </button>
+        </div>
       )}
     </div>
   );

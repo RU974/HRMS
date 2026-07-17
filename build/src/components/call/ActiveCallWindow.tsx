@@ -1,9 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Minimize2, Maximize2 } from "lucide-react";
-import { Call, endCall } from "@/services/call-service";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  PhoneOff,
+  Minimize2,
+  Maximize2,
+  RefreshCw,
+  ScreenShare,
+  ScreenShareOff,
+  Users,
+  UserPlus,
+  UserMinus,
+  X,
+} from "lucide-react";
+import { Call, endCall, addCallParticipant, removeCallParticipant, muteCallParticipant } from "@/services/call-service";
+import { listConversations } from "@/services/chat-service";
 import { useWebRTC, PeerStream } from "@/hooks/use-webrtc";
 import { VideoTile } from "./VideoTile";
 import { stopRingtone } from "@/lib/ringtone";
+import { toast } from "@/components/notifications/toast";
 import { echo } from "@/lib/echo";
 
 interface ActiveCallWindowProps {
@@ -43,11 +61,17 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
   const [elapsed, setElapsed] = useState(0);
   const [ending, setEnding] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "connected" | "failed">("connecting");
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [participantActionId, setParticipantActionId] = useState<number | null>(null);
+
+  const isHost = call.initiated_by === currentUserId;
 
   // Refs so Echo listeners always read current values without re-subscribing
   const cleanupRef = useRef<() => void>(() => {});
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+  const isMutedRef = useRef(false);
+  const toggleMuteRef = useRef<() => void>(() => {});
 
   // Derive joined participant IDs from call state — passed to useWebRTC so it
   // can create peer connections reactively instead of polling /calls/{id}.
@@ -65,8 +89,91 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
     onPeerFailed: () => setConnectionStatus("failed"),
   });
 
-  const { localStream, peerStreams, isMuted, isCameraOff, cleanup, toggleMute, toggleCamera } = webrtc;
+  const {
+    localStream,
+    peerStreams,
+    isMuted,
+    isCameraOff,
+    isScreenSharing,
+    peerQuality,
+    cleanup,
+    toggleMute,
+    toggleCamera,
+    toggleScreenShare,
+    reconnectAllFailed,
+  } = webrtc;
   cleanupRef.current = cleanup;
+  isMutedRef.current = isMuted;
+  toggleMuteRef.current = toggleMute;
+
+  // Candidates for "add participant": other members of the same chat
+  // conversation who aren't already invited/joined/on-the-call.
+  const conversationsQuery = useQuery({
+    queryKey: ["chat-conversations"],
+    queryFn: () => listConversations(),
+    enabled: isHost && showParticipants && !!call.conversation_id,
+  });
+
+  const addableUsers = useMemo(() => {
+    if (!call.conversation_id || !conversationsQuery.data) return [];
+    const conversation = conversationsQuery.data.find((c) => c.id === call.conversation_id);
+    if (!conversation) return [];
+    const currentIds = new Set(call.participants.map((p) => p.user_id));
+    currentIds.add(currentUserId);
+    return conversation.participants.filter((p) => !currentIds.has(p.id));
+  }, [conversationsQuery.data, call.conversation_id, call.participants, currentUserId]);
+
+  const handleAddParticipant = useCallback(
+    async (userId: number) => {
+      setParticipantActionId(userId);
+      try {
+        const updated = await addCallParticipant(call.id, userId);
+        setCall(updated);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Please try again.";
+        toast.error("Could not add participant", message);
+      } finally {
+        setParticipantActionId(null);
+      }
+    },
+    [call.id]
+  );
+
+  const handleRemoveParticipant = useCallback(
+    async (userId: number) => {
+      setParticipantActionId(userId);
+      try {
+        const updated = await removeCallParticipant(call.id, userId);
+        setCall(updated);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Please try again.";
+        toast.error("Could not remove participant", message);
+      } finally {
+        setParticipantActionId(null);
+      }
+    },
+    [call.id]
+  );
+
+  const handleMuteParticipant = useCallback(
+    async (userId: number) => {
+      setParticipantActionId(userId);
+      try {
+        await muteCallParticipant(call.id, userId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Please try again.";
+        toast.error("Could not mute participant", message);
+      } finally {
+        setParticipantActionId(null);
+      }
+    },
+    [call.id]
+  );
+
+  const handleReconnect = useCallback(() => {
+    setConnectionStatus("connecting");
+    reconnectAllFailed();
+  }, [reconnectAllFailed]);
 
   // Stop any playing ringtone the moment we enter the call window
   useEffect(() => { stopRingtone(); }, []);
@@ -113,10 +220,21 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
       }));
     });
 
+    // Host asked us to mute — honor it locally (mesh calls have no
+    // server-side media path to force-mute from the other end).
+    channel.listen(".CallMuteRequested", (data: { call_id: number }) => {
+      if (data.call_id !== call.id) return;
+      if (!isMutedRef.current) {
+        toggleMuteRef.current();
+        toast.info("You've been muted", "The host muted your microphone.");
+      }
+    });
+
     return () => {
       channel.stopListening(".CallAnswered");
       channel.stopListening(".CallEnded");
       channel.stopListening(".CallRejected");
+      channel.stopListening(".CallMuteRequested");
       // CallProvider owns the channel lifetime — only stopListening here
     };
   // call.id and currentUserId never change while the window is mounted
@@ -148,6 +266,18 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
     }
     return "Connecting…";
   }
+
+  // Worst quality across all peers — shown as a single indicator in the header.
+  const overallQuality = (() => {
+    const values = Array.from(peerQuality.values());
+    if (values.includes("poor")) return "poor";
+    if (values.includes("fair")) return "fair";
+    if (values.length > 0) return "good";
+    return null;
+  })();
+
+  const qualityColor = { good: "bg-green-400", fair: "bg-yellow-400", poor: "bg-red-400" };
+  const qualityLabel = { good: "Good connection", fair: "Fair connection", poor: "Poor connection" };
 
   // ── Minimised PiP ──────────────────────────────────────────────────────────
   if (minimized) {
@@ -199,24 +329,55 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
       <div className="flex items-center justify-between px-6 py-4">
         <div>
           <p className="text-lg font-semibold text-white">{callName}</p>
-          <p className={`text-sm ${connectionStatus === "failed" ? "text-red-400" : "text-gray-400"}`}>
+          <p className={`flex items-center gap-1.5 text-sm ${connectionStatus === "failed" ? "text-red-400" : "text-gray-400"}`}>
             {statusLine()}
+            {connectionStatus === "connected" && overallQuality && (
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${qualityColor[overallQuality]}`}
+                title={qualityLabel[overallQuality]}
+              />
+            )}
           </p>
         </div>
-        <button
-          onClick={() => setMinimized(true)}
-          className="rounded-lg p-2 text-gray-400 transition hover:bg-white/10 hover:text-white"
-        >
-          <Minimize2 className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowParticipants((v) => !v)}
+            className={`rounded-lg p-2 text-gray-400 transition hover:bg-white/10 hover:text-white ${
+              showParticipants ? "bg-white/10 text-white" : ""
+            }`}
+            title="Participants"
+          >
+            <Users className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => setMinimized(true)}
+            className="rounded-lg p-2 text-gray-400 transition hover:bg-white/10 hover:text-white"
+          >
+            <Minimize2 className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-1 items-center justify-center overflow-hidden px-6">
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden px-6">
         {call.type === "video" ? (
           <VideoContent peerStreams={peerStreams} call={call} currentUserId={currentUserId} connectionStatus={connectionStatus} />
         ) : (
           <AudioContent peerStreams={peerStreams} call={call} currentUserId={currentUserId} connectionStatus={connectionStatus} />
+        )}
+
+        {showParticipants && (
+          <ParticipantsPanel
+            call={call}
+            currentUserId={currentUserId}
+            isHost={isHost}
+            addableUsers={addableUsers}
+            actionInFlightId={participantActionId}
+            onClose={() => setShowParticipants(false)}
+            onAdd={handleAddParticipant}
+            onRemove={handleRemoveParticipant}
+            onMute={handleMuteParticipant}
+          />
         )}
       </div>
 
@@ -229,6 +390,16 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
 
       {/* Controls */}
       <div className="flex items-center justify-center gap-5 pb-8 pt-4">
+        {connectionStatus === "failed" && (
+          <button
+            onClick={handleReconnect}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500 text-white transition hover:bg-yellow-600"
+            title="Reconnect"
+          >
+            <RefreshCw className="h-6 w-6" />
+          </button>
+        )}
+
         <button
           onClick={toggleMute}
           className={`flex h-14 w-14 items-center justify-center rounded-full transition ${
@@ -251,6 +422,18 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
           </button>
         )}
 
+        {call.type === "video" && (
+          <button
+            onClick={toggleScreenShare}
+            className={`flex h-14 w-14 items-center justify-center rounded-full transition ${
+              isScreenSharing ? "bg-blue-500 text-white hover:bg-blue-600" : "bg-gray-700 text-white hover:bg-gray-600"
+            }`}
+            title={isScreenSharing ? "Stop sharing screen" : "Share screen"}
+          >
+            {isScreenSharing ? <ScreenShareOff className="h-6 w-6" /> : <ScreenShare className="h-6 w-6" />}
+          </button>
+        )}
+
         <button
           onClick={handleEnd}
           disabled={ending}
@@ -265,6 +448,104 @@ export function ActiveCallWindow({ call: initialCall, currentUserId, onEnded }: 
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
+
+function ParticipantsPanel({
+  call,
+  currentUserId,
+  isHost,
+  addableUsers,
+  actionInFlightId,
+  onClose,
+  onAdd,
+  onRemove,
+  onMute,
+}: {
+  call: Call;
+  currentUserId: number;
+  isHost: boolean;
+  addableUsers: { id: number; name: string; email: string }[];
+  actionInFlightId: number | null;
+  onClose: () => void;
+  onAdd: (userId: number) => void;
+  onRemove: (userId: number) => void;
+  onMute: (userId: number) => void;
+}) {
+  const others = call.participants.filter((p) => p.user_id !== currentUserId);
+
+  return (
+    <div className="absolute right-0 top-0 flex h-full w-72 flex-col border-l border-white/10 bg-gray-900/95 backdrop-blur">
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <p className="text-sm font-semibold text-white">Participants ({call.participants.length})</p>
+        <button onClick={onClose} className="rounded p-1 text-gray-400 hover:bg-white/10 hover:text-white">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {isHost && addableUsers.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Add to call</p>
+            <div className="space-y-1">
+              {addableUsers.map((u) => (
+                <div key={u.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
+                  <span className="truncate text-sm text-gray-200">{u.name}</span>
+                  <button
+                    onClick={() => onAdd(u.id)}
+                    disabled={actionInFlightId === u.id}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-500 disabled:opacity-50"
+                    title="Add to call"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">On this call</p>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+            <span className="truncate text-sm text-gray-200">You{isHost ? " (Host)" : ""}</span>
+          </div>
+          {others.map((p) => (
+            <div key={p.user_id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-white/5">
+              <div className="min-w-0">
+                <p className="truncate text-sm text-gray-200">
+                  {p.user.name}
+                  {call.initiated_by === p.user_id ? " (Host)" : ""}
+                </p>
+                <p className="text-xs text-gray-500 capitalize">{p.status}</p>
+              </div>
+              {isHost && (p.status === "invited" || p.status === "joined") && (
+                <div className="flex shrink-0 items-center gap-1">
+                  {p.status === "joined" && (
+                    <button
+                      onClick={() => onMute(p.user_id)}
+                      disabled={actionInFlightId === p.user_id}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-700 text-white transition hover:bg-gray-600 disabled:opacity-50"
+                      title="Mute participant"
+                    >
+                      <MicOff className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onRemove(p.user_id)}
+                    disabled={actionInFlightId === p.user_id}
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-500 disabled:opacity-50"
+                    title="Remove from call"
+                  >
+                    <UserMinus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function WaitingAvatar({ name, status }: { name: string; status: string }) {
   return (

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Events\CallAnswered;
 use App\Events\CallEnded;
 use App\Events\CallInitiated;
+use App\Events\CallMuteRequested;
 use App\Events\CallRejected;
 use App\Events\CallSignalSent;
 use App\Models\Call;
@@ -12,11 +13,16 @@ use App\Models\CallParticipant;
 use App\Models\CallSignal;
 use App\Models\ChatConversation;
 use App\Models\User;
+use App\Services\CallNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CallController extends Controller
 {
+    public function __construct(private readonly CallNotificationService $callNotifications)
+    {
+    }
+
     /**
      * Update the authenticated user's last_seen_at timestamp.
      */
@@ -99,9 +105,19 @@ class CallController extends Controller
             return $this->fail('You already have an active call in progress.', 422);
         }
 
+        // Call waiting: don't ring participants who are already on another call.
+        $busyIds = $this->busyParticipantIds($participantIds);
         $isGroup = count($participantIds) > 1;
 
-        $call = DB::transaction(function () use ($validated, $participantIds, $user, $isGroup) {
+        if (!$isGroup && !empty($busyIds)) {
+            return $this->fail('This user is currently on another call.', 422);
+        }
+
+        if ($isGroup && count($busyIds) === count($participantIds)) {
+            return $this->fail('All selected participants are currently on another call.', 422);
+        }
+
+        $call = DB::transaction(function () use ($validated, $participantIds, $busyIds, $user, $isGroup) {
             $call = Call::create([
                 'conversation_id' => $validated['conversation_id'] ?? null,
                 'initiated_by' => $user->id,
@@ -119,12 +135,14 @@ class CallController extends Controller
                 'joined_at' => now(),
             ]);
 
-            // Add other participants as invited
+            // Add other participants as invited — busy ones are auto-declined
+            // immediately so they're never rung, and the caller sees they were skipped.
             foreach ($participantIds as $participantId) {
                 CallParticipant::create([
                     'call_id' => $call->id,
                     'user_id' => $participantId,
-                    'status' => 'invited',
+                    'status' => in_array($participantId, $busyIds, true) ? 'rejected' : 'invited',
+                    'left_at' => in_array($participantId, $busyIds, true) ? now() : null,
                 ]);
             }
 
@@ -133,9 +151,10 @@ class CallController extends Controller
 
         $formatted = $this->formatCall($call->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']));
 
-        // Notify every invited participant in real-time (no polling needed).
+        // Notify only the participants who were actually invited (not the busy ones).
         $invitedIds = $call->callParticipants
             ->where('user_id', '!=', $user->id)
+            ->where('status', 'invited')
             ->pluck('user_id')
             ->toArray();
 
@@ -184,7 +203,9 @@ class CallController extends Controller
     {
         $user = $request->user();
 
-        $answerQuery = Call::query()->where('status', 'ringing');
+        // 'active' is included so a participant added mid-call (via addParticipant)
+        // can still answer after the call has already gone active.
+        $answerQuery = Call::query()->whereIn('status', ['ringing', 'active']);
         $this->scopeToCompany($request, $answerQuery);
         $call = $answerQuery->findOrFail($id);
 
@@ -206,10 +227,17 @@ class CallController extends Controller
             }
         });
 
-        $formatted = $this->formatCall($call->fresh()->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']));
+        $call = $call->fresh()->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']);
+        $formatted = $this->formatCall($call);
 
-        // Notify the initiator that someone answered so their UI flips to active.
-        event(new CallAnswered($formatted, $call->initiated_by));
+        // Notify every other current participant (joined or still invited) so
+        // group calls build a complete peer mesh, not just the initiator.
+        $otherParticipantIds = $call->callParticipants
+            ->where('user_id', '!=', $user->id)
+            ->pluck('user_id')
+            ->toArray();
+
+        event(new CallAnswered($formatted, $otherParticipantIds));
 
         return $this->ok($formatted, 'Call answered');
     }
@@ -245,8 +273,10 @@ class CallController extends Controller
             ->count();
 
         if ($activeCount === 0 || $call->initiated_by === $user->id) {
+            $wasRinging = $call->status === 'ringing';
+
             $call->update([
-                'status' => $call->status === 'ringing' ? 'missed' : 'ended',
+                'status' => $wasRinging ? 'missed' : 'ended',
                 'ended_at' => now(),
             ]);
 
@@ -254,6 +284,11 @@ class CallController extends Controller
                 ->where('call_id', $call->id)
                 ->pluck('user_id')
                 ->toArray();
+
+            if ($wasRinging) {
+                $missedUserIds = array_values(array_diff($allParticipantIds, [$call->initiated_by]));
+                $this->callNotifications->notifyMissedCall($call, $missedUserIds);
+            }
 
             event(new CallEnded($call->id, $allParticipantIds));
         }
@@ -324,6 +359,152 @@ class CallController extends Controller
         }
 
         return $this->ok(null, 'Call ended');
+    }
+
+    /**
+     * Add a participant to an active/ringing call. Host-only.
+     */
+    public function addParticipant(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $user = $request->user();
+
+        $callQuery = Call::query()->whereIn('status', ['ringing', 'active']);
+        $this->scopeToCompany($request, $callQuery);
+        $call = $callQuery->findOrFail($id);
+
+        if ($call->initiated_by !== $user->id) {
+            return $this->fail('Only the call host can add participants.', 403);
+        }
+
+        $newUserId = (int) $validated['user_id'];
+
+        if ($newUserId === $user->id) {
+            return $this->fail('You are already in this call.', 422);
+        }
+
+        $target = User::query()->where('id', $newUserId)->where('company_id', $user->company_id)->first();
+        if (!$target) {
+            return $this->fail('You cannot add users outside your company.', 403);
+        }
+
+        $existing = CallParticipant::query()
+            ->where('call_id', $call->id)
+            ->where('user_id', $newUserId)
+            ->first();
+
+        if ($existing && in_array($existing->status, ['invited', 'joined'], true)) {
+            return $this->fail('User is already in this call.', 422);
+        }
+
+        if (!empty($this->busyParticipantIds([$newUserId]))) {
+            return $this->fail('This user is currently on another call.', 422);
+        }
+
+        DB::transaction(function () use ($call, $existing, $newUserId) {
+            if ($existing) {
+                $existing->update(['status' => 'invited', 'joined_at' => null, 'left_at' => null]);
+            } else {
+                CallParticipant::create(['call_id' => $call->id, 'user_id' => $newUserId, 'status' => 'invited']);
+            }
+
+            if ($call->call_type !== 'group') {
+                $call->update(['call_type' => 'group']);
+            }
+        });
+
+        $call = $call->fresh()->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']);
+        $formatted = $this->formatCall($call);
+
+        // Ring the newly invited participant.
+        event(new CallInitiated($formatted, [$newUserId]));
+
+        // Let every existing participant know the roster changed.
+        $existingParticipantIds = $call->callParticipants
+            ->where('user_id', '!=', $newUserId)
+            ->pluck('user_id')
+            ->toArray();
+        event(new CallAnswered($formatted, $existingParticipantIds));
+
+        return $this->ok($formatted, 'Participant added');
+    }
+
+    /**
+     * Remove a participant from an active call. Host-only.
+     */
+    public function removeParticipant(Request $request, int $id, int $userId)
+    {
+        $user = $request->user();
+
+        $callQuery = Call::query()->whereIn('status', ['ringing', 'active']);
+        $this->scopeToCompany($request, $callQuery);
+        $call = $callQuery->findOrFail($id);
+
+        if ($call->initiated_by !== $user->id) {
+            return $this->fail('Only the call host can remove participants.', 403);
+        }
+
+        if ($userId === $user->id) {
+            return $this->fail('Use "end call" to leave yourself.', 422);
+        }
+
+        $participant = CallParticipant::query()
+            ->where('call_id', $call->id)
+            ->where('user_id', $userId)
+            ->whereIn('status', ['invited', 'joined'])
+            ->firstOrFail();
+
+        $participant->update(['status' => 'left', 'left_at' => now()]);
+
+        $call = $call->fresh()->load(['initiator:id,name,email', 'callParticipants.user:id,name,email']);
+        $formatted = $this->formatCall($call);
+
+        // Close the removed participant's call window.
+        event(new CallEnded($call->id, [$userId]));
+
+        // Let everyone else know the roster changed.
+        $remainingParticipantIds = $call->callParticipants
+            ->where('user_id', '!=', $userId)
+            ->pluck('user_id')
+            ->toArray();
+        event(new CallAnswered($formatted, $remainingParticipantIds));
+
+        return $this->ok($formatted, 'Participant removed');
+    }
+
+    /**
+     * Ask a participant's client to mute their own microphone. Host-only.
+     * This is a soft request — the target's client honors it locally, since a
+     * mesh call has no server-side media path to force-mute from.
+     */
+    public function muteParticipant(Request $request, int $id, int $userId)
+    {
+        $user = $request->user();
+
+        $callQuery = Call::query()->whereIn('status', ['ringing', 'active']);
+        $this->scopeToCompany($request, $callQuery);
+        $call = $callQuery->findOrFail($id);
+
+        if ($call->initiated_by !== $user->id) {
+            return $this->fail('Only the call host can mute participants.', 403);
+        }
+
+        $isParticipant = CallParticipant::query()
+            ->where('call_id', $call->id)
+            ->where('user_id', $userId)
+            ->where('status', 'joined')
+            ->exists();
+
+        if (!$isParticipant) {
+            return $this->fail('That user is not currently in this call.', 404);
+        }
+
+        event(new CallMuteRequested($call->id, $userId));
+
+        return $this->ok(null, 'Mute request sent');
     }
 
     /**
@@ -412,18 +593,51 @@ class CallController extends Controller
      */
     public function history(Request $request)
     {
+        $validated = $request->validate([
+            'status' => 'nullable|in:all,ended,missed',
+            'type' => 'nullable|in:all,audio,video',
+            'page' => 'nullable|integer|min:1',
+        ]);
+
         $user = $request->user();
+        $status = $validated['status'] ?? 'all';
+        $type = $validated['type'] ?? 'all';
 
         $historyQuery = Call::query()
             ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id))
-            ->whereIn('status', ['ended', 'missed'])
+            ->whereIn('status', $status === 'all' ? ['ended', 'missed'] : [$status])
             ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email'])
-            ->latest()
-            ->limit(50);
-        $this->scopeToCompany($request, $historyQuery);
-        $calls = $historyQuery->get()->map(fn ($call) => $this->formatCall($call));
+            ->latest();
 
-        return $this->ok($calls);
+        if ($type !== 'all') {
+            $historyQuery->where('type', $type);
+        }
+
+        $this->scopeToCompany($request, $historyQuery);
+        $paginated = $historyQuery->paginate(50, ['*'], 'page', $validated['page'] ?? 1);
+
+        return $this->ok([
+            'data' => collect($paginated->items())->map(fn ($call) => $this->formatCall($call)),
+            'current_page' => $paginated->currentPage(),
+            'last_page' => $paginated->lastPage(),
+            'total' => $paginated->total(),
+        ]);
+    }
+
+    /**
+     * Return the subset of $userIds who are currently joined/invited on
+     * another ringing or active call — used to implement call waiting.
+     */
+    private function busyParticipantIds(array $userIds): array
+    {
+        return CallParticipant::query()
+            ->whereIn('user_id', $userIds)
+            ->whereIn('status', ['invited', 'joined'])
+            ->whereHas('call', fn ($q) => $q->whereIn('status', ['ringing', 'active']))
+            ->pluck('user_id')
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     private function formatCall(Call $call): array

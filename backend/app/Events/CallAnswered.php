@@ -14,13 +14,21 @@ class CallAnswered implements ShouldBroadcastNow
 
     public function __construct(
         private readonly array $call,
-        private readonly int $initiatorUserId
+        private readonly array $recipientUserIds
     ) {}
 
-    /** Broadcast to the call initiator so they know someone answered. */
-    public function broadcastOn(): PrivateChannel
+    /**
+     * Broadcast to every other current participant (not just the initiator) so
+     * group calls with 3+ people build a complete peer-connection mesh — each
+     * existing participant needs to learn about every other joiner, not only
+     * the call's original initiator.
+     */
+    public function broadcastOn(): array
     {
-        return new PrivateChannel('call.' . $this->initiatorUserId);
+        return array_map(
+            fn ($id) => new PrivateChannel('call.' . $id),
+            $this->recipientUserIds
+        );
     }
 
     public function broadcastWith(): array

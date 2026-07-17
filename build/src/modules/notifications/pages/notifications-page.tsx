@@ -30,6 +30,11 @@ const TYPE_META: Record<NotificationType, { label: string; color: string; bg: st
   error:   { label: "Error",   color: "text-red-700",    bg: "bg-red-50 border-red-200",     dot: "bg-red-500" },
 };
 
+// System-generated notifications (tickets, calls, etc.) use free-form type
+// strings outside the manually-assignable info/warning/success/error set —
+// fall back to a neutral style instead of crashing on an unmapped lookup.
+const DEFAULT_TYPE_META = { label: "Notification", color: "text-slate-700", bg: "bg-slate-50 border-slate-200", dot: "bg-slate-400" };
+
 function formatTime(ts: string) {
   const d = new Date(ts);
   const now = new Date();
@@ -242,7 +247,7 @@ export function NotificationsPage() {
           )}
 
           {items.map((item) => {
-            const meta = TYPE_META[item.type];
+            const meta = TYPE_META[item.type] ?? DEFAULT_TYPE_META;
             return (
               <div
                 key={item.id}

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Call, sendHeartbeat, getIncomingCalls } from "@/services/call-service";
 import { useAuthStore } from "@/store/auth-store";
 import { startRingtone, stopRingtone } from "@/lib/ringtone";
+import { requestNotificationPermission, showCallNotification } from "@/lib/browser-notification";
 import { echo } from "@/lib/echo";
 import { IncomingCallModal } from "./IncomingCallModal";
 import { ActiveCallWindow } from "./ActiveCallWindow";
@@ -45,6 +46,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [token, user]);
 
+  // Ask once for OS-notification permission so incoming calls can alert the
+  // user while the tab is backgrounded (does not reach a fully closed tab).
+  useEffect(() => {
+    if (!user) return;
+    requestNotificationPermission();
+  }, [user]);
+
   // ── Shared helper: surface a new incoming call ──────────────────────────────
   const handleIncomingCall = useCallback((call: Call) => {
     if (activeCallRef.current) return; // never interrupt an ongoing call
@@ -55,6 +63,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       incomingRingRef.current = true;
       startRingtone("incoming").catch(() => {});
     }
+    showCallNotification({
+      title: `Incoming ${call.type} call`,
+      body: call.initiator.name,
+    });
   }, []);
 
   // ── Real-time call events via WebSocket ────────────────────────────────────

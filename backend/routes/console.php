@@ -52,3 +52,8 @@ Schedule::command('tickets:auto-close')->daily();
 
 // Sync biometric devices whose scheduled interval is due.
 Schedule::command('biometric:sync-scheduled')->everyFiveMinutes();
+
+// ─── Calls ────────────────────────────────────────────────────────────────
+
+// Mark calls left ringing for too long (client disconnected, never answered) as missed.
+Schedule::command('calls:expire-stale')->everyMinute();

@@ -19,10 +19,10 @@ export function CallButton({ conversation, currentUserId }: CallButtonProps) {
     .filter((p) => p.id !== currentUserId)
     .map((p) => p.id);
 
-  if (participantIds.length === 0) return null;
+  const noParticipants = participantIds.length === 0;
 
   async function handleCall(type: "audio" | "video") {
-    if (loading || activeCall) return;
+    if (loading || activeCall || noParticipants) return;
     setLoading(type);
     try {
       const call = await initiateCall({
@@ -33,21 +33,25 @@ export function CallButton({ conversation, currentUserId }: CallButtonProps) {
       // Play outgoing ringback so the caller knows it's ringing
       startRingtone("outgoing").catch(() => {});
       startCall(call);
-    } catch {
-      toast.error("Could not start call", "Please try again in a moment.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Please try again in a moment.";
+      toast.error("Could not start call", message);
     } finally {
       setLoading(null);
     }
   }
 
-  const disabled = !!activeCall || !!loading;
+  const disabled = !!activeCall || !!loading || noParticipants;
+  const title = noParticipants
+    ? "No one to call in this conversation"
+    : undefined;
 
   return (
     <div className="flex items-center gap-1">
       <button
         onClick={() => handleCall("audio")}
         disabled={disabled}
-        title="Voice call"
+        title={title ?? "Voice call"}
         className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40"
       >
         {loading === "audio" ? (
@@ -60,7 +64,7 @@ export function CallButton({ conversation, currentUserId }: CallButtonProps) {
       <button
         onClick={() => handleCall("video")}
         disabled={disabled}
-        title="Video call"
+        title={title ?? "Video call"}
         className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--hover)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40"
       >
         {loading === "video" ? (
