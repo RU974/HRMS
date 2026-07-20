@@ -74,7 +74,7 @@ function createPattern(
   };
 }
 
-export async function startRingtone(mode: "incoming" | "outgoing" = "incoming") {
+export async function startRingtone() {
   stopRingtone();
 
   const ctx = ensureContext();
@@ -86,13 +86,8 @@ export async function startRingtone(mode: "incoming" | "outgoing" = "incoming") 
     return;
   }
 
-  if (mode === "incoming") {
-    // Classic dual-tone telephone ring: 440 Hz + 480 Hz, 2 s on / 4 s off
-    stopFn = createPattern(ctx, [440, 480], 2000, 4000, 0.25);
-  } else {
-    // Soft ringback tone for the caller: 400 Hz + 450 Hz, 1 s on / 3 s off
-    stopFn = createPattern(ctx, [400, 450], 1000, 3000, 0.12);
-  }
+  // Soft ringback tone for the caller: 400 Hz + 450 Hz, 1 s on / 3 s off
+  stopFn = createPattern(ctx, [400, 450], 1000, 3000, 0.12);
 }
 
 export function stopRingtone() {

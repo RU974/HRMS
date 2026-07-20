@@ -377,7 +377,6 @@ $registerRoutes = function (): void {
                 Route::post('users/online-status', [CallController::class, 'onlineStatus']);
 
                 // Calling
-                Route::get('calls/incoming', [CallController::class, 'incoming']);
                 Route::get('calls/history', [CallController::class, 'history']);
                 Route::post('calls', [CallController::class, 'initiate']);
                 Route::get('calls/{id}', [CallController::class, 'show']);

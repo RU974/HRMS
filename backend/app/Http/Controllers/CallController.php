@@ -155,23 +155,6 @@ class CallController extends Controller
     }
 
     /**
-     * Poll for incoming calls for the authenticated user.
-     */
-    public function incoming(Request $request)
-    {
-        $user = $request->user();
-
-        $incomingQuery = Call::query()
-            ->where('status', 'ringing')
-            ->whereHas('callParticipants', fn ($q) => $q->where('user_id', $user->id)->where('status', 'invited'))
-            ->with(['initiator:id,name,email', 'callParticipants.user:id,name,email']);
-        $this->scopeToCompany($request, $incomingQuery);
-        $calls = $incomingQuery->get()->map(fn ($call) => $this->formatCall($call));
-
-        return $this->ok($calls);
-    }
-
-    /**
      * Get call details.
      */
     public function show(Request $request, int $id)

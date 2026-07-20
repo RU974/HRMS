@@ -56,10 +56,6 @@ export function initiateCall(payload: {
   return apiClient<Call>("/calls", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getIncomingCalls() {
-  return apiClient<Call[]>("/calls/incoming");
-}
-
 export interface CallHistoryPage {
   data: Call[];
   current_page: number;

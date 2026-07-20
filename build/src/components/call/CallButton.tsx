@@ -31,7 +31,7 @@ export function CallButton({ conversation, currentUserId }: CallButtonProps) {
         type,
       });
       // Play outgoing ringback so the caller knows it's ringing
-      startRingtone("outgoing").catch(() => {});
+      startRingtone().catch(() => {});
       startCall(call);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Please try again in a moment.";
