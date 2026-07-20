@@ -1,9 +1,5 @@
 import { apiClient } from "@/services/api-client";
 
-export function sendHeartbeat() {
-  return apiClient<null>("/heartbeat", { method: "POST" });
-}
-
 export interface UserPresence {
   online: boolean;
   in_call: boolean;

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Call, sendHeartbeat, getIncomingCalls } from "@/services/call-service";
+import { Call, getIncomingCalls } from "@/services/call-service";
 import { useAuthStore } from "@/store/auth-store";
 import { startRingtone, stopRingtone } from "@/lib/ringtone";
 import { requestNotificationPermission, showCallNotification } from "@/lib/browser-notification";
@@ -37,16 +37,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // This avoids double-triggering when Reverb IS working.
   const wsAliveRef = useRef(false);
 
-  // ── Heartbeat: keep last_seen_at fresh every 30 s ──────────────────────────
-  useEffect(() => {
-    if (!token || !user) return;
-
-    sendHeartbeat().catch(() => {});
-    const id = setInterval(() => sendHeartbeat().catch(() => {}), 30_000);
-    return () => clearInterval(id);
-  }, [token, user]);
-
-  // Ask once for OS-notification permission so incoming calls can alert the
+// Ask once for OS-notification permission so incoming calls can alert the
   // user while the tab is backgrounded (does not reach a fully closed tab).
   useEffect(() => {
     if (!user) return;

@@ -24,15 +24,6 @@ class CallController extends Controller
     }
 
     /**
-     * Update the authenticated user's last_seen_at timestamp.
-     */
-    public function heartbeat(Request $request)
-    {
-        $request->user()->update(['last_seen_at' => now()]);
-        return $this->ok(null);
-    }
-
-    /**
      * Return online status for a list of user IDs within the same company.
      */
     public function onlineStatus(Request $request)

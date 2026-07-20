@@ -374,7 +374,6 @@ $registerRoutes = function (): void {
                 Route::delete('chat-conversations/{id}/participants/{userId}', [ChatConversationController::class, 'removeParticipant']);
 
                 // Presence
-                Route::post('heartbeat', [CallController::class, 'heartbeat']);
                 Route::post('users/online-status', [CallController::class, 'onlineStatus']);
 
                 // Calling
