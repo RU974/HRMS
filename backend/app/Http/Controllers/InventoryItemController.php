@@ -53,7 +53,13 @@ class InventoryItemController extends Controller
 
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', Rule::exists('inventory_categories', 'id')->where('company_id', $companyId)],
+            'category_id' => [
+                'nullable',
+                Rule::exists('inventory_categories', 'id')->when(
+                    $companyId,
+                    fn ($rule) => $rule->where('company_id', $companyId)
+                ),
+            ],
             'sku'         => [
                 'nullable', 'string', 'max:100',
                 Rule::unique('inventory_items', 'sku')->where('company_id', $companyId)->whereNull('deleted_at'),
@@ -82,7 +88,13 @@ class InventoryItemController extends Controller
 
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', Rule::exists('inventory_categories', 'id')->where('company_id', $companyId)],
+            'category_id' => [
+                'nullable',
+                Rule::exists('inventory_categories', 'id')->when(
+                    $companyId,
+                    fn ($rule) => $rule->where('company_id', $companyId)
+                ),
+            ],
             'sku'         => [
                 'nullable', 'string', 'max:100',
                 Rule::unique('inventory_items', 'sku')->ignore($id)->where('company_id', $companyId)->whereNull('deleted_at'),
