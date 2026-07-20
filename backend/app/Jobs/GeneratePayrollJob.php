@@ -21,6 +21,10 @@ class GeneratePayrollJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $timeout = 300;
+
+    public int $tries = 1;
+
     /**
      * @param int[] $employeeIds
      */
@@ -127,5 +131,15 @@ class GeneratePayrollJob implements ShouldQueue
             ]);
             throw $e;
         }
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        BackgroundRun::where('id', $this->backgroundRunId)
+            ->where('status', '!=', BackgroundRun::STATUS_DONE)
+            ->update([
+                'status' => BackgroundRun::STATUS_FAILED,
+                'error' => $exception?->getMessage() ?? 'Payroll generation timed out or crashed unexpectedly.',
+            ]);
     }
 }
