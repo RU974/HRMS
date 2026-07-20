@@ -99,6 +99,7 @@ class GeneratePayrollJob implements ShouldQueue
                             'month' => $this->month,
                             'year' => $this->year,
                             'base_salary' => $components['base_salary'],
+                            'allowances' => $components['allowances'],
                             'bonus' => $components['bonuses'],
                             'deductions' => $components['deductions'],
                             'tax' => $components['tax'],

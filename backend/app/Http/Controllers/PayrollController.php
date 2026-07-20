@@ -59,6 +59,7 @@ class PayrollController extends Controller
             'month'        => 'required|integer|min:1|max:12',
             'year'         => 'required|integer|min:2000',
             'base_salary'  => 'required|numeric|min:0',
+            'allowances'   => 'nullable|numeric|min:0',
             'bonus'        => 'nullable|numeric|min:0',
             'deductions'   => 'nullable|numeric|min:0',
             'tax'          => 'nullable|numeric|min:0',
@@ -70,6 +71,7 @@ class PayrollController extends Controller
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $validated['status'] = $validated['status'] ?? Payroll::STATUS_DRAFT;
+        $validated['allowances'] = $validated['allowances'] ?? 0;
         $validated['bonus'] = $validated['bonus'] ?? 0;
         $validated['deductions'] = $validated['deductions'] ?? 0;
         $validated['tax'] = $validated['tax'] ?? 0;
@@ -115,6 +117,7 @@ class PayrollController extends Controller
 
         $validated = $request->validate([
             'base_salary'  => 'sometimes|numeric|min:0',
+            'allowances'   => 'nullable|numeric|min:0',
             'bonus'        => 'nullable|numeric|min:0',
             'deductions'   => 'nullable|numeric|min:0',
             'tax'          => 'nullable|numeric|min:0',
@@ -195,6 +198,7 @@ class PayrollController extends Controller
                 status,
                 COUNT(*)               AS total_employees,
                 SUM(base_salary)       AS total_base_salary,
+                SUM(allowances)        AS total_allowances,
                 SUM(bonus)             AS total_bonus,
                 SUM(deductions)        AS total_deductions,
                 SUM(tax)               AS total_tax,

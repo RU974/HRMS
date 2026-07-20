@@ -62,7 +62,18 @@ class PayrollCalculator
             try {
                 $start = Carbon::parse($shift->start_time);
                 $end = Carbon::parse($shift->end_time);
-                $shiftDailyHours = max(1, $end->diffInMinutes($start) / 60.0);
+                // Overnight shift (e.g. 22:00 -> 06:00): roll end forward a day so
+                // the diff reflects actual shift length instead of the ~16h gap
+                // you get from comparing raw times, which halves the hourly rate.
+                if ($end->lessThanOrEqualTo($start)) {
+                    $end->addDay();
+                }
+                // Carbon 3's diffInMinutes($other) returns $other - $this (sign flipped
+                // from Carbon 2's absolute-by-default behavior), so end->diffInMinutes(start)
+                // came back negative for every normal shift and got clamped to the max(1, ...)
+                // floor — every employee's hourly rate was computed as if their shift were 1
+                // hour long. Timestamp arithmetic sidesteps the ambiguity entirely.
+                $shiftDailyHours = max(1, ($end->getTimestamp() - $start->getTimestamp()) / 3600.0);
             } catch (\Exception $e) {
                 $shiftDailyHours = 8.0;
             }
