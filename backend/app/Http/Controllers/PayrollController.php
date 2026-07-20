@@ -249,7 +249,11 @@ class PayrollController extends Controller
             'requested_by' => $request->user()?->id,
         ]);
 
-        GeneratePayrollJob::dispatch($run->id, $employeeIds, $month, $year);
+        // Dispatched sync rather than queued: this app has no supervised, always-on
+        // queue worker (only a manually-started `queue:listen` in a second terminal),
+        // so a queued dispatch leaves the BackgroundRun stuck at "queued" forever
+        // whenever that process isn't running, and the frontend just hangs polling it.
+        GeneratePayrollJob::dispatchSync($run->id, $employeeIds, $month, $year);
 
         return $this->ok(['background_run_id' => $run->id], 'Payroll generation has been queued.', 202);
     }
