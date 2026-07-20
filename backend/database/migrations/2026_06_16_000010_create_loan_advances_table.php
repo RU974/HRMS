@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('loan_advances', function (Blueprint $table) {
             $table->id();
             $table->foreignId('employee_id')->constrained()->cascadeOnDelete();
-            $table->unsignedBigInteger('company_id')->nullable()->index();
+            $table->uuid('company_id')->nullable()->index();
             $table->string('title', 200);
             $table->decimal('amount', 15, 2);
             $table->decimal('outstanding_balance', 15, 2);

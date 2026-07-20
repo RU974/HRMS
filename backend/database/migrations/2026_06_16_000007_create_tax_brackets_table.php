@@ -9,7 +9,7 @@ return new class extends Migration {
     {
         Schema::create('tax_brackets', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('company_id')->nullable()->index();
+            $table->uuid('company_id')->nullable()->index();
             $table->string('name', 120);
             $table->decimal('min_income', 15, 2)->default(0);
             $table->decimal('max_income', 15, 2)->nullable()->comment('NULL means no upper limit');
