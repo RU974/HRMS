@@ -279,6 +279,9 @@ $registerRoutes = function (): void {
         Route::middleware('license.feature:payroll')->group(function () {
             Route::get('payroll/employee/{employeeId}', [PayrollController::class, 'getByEmployee']);
             Route::get('payroll/summary/monthly', [PayrollController::class, 'getMonthlySummary']);
+            Route::middleware('permission:payroll:manage_settings')->group(function () {
+                Route::get('payroll/bank-export', [PayrollController::class, 'bankExport']);
+            });
             Route::apiResource('payroll', PayrollController::class);
             Route::apiResource('payslips', PayslipController::class);
             Route::apiResource('bonuses', BonusController::class);
@@ -287,7 +290,6 @@ $registerRoutes = function (): void {
                 Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
                 Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
                 Route::post('payroll/{id}/approve', [PayrollController::class, 'approvePayroll']);
-                Route::get('payroll/bank-export', [PayrollController::class, 'bankExport']);
                 Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
                 Route::apiResource('payroll-processings', PayrollProcessingController::class);
                 Route::apiResource('tax-brackets', TaxBracketController::class)->only(['index', 'store', 'update', 'destroy']);
