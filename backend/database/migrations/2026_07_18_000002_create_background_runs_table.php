@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('type');
             $table->string('status')->default('queued');
-            $table->unsignedBigInteger('company_id')->nullable();
+            $table->uuid('company_id')->nullable();
             $table->unsignedBigInteger('requested_by')->nullable();
             $table->json('summary')->nullable();
             $table->text('error')->nullable();
