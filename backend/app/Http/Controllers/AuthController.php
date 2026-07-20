@@ -58,7 +58,7 @@ class AuthController extends Controller
         );
 
         return $this->ok([
-            'user' => $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']),
+            'user' => $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager', 'company']),
             'token' => $token,
         ], 'User registered successfully', 201);
     }
@@ -86,7 +86,7 @@ class AuthController extends Controller
             return $this->fail('Invalid credentials', 401);
         }
 
-        $user->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']);
+        $user->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager', 'company']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $this->auditLogService->recordRequest(
@@ -99,7 +99,7 @@ class AuthController extends Controller
             200
         );
 
-        return $this->ok(['user' => $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']), 'token' => $token], 'Login successful');
+        return $this->ok(['user' => $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager', 'company']), 'token' => $token], 'Login successful');
     }
 
     /**
@@ -127,7 +127,7 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        $user = $request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']);
+        $user = $request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager', 'company']);
 
         // Attach a lightweight license snapshot so the frontend can render
         // expiry banners and seat warnings without a separate API call.
