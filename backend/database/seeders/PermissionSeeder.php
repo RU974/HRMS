@@ -87,6 +87,9 @@ class PermissionSeeder extends Seeder
             ['module' => 'biometric', 'action' => 'manage_mapping', 'name' => 'biometric:manage_mapping'],
             // reports:view_own used by Employee role and route guards
             ['module' => 'reports', 'action' => 'view_own', 'name' => 'reports:view_own'],
+            // employees:view_all grants company-wide visibility, bypassing the
+            // manager/department/branch narrowing applied to plain employees:view holders
+            ['module' => 'employees', 'action' => 'view_all', 'name' => 'employees:view_all'],
             ['module' => '*', 'action' => '*', 'name' => '*.*'],
         ];
 

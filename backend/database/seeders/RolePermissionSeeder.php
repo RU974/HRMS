@@ -33,7 +33,7 @@ class RolePermissionSeeder extends Seeder
             ],
             'HR Manager' => [
                 'dashboard:view',
-                'employees:view', 'employees:create', 'employees:edit',
+                'employees:view', 'employees:view_all', 'employees:create', 'employees:edit',
                 'leaves:view', 'leaves:approve', 'leaves:manage_settings',
                 'attendance:view', 'attendance:edit',
                 'payroll:view',
@@ -47,7 +47,7 @@ class RolePermissionSeeder extends Seeder
             ],
             'HR Executive' => [
                 'dashboard:view',
-                'employees:view',
+                'employees:view', 'employees:view_all',
                 'leaves:view', 'leaves:approve',
                 'attendance:view',
                 'recruitment:view',
@@ -59,7 +59,7 @@ class RolePermissionSeeder extends Seeder
             ],
             'Payroll Manager' => [
                 'dashboard:view',
-                'employees:view',
+                'employees:view', 'employees:view_all',
                 'payroll:view', 'payroll:create', 'payroll:edit', 'payroll:approve', 'payroll:manage_settings',
                 'attendance:view',
                 'approvals:view', 'approvals:approve',
@@ -73,7 +73,7 @@ class RolePermissionSeeder extends Seeder
                 'dashboard:view',
                 'attendance:view', 'attendance:create', 'attendance:edit', 'attendance:manage_settings',
                 'biometric:view', 'biometric:sync', 'biometric:manage_mapping',
-                'employees:view',
+                'employees:view', 'employees:view_all',
                 'approvals:view',
                 'reports:view',
                 'announcement:view',
@@ -83,7 +83,7 @@ class RolePermissionSeeder extends Seeder
             'Recruiter' => [
                 'dashboard:view',
                 'recruitment:view', 'recruitment:create', 'recruitment:edit', 'recruitment:delete', 'recruitment:manage_settings',
-                'employees:view',
+                'employees:view', 'employees:view_all',
                 'leaves:view', 'leaves:create',
                 'approvals:view',
                 'chat:view', 'chat:create',

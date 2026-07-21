@@ -115,6 +115,14 @@ abstract class Controller
             return false;
         }
 
+        // Company-wide functional roles (HR Manager/Executive, Payroll Manager,
+        // Attendance Manager, Recruiter) hold employees:view_all and see the
+        // whole company; only line-manager-style roles stay narrowed to their
+        // own reports/department/branch.
+        if ($user->can('employees:view_all')) {
+            return false;
+        }
+
         return $user->can('employees:view')
             || $user->can('employees:export')
             || $user->can('attendance:view')
