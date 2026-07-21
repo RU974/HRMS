@@ -158,5 +158,10 @@ class RolePermissionSeeder extends Seeder
                 $role->permissions()->sync($permissions);
             }
         }
+
+        // Role permissions are cached per-user for 30 minutes (see PermissionService);
+        // without this, users who already made a request keep stale permissions until
+        // the cache naturally expires, even though the DB was just updated.
+        \Illuminate\Support\Facades\Cache::flush();
     }
 }
