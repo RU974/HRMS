@@ -15,6 +15,7 @@ class InventoryItemController extends Controller
 
         $query = InventoryItem::query()
             ->with('category:id,name')
+            ->with(['activeAssignments' => fn ($q) => $q->with('employee:id,name')])
             ->withCount('activeAssignments')
             ->orderBy('name');
 
@@ -37,6 +38,7 @@ class InventoryItemController extends Controller
 
         $query = InventoryItem::query()->with([
             'category:id,name',
+            'activeAssignments' => fn ($q) => $q->with('employee:id,name'),
             'assignments' => fn ($q) => $q->with('employee:id,name')->orderByDesc('assigned_date'),
         ]);
         $this->scopeToCompany($request, $query);

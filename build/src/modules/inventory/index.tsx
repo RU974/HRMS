@@ -87,6 +87,7 @@ function buildQRPayload(item: InventoryItem, companyId: string | null | undefine
     ...(item.location ? { loc: item.location } : {}),
     cond: item.condition,
     qty: item.quantity,
+    ...(item.assigned_to_name ? { assigned: item.assigned_to_name } : {}),
   });
 }
 
@@ -105,6 +106,7 @@ function QRLabel({ item, companyId }: { item: InventoryItem; companyId: string |
         {item.location && <p className="text-xs text-[var(--muted)]">Location: {item.location}</p>}
         <p className="text-xs text-[var(--muted)] capitalize">Condition: {item.condition}</p>
         <p className="text-xs text-[var(--muted)]">Qty: {item.quantity}</p>
+        {item.assigned_to_name && <p className="text-xs text-[var(--muted)]">Assigned to: {item.assigned_to_name}</p>}
       </div>
     </div>
   );
@@ -181,21 +183,11 @@ function QRModal({ item, companyId, onClose }: { item: InventoryItem; companyId:
 
 function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; companyId: string | null | undefined; onClose: () => void }) {
   const activeItems = items.filter((i) => !i.deleted_at);
+  const printRef = useRef<HTMLDivElement>(null);
 
   function handlePrint() {
-    const labels = activeItems.map((item) => {
-      const payload = buildQRPayload(item, companyId);
-      const encoded = encodeURIComponent(payload);
-      return `
-        <div class="label">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encoded}" width="150" height="150" alt="QR" />
-          <p class="label-name">${item.name}</p>
-          ${item.sku ? `<p class="label-meta">SKU: ${item.sku}</p>` : ""}
-          ${item.location ? `<p class="label-meta">Loc: ${item.location}</p>` : ""}
-          <p class="label-meta">Qty: ${item.quantity}</p>
-        </div>
-      `;
-    }).join("");
+    const content = printRef.current?.innerHTML;
+    if (!content) return;
 
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) return;
@@ -210,7 +202,7 @@ function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; co
             h2 { margin-bottom: 16px; font-size: 16px; }
             .grid { display: flex; flex-wrap: wrap; gap: 12px; }
             .label { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 1px solid #ccc; border-radius: 6px; padding: 12px; width: 180px; page-break-inside: avoid; }
-            .label img { width: 150px; height: 150px; }
+            .label svg { width: 150px; height: 150px; }
             .label-name { font-weight: 600; font-size: 12px; text-align: center; word-break: break-word; }
             .label-meta { font-size: 10px; color: #555; text-align: center; }
             @media print { body { padding: 8px; } h2 { display: none; } }
@@ -218,7 +210,7 @@ function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; co
         </head>
         <body>
           <h2>Inventory QR Code Sheet (${activeItems.length} items)</h2>
-          <div class="grid">${labels}</div>
+          <div class="grid">${content}</div>
         </body>
       </html>
     `);
@@ -238,18 +230,33 @@ function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; co
                 <QRCodeSVG value={buildQRPayload(item, companyId)} size={64} level="M" />
                 <p className="text-[10px] text-center font-medium leading-tight line-clamp-2">{item.name}</p>
                 {item.sku && <p className="text-[9px] text-[var(--muted)]">{item.sku}</p>}
+                {item.assigned_to_name && <p className="text-[9px] text-[var(--muted)]">{item.assigned_to_name}</p>}
               </div>
             ))}
           </div>
         </div>
         <p className="text-xs text-[var(--muted)]">
-          Opens a printable sheet with all {activeItems.length} active item QR labels. Each label includes name, SKU, location, and quantity.
+          Opens a printable sheet with all {activeItems.length} active item QR labels. Each label includes name, SKU, location, quantity, and the assigned person (if any).
         </p>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handlePrint}>
             <Printer className="mr-1.5 h-4 w-4" /> Print All Labels
           </Button>
+        </div>
+
+        {/* Off-screen source for printing: real rendered SVGs, no external network dependency */}
+        <div ref={printRef} style={{ position: "absolute", left: -99999, top: -99999 }} aria-hidden>
+          {activeItems.map((item) => (
+            <div className="label" key={item.id}>
+              <QRCodeSVG value={buildQRPayload(item, companyId)} size={150} level="M" includeMargin />
+              <p className="label-name">{item.name}</p>
+              {item.sku && <p className="label-meta">SKU: {item.sku}</p>}
+              {item.location && <p className="label-meta">Loc: {item.location}</p>}
+              {item.assigned_to_name && <p className="label-meta">Assigned: {item.assigned_to_name}</p>}
+              <p className="label-meta">Qty: {item.quantity}</p>
+            </div>
+          ))}
         </div>
       </div>
     </Modal>

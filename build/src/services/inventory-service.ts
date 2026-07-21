@@ -22,6 +22,7 @@ export interface InventoryItem {
   description?: string | null;
   deleted_at?: string | null;
   active_assignments_count?: number;
+  assigned_to_name?: string | null;
   assignments?: InventoryAssignment[];
 }
 

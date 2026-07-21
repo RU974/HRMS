@@ -33,6 +33,17 @@ class InventoryItem extends Model
         'quantity_available' => 'integer',
     ];
 
+    protected $appends = ['assigned_to_name'];
+
+    public function getAssignedToNameAttribute(): ?string
+    {
+        if (! $this->relationLoaded('activeAssignments')) {
+            return null;
+        }
+
+        return optional($this->activeAssignments->first()?->employee)->name;
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(InventoryCategory::class, 'category_id');
