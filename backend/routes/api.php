@@ -117,6 +117,7 @@ $registerRoutes = function (): void {
             Route::get('/attendance', [ReportController::class, 'attendance']);
             Route::get('/leave', [ReportController::class, 'leave']);
             Route::get('/payroll', [ReportController::class, 'payroll']);
+            Route::get('/inventory', [ReportController::class, 'inventory']);
             Route::get('/analytics', [ReportController::class, 'analytics']);
         });
         Route::middleware('permission:reports:view|reports:manage_settings')->apiResource('reports', ReportController::class);

@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\InventoryAssignment;
+use App\Models\InventoryItem;
 use App\Models\Leave;
 use App\Models\Payroll;
 use App\Models\Report;
@@ -82,6 +84,76 @@ class ReportAnalyticsService
         }
 
         return $query->groupBy('status')->get();
+    }
+
+    public function inventorySummary(Request $request, int $lowStockThreshold = 5): array
+    {
+        // InventoryItem/InventoryCategory carry a global CompanyScope, so no
+        // manual scopeByCompany() call is needed on these queries.
+        $byCategory = InventoryItem::query()
+            ->leftJoin('inventory_categories', 'inventory_categories.id', '=', 'inventory_items.category_id')
+            ->selectRaw(
+                "COALESCE(inventory_categories.name, 'Uncategorized') as category,
+                 COUNT(inventory_items.id) as item_count,
+                 SUM(inventory_items.quantity) as total_quantity,
+                 SUM(inventory_items.quantity_available) as total_available,
+                 SUM(inventory_items.quantity - inventory_items.quantity_available) as total_assigned,
+                 SUM(inventory_items.quantity * inventory_items.unit_cost) as total_value"
+            )
+            ->groupBy('category')
+            ->orderBy('category')
+            ->get();
+
+        $byCondition = InventoryItem::query()
+            ->selectRaw(
+                '`condition`,
+                 COUNT(*) as item_count,
+                 SUM(quantity) as total_quantity,
+                 SUM(quantity_available) as total_available,
+                 SUM(quantity * unit_cost) as total_value'
+            )
+            ->groupBy('condition')
+            ->orderBy('condition')
+            ->get();
+
+        $totals = InventoryItem::query()
+            ->selectRaw(
+                'COUNT(*) as total_items,
+                 SUM(quantity) as total_quantity,
+                 SUM(quantity_available) as total_available,
+                 SUM(quantity - quantity_available) as total_assigned,
+                 SUM(quantity * unit_cost) as total_value'
+            )
+            ->first();
+
+        $lowStock = InventoryItem::query()
+            ->with('category:id,name')
+            ->where('quantity_available', '<=', $lowStockThreshold)
+            ->orderBy('quantity_available')
+            ->get(['id', 'category_id', 'name', 'sku', 'quantity', 'quantity_available', 'unit_cost', 'location', 'condition']);
+
+        // whereHas('item') implicitly applies InventoryItem's global
+        // CompanyScope, scoping assignments to the current company.
+        $assignmentStatus = InventoryAssignment::query()
+            ->whereHas('item')
+            ->selectRaw('status, COUNT(*) as count, SUM(quantity) as total_quantity')
+            ->groupBy('status')
+            ->get();
+
+        return [
+            'by_category' => $byCategory,
+            'by_condition' => $byCondition,
+            'totals' => [
+                'total_items' => (int) ($totals?->total_items ?? 0),
+                'total_quantity' => (int) ($totals?->total_quantity ?? 0),
+                'total_available' => (int) ($totals?->total_available ?? 0),
+                'total_assigned' => (int) ($totals?->total_assigned ?? 0),
+                'total_value' => round((float) ($totals?->total_value ?? 0), 2),
+            ],
+            'low_stock_threshold' => $lowStockThreshold,
+            'low_stock' => $lowStock,
+            'assignment_status' => $assignmentStatus,
+        ];
     }
 
     public function analyticsOverview(Request $request, int $month, int $year): array

@@ -47,6 +47,7 @@ const AttendanceReportsPage = lazy(() => import("@/modules/reports/attendance-re
 const EmployeeReportsPage = lazy(() => import("@/modules/reports/employee-reports-page").then((m) => ({ default: m.EmployeeReportsPage })));
 const LeaveReportsPage = lazy(() => import("@/modules/reports/leave-reports-page").then((m) => ({ default: m.LeaveReportsPage })));
 const PayrollReportsPage = lazy(() => import("@/modules/reports/payroll-reports-page").then((m) => ({ default: m.PayrollReportsPage })));
+const InventoryReportsPage = lazy(() => import("@/modules/reports/inventory-reports-page").then((m) => ({ default: m.InventoryReportsPage })));
 const AnalyticsReportsPage = lazy(() => import("@/modules/reports/analytics-reports-page").then((m) => ({ default: m.AnalyticsReportsPage })));
 const SearchPage = lazy(() => import("@/modules/search").then((m) => ({ default: m.SearchPage })));
 const ProfilePage = lazy(() => import("@/modules/profile").then((m) => ({ default: m.ProfilePage })));
@@ -111,6 +112,7 @@ export const appRouter = createBrowserRouter([
       { path: "reports/employees",         element: withPermission(<EmployeeReportsPage />,       ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "reports/leave",             element: withPermission(<LeaveReportsPage />,          ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "reports/payroll",           element: withPermission(<PayrollReportsPage />,        ["reports:view", "reports:manage_settings", "reports:view_own"]) },
+      { path: "reports/inventory",         element: withPermission(<InventoryReportsPage />,      ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "reports/analytics",         element: withPermission(<AnalyticsReportsPage />,      ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "search",                    element: <SearchPage /> },
       { path: "inventory",                  element: withPermission(<InventoryPage />,             ["inventory:view", "inventory:create", "inventory:edit", "inventory:manage_settings"]) },

@@ -7,6 +7,7 @@ const reportAreas = [
   { title: "Employee Reports", description: "Review employee distribution and workforce status.", path: "/reports/employees" },
   { title: "Leave Reports", description: "Analyze leave volumes and approvals by month.", path: "/reports/leave" },
   { title: "Payroll Reports", description: "Monitor paid and pending payroll with salary totals.", path: "/reports/payroll" },
+  { title: "Inventory Reports", description: "Stock levels, valuation, and low-stock alerts by category.", path: "/reports/inventory" },
   { title: "Analytics Reports", description: "Cross-module HR analytics with consolidated KPIs.", path: "/reports/analytics" },
 ];
 

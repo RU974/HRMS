@@ -14,7 +14,7 @@ use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
-    private const REPORT_TYPES = ['attendance', 'employee', 'leave', 'payroll', 'custom'];
+    private const REPORT_TYPES = ['attendance', 'employee', 'leave', 'payroll', 'inventory', 'custom'];
 
     public function index(Request $request)
     {
@@ -278,6 +278,37 @@ class ReportController extends Controller
                     'total_bonus' => $row->total_bonus,
                     'total_deductions' => $row->total_deductions,
                     'total_tax' => $row->total_tax,
+                ])->toArray(),
+                $format
+            );
+        }
+
+        return $this->ok($data);
+    }
+
+    public function inventory(Request $request)
+    {
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
+
+        $validated = $request->validate([
+            'low_stock_threshold' => 'nullable|integer|min:0|max:100000',
+        ]);
+
+        $service = new ReportAnalyticsService();
+        $data = $service->inventorySummary($request, (int) ($validated['low_stock_threshold'] ?? 5));
+        $format = $this->resolveExportFormat($request);
+
+        if ($format) {
+            return (new ReportExportService())->export(
+                'inventory-report',
+                ['Category', 'Item Count', 'Total Quantity', 'Available Quantity', 'Assigned Quantity', 'Total Value'],
+                collect($data['by_category'])->map(fn ($row) => [
+                    'category' => $row->category,
+                    'item_count' => $row->item_count,
+                    'total_quantity' => $row->total_quantity,
+                    'total_available' => $row->total_available,
+                    'total_assigned' => $row->total_assigned,
+                    'total_value' => $row->total_value,
                 ])->toArray(),
                 $format
             );

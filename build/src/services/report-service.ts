@@ -1,7 +1,7 @@
 import { apiClient, API_BASE_URL } from "./api-client";
 import { useAuthStore } from "@/store/auth-store";
 
-export type ReportType = "attendance" | "employee" | "leave" | "payroll" | "custom";
+export type ReportType = "attendance" | "employee" | "leave" | "payroll" | "inventory" | "custom";
 export type ReportStatus = "active" | "inactive";
 
 export interface ReportUser {
@@ -126,6 +126,62 @@ export function getLeaveReportSummary(month: number, year: number) {
 
 export function getReportsAnalytics(month: number, year: number) {
   return apiClient<ReportsAnalyticsSummary>(`/reports/analytics?month=${month}&year=${year}`);
+}
+
+export interface InventoryCategoryReportRow {
+  category: string;
+  item_count: number;
+  total_quantity: number;
+  total_available: number;
+  total_assigned: number;
+  total_value: number;
+}
+
+export interface InventoryConditionReportRow {
+  condition: string;
+  item_count: number;
+  total_quantity: number;
+  total_available: number;
+  total_value: number;
+}
+
+export interface InventoryLowStockRow {
+  id: number;
+  category_id?: number | null;
+  category?: { id: number; name: string } | null;
+  name: string;
+  sku?: string | null;
+  quantity: number;
+  quantity_available: number;
+  unit_cost: number;
+  location?: string | null;
+  condition: string;
+}
+
+export interface InventoryAssignmentStatusRow {
+  status: string;
+  count: number;
+  total_quantity: number;
+}
+
+export interface InventoryReportSummary {
+  by_category: InventoryCategoryReportRow[];
+  by_condition: InventoryConditionReportRow[];
+  totals: {
+    total_items: number;
+    total_quantity: number;
+    total_available: number;
+    total_assigned: number;
+    total_value: number;
+  };
+  low_stock_threshold: number;
+  low_stock: InventoryLowStockRow[];
+  assignment_status: InventoryAssignmentStatusRow[];
+}
+
+export function getInventoryReportSummary(lowStockThreshold?: number) {
+  const query = lowStockThreshold != null ? `?low_stock_threshold=${lowStockThreshold}` : "";
+  return apiClient<InventoryReportSummary>(`/reports/inventory${query}`);
 }
 
 export function updateReportSchedule(id: number, payload: ReportScheduleUpdate) {
