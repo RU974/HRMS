@@ -281,7 +281,13 @@ abstract class Controller
             if ($user && !$user->hasAnyRole([User::ROLE_SUPER_ADMIN])) {
                 abort(403, 'Your account is not associated with a company.');
             }
-            return;
+
+            // A super admin may explicitly filter to one company (e.g. the employee
+            // list's company picker); without it they keep seeing all companies.
+            $companyId = $request->query('company_id');
+            if (!$companyId) {
+                return;
+            }
         }
         if ($relation === '') {
             $query->where('company_id', $companyId);

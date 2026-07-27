@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
 import { FormInput } from "@/components/forms/form-input";
 import { useAuthStore } from "@/store/auth-store";
+import { isSuperAdminRole } from "@/config/rbac";
+import { listCompanies } from "@/services/settings-service";
 import {
   type Employee,
   type EmployeeImportResult,
@@ -110,17 +112,26 @@ function StatusBadge({ status }: { status: string }) {
 export function EmployeesPage() {
   const navigate = useNavigate();
   const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
+  const user = useAuthStore((s) => s.user);
+  const isSuperAdmin = isSuperAdminRole(user);
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
+  const companiesQuery = useQuery({
+    queryKey: ["settings", "companies"],
+    queryFn: listCompanies,
+    enabled: isSuperAdmin,
+  });
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["employees", page, search],
-    queryFn: () => listEmployeesPaginated(page, search),
+    queryKey: ["employees", page, search, companyId],
+    queryFn: () => listEmployeesPaginated(page, search, companyId || undefined),
     retry: false,
     placeholderData: (prev) => prev,
   });
@@ -175,6 +186,22 @@ export function EmployeesPage() {
               </Button>
             )}
           </form>
+
+          {isSuperAdmin && (
+            <select
+              value={companyId}
+              onChange={(e) => {
+                setCompanyId(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm shrink-0"
+            >
+              <option value="">All companies</option>
+              {(companiesQuery.data ?? []).map((company) => (
+                <option key={company.id} value={company.id}>{company.name}</option>
+              ))}
+            </select>
+          )}
 
           <div className="flex items-center gap-2 ml-auto">
             <Button variant="outline" onClick={handleExport} disabled={exporting} className="shrink-0">
