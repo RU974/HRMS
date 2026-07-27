@@ -109,6 +109,7 @@ class RolePermissionSeeder extends Seeder
                 'reports:view',
                 'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:assign',
                 'biometric:view', 'biometric:sync', 'biometric:manage_mapping',
+                'inventory:view', 'inventory:create', 'inventory:edit',
                 'announcement:view',
                 'notification:view',
                 'chat:view', 'chat:create',
