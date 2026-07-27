@@ -17,6 +17,7 @@ export type UserItem = {
   company?: { id: string; name: string } | null;
   branch?: { id: string; name: string } | null;
   is_active?: boolean;
+  employee?: { id: number; department_id?: number | null; designation?: string | null; department?: { id: number; name: string } | null } | null;
 };
 export type CompanyItem = {
   id: string;

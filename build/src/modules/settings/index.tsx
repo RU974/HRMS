@@ -18,6 +18,7 @@ import {
   listThemes, listUsers, updateBranch, updateCompany, updateRole,
   updateTheme, updateUser, LogItem,
 } from "@/services/settings-service";
+import { DepartmentItem, listDepartmentsForCompany } from "@/services/hr-management-service";
 import { useThemeStore } from "@/store/theme-store";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import type { CurrencyCode } from "@/store/currency-store";
@@ -161,8 +162,9 @@ function EmptyState({ icon: Icon, title, body }: { icon: LucideIcon; title: stri
 function UserModal({ open, onClose, user, roles, companies, branches, onSave, busy }:
   { open: boolean; onClose: () => void; user: UserItem | null; roles: RoleItem[]; companies: CompanyItem[]; branches: BranchItem[]; onSave: (data: Record<string, unknown>) => Promise<void>; busy: boolean }) {
   const isEdit = Boolean(user);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role_ids: [] as number[], company_id: "", branch_id: "", is_active: true });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role_ids: [] as number[], company_id: "", branch_id: "", is_active: true, department_id: "", designation: "" });
   const [showPw, setShowPw] = useState(false);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -172,9 +174,18 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
         company_id: user.company_id ?? "",
         branch_id: user.branch_id ?? "",
         is_active: user.is_active ?? true,
-      } : { name: "", email: "", password: "", role_ids: [] as number[], company_id: "", branch_id: "", is_active: true });
+        department_id: user.employee?.department_id ? String(user.employee.department_id) : "",
+        designation: user.employee?.designation ?? "",
+      } : { name: "", email: "", password: "", role_ids: [] as number[], company_id: "", branch_id: "", is_active: true, department_id: "", designation: "" });
     }
   }, [open, user, roles]); // roles included so pre-selection resolves after async load
+
+  useEffect(() => {
+    if (!open || !form.company_id) { setDepartments([]); return; }
+    let cancelled = false;
+    listDepartmentsForCompany(form.company_id).then(list => { if (!cancelled) setDepartments(Array.isArray(list) ? list : []); }).catch(() => { if (!cancelled) setDepartments([]); });
+    return () => { cancelled = true; };
+  }, [open, form.company_id]);
 
   const availBranches = branches.filter(b => b.company_id === form.company_id);
   const valid = form.name && form.email && form.role_ids.length > 0 && (isEdit || form.password.length >= 8);
@@ -190,6 +201,8 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
       company_id: form.company_id || null,
       branch_id: form.branch_id || null,
       is_active: form.is_active,
+      department_id: form.department_id || null,
+      designation: form.designation || null,
     };
     if (!isEdit || form.password) payload.password = form.password;
     await onSave(payload);
@@ -235,6 +248,22 @@ function UserModal({ open, onClose, user, roles, companies, branches, onSave, bu
             </select>
           </FormField>
         </div>
+
+        {form.company_id && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+            <FormField label="Department" hint="Adding a department makes this person visible in the company's Employees list.">
+              <select className={inputCls} value={form.department_id}
+                onChange={e => setForm(p => ({ ...p, department_id: e.target.value }))}>
+                <option value="">No department (system access only)</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Designation">
+              <input className={inputCls} placeholder="e.g. IT Support Officer" value={form.designation}
+                onChange={e => setForm(p => ({ ...p, designation: e.target.value }))} />
+            </FormField>
+          </div>
+        )}
 
         <FormField label={`Assign Roles — ${form.role_ids.length} selected`}>
           <div className="grid max-h-44 gap-1.5 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--background)] p-2">

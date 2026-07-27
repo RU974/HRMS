@@ -121,6 +121,8 @@ export interface DepartmentDetailItem extends DepartmentItem {
 }
 
 export const listDepartments = () => apiClient<DepartmentItem[]>("/departments");
+export const listDepartmentsForCompany = (companyId: string) =>
+  apiClient<DepartmentItem[]>(`/departments?company_id=${companyId}`);
 export const getDepartment = (id: number) => apiClient<DepartmentDetailItem>(`/departments/${id}`);
 export const createDepartment = (payload: { name: string }) => apiClient<DepartmentItem>("/departments", { method: "POST", body: JSON.stringify(payload) });
 export const updateDepartment = (id: number, payload: { name: string }) => apiClient<DepartmentItem>(`/departments/${id}`, { method: "PUT", body: JSON.stringify(payload) });
