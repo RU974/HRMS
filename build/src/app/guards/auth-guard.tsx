@@ -48,6 +48,26 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, setUser, logout]);
 
+  // Also refresh on tab focus (throttled) so role/permission changes made by
+  // an admin elsewhere show up without requiring a manual logout/login —
+  // an SPA tab left open otherwise keeps the permission snapshot from login.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let lastRefresh = Date.now();
+    const REFRESH_INTERVAL_MS = 60_000;
+
+    const handleFocus = () => {
+      if (Date.now() - lastRefresh < REFRESH_INTERVAL_MS) return;
+      lastRefresh = Date.now();
+      me()
+        .then(({ user, license }) => setUser(user, license))
+        .catch(() => logout());
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [isAuthenticated, setUser, logout]);
+
   if (!isAuthenticated) return <Navigate to="/auth/login" replace />;
   if (refreshing) return null;
   return <>{children}</>;
