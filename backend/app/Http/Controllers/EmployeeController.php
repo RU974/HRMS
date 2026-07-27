@@ -68,16 +68,11 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:create');
 
-        $companyId      = $request->user()?->company_id;
-        $licenseService = app(\App\Services\LicenseService::class);
-        try {
-            $licenseService->assertCanAddEmployee($companyId);
-        } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
+        $isSuperAdmin = (bool) $request->user()?->hasAnyRole([User::ROLE_SUPER_ADMIN]);
 
         $validated = $request->validate([
             'user_id' => ['nullable', 'exists:users,id', Rule::unique('employees', 'user_id')],
+            'company_id' => [$isSuperAdmin ? 'required' : 'nullable', 'uuid', 'exists:companies,id'],
             'name' => 'nullable|string|max:255',
             'first_name' => 'nullable|string|max:255',
             'last_name' => 'nullable|string|max:255',
@@ -106,10 +101,21 @@ class EmployeeController extends Controller
             'role' => 'nullable|string|in:' . implode(',', User::availableRoles()),
         ]);
 
+        // Non-super-admins can only create employees in their own company;
+        // super admins must explicitly pick the target company (validated above).
+        $companyId = $isSuperAdmin ? $validated['company_id'] : $request->user()?->company_id;
+
+        $licenseService = app(\App\Services\LicenseService::class);
+        try {
+            $licenseService->assertCanAddEmployee($companyId);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
         $this->assertUserCompanyMatch($request, $validated['user_id'] ?? null);
         $this->assertEmployeeReferenceInCompany($request, $validated['manager_id'] ?? null);
         $name = $validated['name'] ?? trim(($validated['first_name'] ?? '') . ' ' . ($validated['last_name'] ?? ''));
-        $employee = DB::transaction(function () use ($validated, $name, $request) {
+        $employee = DB::transaction(function () use ($validated, $name, $request, $companyId) {
             $linkedUserId = $validated['user_id'] ?? null;
             $createUser = $validated['create_user'] ?? true;
             $roleName = $validated['role'] ?? User::ROLE_EMPLOYEE;
@@ -125,7 +131,7 @@ class EmployeeController extends Controller
                         'email' => $validated['email'],
                         'username' => $validated['username'] ?? explode('@', $validated['email'])[0],
                         'password' => Hash::make($validated['password'] ?? Str::password(12)),
-                        'company_id' => $request->user()?->company_id,
+                        'company_id' => $companyId,
                 ]);
                 $linkedUserId = $linkedUser->id;
             }
@@ -153,7 +159,7 @@ class EmployeeController extends Controller
 
             return Employee::create([
                 'user_id' => $linkedUserId,
-                'company_id' => $request->user()?->company_id,
+                'company_id' => $companyId,
                 'name' => $name,
                 'email' => $validated['email'],
                 'phone' => $validated['phone'] ?? null,

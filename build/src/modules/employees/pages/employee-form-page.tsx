@@ -9,6 +9,9 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
+import { useAuthStore } from "@/store/auth-store";
+import { isSuperAdminRole } from "@/config/rbac";
+import { listCompanies } from "@/services/settings-service";
 import {
   createEmployee,
   getEmployees,
@@ -71,6 +74,7 @@ const employeeSchema = z.object({
   username: z.string().optional(),
   password: z.string().optional(),
   role: z.string().min(1, "Role is required"),
+  company_id: z.string().optional(),
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
@@ -79,10 +83,13 @@ export function EmployeeFormPage() {
   const navigate = useNavigate();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<File | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const isSuperAdmin = isSuperAdminRole(user);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
@@ -107,9 +114,18 @@ export function EmployeeFormPage() {
       username: "",
       password: "",
       role: "Employee",
+      company_id: "",
     },
   });
 
+  const selectedCompanyId = watch("company_id");
+
+  const companiesQuery = useQuery({
+    queryKey: ["settings", "companies"],
+    queryFn: listCompanies,
+    enabled: isSuperAdmin,
+    retry: false,
+  });
   const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: listDepartments, retry: false });
   const designationsQuery = useQuery({ queryKey: ["designations"], queryFn: listDesignations, retry: false });
   const shiftsQuery = useQuery({ queryKey: ["shifts"], queryFn: listShifts, retry: false });
@@ -120,6 +136,8 @@ export function EmployeeFormPage() {
     onSuccess: () => { toast.success("Employee added", "New employee has been created successfully."); navigate("/employees"); },
     onError: (e: Error) => toast.error("Failed to save", e.message),
   });
+
+  const missingCompany = isSuperAdmin && !selectedCompanyId;
 
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -228,6 +246,18 @@ export function EmployeeFormPage() {
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
+            {isSuperAdmin && (
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium">Company</label>
+                <select className={inputClass} {...register("company_id")}>
+                  <option value="">Select company</option>
+                  {(companiesQuery.data ?? []).map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-[var(--muted)]">As Super Admin, you must choose which company this employee belongs to.</p>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Employee ID</label>
               <FormInput {...register("employee_number")} />
@@ -354,10 +384,13 @@ export function EmployeeFormPage() {
         </Card>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={mutation.isPending}>
+          <Button type="submit" disabled={mutation.isPending || missingCompany}>
             {mutation.isPending ? "Saving..." : "Create Employee"}
           </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/employees")}>Cancel</Button>
+          {missingCompany && (
+            <p className="text-sm text-red-500">Please select a company before creating this employee.</p>
+          )}
           {mutation.error instanceof Error && (
             <p className="text-sm text-red-500">{mutation.error.message}</p>
           )}
