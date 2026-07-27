@@ -21,7 +21,7 @@ class RolePermissionSeeder extends Seeder
                 'payroll:view', 'payroll:edit', 'payroll:manage_settings',
                 'recruitment:view', 'recruitment:create', 'recruitment:edit', 'recruitment:delete',
                 'approvals:view', 'approvals:approve', 'approvals:manage_settings',
-                'settings:manage_settings', 'reports:view', 'reports:manage_settings',
+                'settings:manage_settings', 'reports:view', 'reports:manage_settings', 'reports:export',
                 'performance:view', 'performance:edit', 'performance:manage_settings',
                 'announcement:view', 'announcement:create', 'announcement:edit', 'announcement:delete',
                 'notification:view', 'notification:create', 'notification:edit', 'notification:delete',

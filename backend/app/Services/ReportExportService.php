@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Response;
 
 class ReportExportService
 {
-    public function export(string $filename, array $columns, array $rows, string $format)
+    public const PDF_TEMPLATES = ['classic', 'corporate', 'compact'];
+
+    public function export(string $filename, array $columns, array $rows, string $format, array $context = [])
     {
-        $built = $this->buildExport($filename, $columns, $rows, $format);
+        $built = $this->buildExport($filename, $columns, $rows, $format, $context);
 
         return Response::make($built['content'], 200, [
             'Content-Type' => $built['mime'],
@@ -19,8 +22,10 @@ class ReportExportService
     /**
      * Builds the raw export payload (content/mime/filename) without wrapping
      * it in an HTTP response, so it can also be used as a mail attachment.
+     *
+     * $context may include: template (pdf style), company_name, generated_by.
      */
-    public function buildExport(string $filename, array $columns, array $rows, string $format): array
+    public function buildExport(string $filename, array $columns, array $rows, string $format, array $context = []): array
     {
         $format = strtolower(trim($format));
 
@@ -42,7 +47,7 @@ class ReportExportService
 
         if ($format === 'pdf') {
             return [
-                'content' => $this->toPdf($filename, $columns, $rows),
+                'content' => $this->toPdf($filename, $columns, $rows, $context),
                 'mime' => 'application/pdf',
                 'filename' => $this->safeFileName($filename) . '.pdf',
             ];
@@ -88,54 +93,28 @@ class ReportExportService
         return $build;
     }
 
-    private function toPdf(string $title, array $columns, array $rows): string
+    private function toPdf(string $title, array $columns, array $rows, array $context = []): string
     {
-        $lines = [];
-        $lines[] = $title;
-        $lines[] = str_repeat('-', 120);
-        $lines[] = implode(' | ', $columns);
-        $lines[] = str_repeat('-', 120);
-
-        foreach ($rows as $row) {
-            $lines[] = implode(' | ', array_map([$this, 'normalizeValue'], $row));
+        $template = strtolower((string) ($context['template'] ?? 'classic'));
+        if (!in_array($template, self::PDF_TEMPLATES, true)) {
+            $template = 'classic';
         }
 
-        $streamContent = '';
-        $y = 760;
-        foreach ($lines as $line) {
-            $escaped = $this->escapePdfText($line);
-            $streamContent .= "BT /F1 10 Tf 40 {$y} Td ({$escaped}) Tj ET\n";
-            $y -= 14;
-            if ($y < 40) {
-                break;
-            }
-        }
+        $displayRows = array_map(
+            fn ($row) => array_map([$this, 'normalizeValue'], $row),
+            $rows
+        );
 
-        $objects = [];
-        $objects[] = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
-        $objects[] = "2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n";
-        $objects[] = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n";
-        $objects[] = "4 0 obj\n<< /Length " . strlen($streamContent) . " >>\nstream\n{$streamContent}endstream\nendobj\n";
-        $objects[] = "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
+        $pdf = Pdf::loadView("reports.pdf.{$template}", [
+            'title' => $title,
+            'columns' => $columns,
+            'rows' => $displayRows,
+            'companyName' => $context['company_name'] ?? 'HRMS',
+            'generatedBy' => $context['generated_by'] ?? null,
+            'generatedAt' => $context['generated_at'] ?? now()->format('M j, Y g:i A'),
+        ])->setPaper('a4', 'portrait');
 
-        $pdf = "%PDF-1.4\n";
-        $offsets = [];
-        $pos = strlen($pdf);
-
-        foreach ($objects as $object) {
-            $offsets[] = $pos;
-            $pdf .= $object;
-            $pos += strlen($object);
-        }
-
-        $xref = "xref\n0 " . (count($objects) + 1) . "\n0000000000 65535 f \n";
-        foreach ($offsets as $offset) {
-            $xref .= str_pad((string) $offset, 10, '0', STR_PAD_LEFT) . " 00000 n \n";
-        }
-
-        $trailer = "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n" . $pos . "\n%%EOF\n";
-
-        return $pdf . $xref . $trailer;
+        return $pdf->output();
     }
 
     private function normalizeValue(mixed $value): string
@@ -153,12 +132,6 @@ class ReportExportService
         }
 
         return (string) $value;
-    }
-
-    private function escapePdfText(string $value): string
-    {
-        $escaped = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
-        return preg_replace('/[^\x20-\x7E]/', '?', $escaped);
     }
 
     private function safeFileName(string $name): string

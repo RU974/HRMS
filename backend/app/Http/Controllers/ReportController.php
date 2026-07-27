@@ -190,7 +190,8 @@ class ReportController extends Controller
                     'status' => $row->status,
                     'count' => $row->count,
                 ])->toArray(),
-                $format
+                $format,
+                $this->exportContext($request)
             );
         }
 
@@ -218,7 +219,8 @@ class ReportController extends Controller
                     'status' => $row->status,
                     'count' => $row->count,
                 ])->toArray(),
-                $format
+                $format,
+                $this->exportContext($request)
             );
         }
 
@@ -246,7 +248,8 @@ class ReportController extends Controller
                     'status' => $row->status,
                     'count' => $row->count,
                 ])->toArray(),
-                $format
+                $format,
+                $this->exportContext($request)
             );
         }
 
@@ -279,7 +282,8 @@ class ReportController extends Controller
                     'total_deductions' => $row->total_deductions,
                     'total_tax' => $row->total_tax,
                 ])->toArray(),
-                $format
+                $format,
+                $this->exportContext($request)
             );
         }
 
@@ -310,7 +314,8 @@ class ReportController extends Controller
                     'total_assigned' => $row->total_assigned,
                     'total_value' => $row->total_value,
                 ])->toArray(),
-                $format
+                $format,
+                $this->exportContext($request)
             );
         }
 
@@ -338,7 +343,8 @@ class ReportController extends Controller
                     'metric' => $key,
                     'value' => $value,
                 ])->values()->toArray(),
-                $format
+                $format,
+                $this->exportContext($request)
             );
         }
 
@@ -362,6 +368,24 @@ class ReportController extends Controller
         }
 
         return $format;
+    }
+
+    /**
+     * Branding/attribution passed to the export builder. The PDF template
+     * choice only applies to the pdf format; other formats ignore it.
+     */
+    private function exportContext(Request $request): array
+    {
+        $template = strtolower((string) $request->query('template', 'classic'));
+        if (!in_array($template, ReportExportService::PDF_TEMPLATES, true)) {
+            $template = 'classic';
+        }
+
+        return [
+            'template' => $template,
+            'company_name' => $request->user()?->company?->name ?? 'HRMS',
+            'generated_by' => $request->user()?->name,
+        ];
     }
 
     private function assertCompanyAccess(Request $request, Report $report): void

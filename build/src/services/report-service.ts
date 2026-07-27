@@ -11,6 +11,7 @@ export interface ReportUser {
 }
 
 export type ExportFormat = "csv" | "excel" | "pdf";
+export type PdfTemplate = "classic" | "corporate" | "compact";
 
 export interface ReportSchedule {
   enabled: boolean;
@@ -202,10 +203,19 @@ function parseExportFilename(header: string | null, fallback: string) {
  * same summary endpoint with ?format=, bypassing apiClient's JSON parsing
  * since the response body is a binary/text file, not a JSON envelope.
  */
-export async function downloadReportExport(path: string, format: ExportFormat, fallbackFilename: string) {
+export async function downloadReportExport(
+  path: string,
+  format: ExportFormat,
+  fallbackFilename: string,
+  template?: PdfTemplate
+) {
   const token = useAuthStore.getState().token;
   const separator = path.includes("?") ? "&" : "?";
-  const response = await fetch(`${API_BASE_URL}${path}${separator}format=${format}`, {
+  let query = `format=${format}`;
+  if (format === "pdf" && template) {
+    query += `&template=${template}`;
+  }
+  const response = await fetch(`${API_BASE_URL}${path}${separator}${query}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
 
