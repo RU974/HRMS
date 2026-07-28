@@ -174,7 +174,7 @@ export function EmployeeDashboard() {
     { label: "My Profile",    to: "/profile",                  icon: User,          desc: "Update your details" },
     { label: "Attendance",    to: "/attendance",               icon: Clock,         desc: "View full log" },
     { label: "Request Leave", to: "/leaves",                   icon: CalendarRange, desc: `${totalRemaining} days left` },
-    { label: "My Payslips",   to: "/payroll?tab=payslips",     icon: Wallet,        desc: "Download payslips" },
+    { label: "My Payslips",   to: "/profile?tab=payslips",     icon: Wallet,        desc: "Download payslips" },
     { label: "Documents",     to: "/employee-documents",       icon: FileText,      desc: "Your files" },
     { label: "Chat",          to: "/chat",                     icon: MessageSquare, desc: "Team messaging" },
     ...(showAdminLinks ? [{ label: "Notifications", to: "/notifications", icon: Bell, desc: `${unread} unread` }] : []),

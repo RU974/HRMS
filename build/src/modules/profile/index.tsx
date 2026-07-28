@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,24 @@ export function ProfilePage() {
   const canViewOwnPayslips =
     hasPermission("payroll:view_own") || hasPermission("payroll:view") || hasPermission("payroll:manage_settings");
 
-  const [tab, setTab] = useState<ActiveTab>("profile");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const validTabs: ActiveTab[] = ["profile", "password", "payslips", "permissions"];
+  const requestedTab = searchParams.get("tab") as ActiveTab | null;
+  const [tab, setTab] = useState<ActiveTab>(
+    requestedTab && validTabs.includes(requestedTab) ? requestedTab : "profile"
+  );
+
+  useEffect(() => {
+    if (requestedTab && validTabs.includes(requestedTab) && requestedTab !== tab) {
+      setTab(requestedTab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab]);
+
+  function switchTab(t: ActiveTab) {
+    setTab(t);
+    setSearchParams({ tab: t });
+  }
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pwMsg, setPwMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(user?.employee ? null : null);
@@ -196,7 +213,7 @@ export function ProfilePage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => switchTab(t.key)}
             className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
               tab === t.key
                 ? "border-[var(--primary)] text-[var(--primary)]"

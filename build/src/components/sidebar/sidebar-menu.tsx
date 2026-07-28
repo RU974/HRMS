@@ -299,7 +299,7 @@ function EmployeeShortcuts({ collapsed }: { collapsed: boolean }) {
   });
 
   const leaveLinkVisible   = hasPermission("leaves:view") || hasPermission("leaves:approve");
-  const payrollLinkVisible = hasPermission("payroll:view") || hasPermission("payroll:manage_settings");
+  const payrollLinkVisible = hasPermission("payroll:view") || hasPermission("payroll:manage_settings") || hasPermission("payroll:view_own");
   const showComms          = isSuperAdminRole(user);
 
   if (!employeeId) return null;
@@ -336,7 +336,7 @@ function EmployeeShortcuts({ collapsed }: { collapsed: boolean }) {
       <QuickButton icon={LogIn}              label="Check In"       onClick={() => checkIn.mutate()}  loading={checkIn.isPending}  disabled={busy} accent="#10b981" collapsed={collapsed} />
       <QuickButton icon={LogOut}             label="Check Out"      onClick={() => checkOut.mutate()} loading={checkOut.isPending} disabled={busy} accent="#f59e0b" collapsed={collapsed} />
       {leaveLinkVisible   && <QuickButton icon={CalendarRange}     label="Request Leave"  path="/leaves"               accent="#6366f1" collapsed={collapsed} />}
-      {payrollLinkVisible && <QuickButton icon={WalletCards}       label="My Payslips"    path="/payroll?tab=payslips" accent="#0ea5e9" collapsed={collapsed} />}
+      {payrollLinkVisible && <QuickButton icon={WalletCards}       label="My Payslips"    path="/profile?tab=payslips" accent="#0ea5e9" collapsed={collapsed} />}
       {showComms          && <QuickButton icon={Bell}              label="Notifications"  path="/notifications"        accent="#f59e0b" collapsed={collapsed} />}
       <QuickButton           icon={MessageCircleMore} label="Team Chat" path="/chat"                    accent="#8b5cf6" collapsed={collapsed} />
     </div>
