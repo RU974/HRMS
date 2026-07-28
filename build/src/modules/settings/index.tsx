@@ -22,6 +22,7 @@ import { DepartmentItem, listDepartmentsForCompany } from "@/services/hr-managem
 import { useThemeStore } from "@/store/theme-store";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import type { CurrencyCode } from "@/store/currency-store";
+import { useReportTemplateStore, REPORT_TEMPLATE_OPTIONS } from "@/store/report-template-store";
 import { hasAllPermissions, hasAnyPermission, hasPermission } from "@/utils/permissions";
 import { LicensingTab } from "./licensing-tab";
 
@@ -946,6 +947,7 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { currency, setCurrency } = useCurrencyStore();
+  const { reportTemplate, setReportTemplate } = useReportTemplateStore();
 
   const canCompanyScope = Boolean(user?.company_id);
   const options = [
@@ -1031,6 +1033,22 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
         <p className="mt-3 text-xs text-[var(--muted)]">
           Exchange rates are approximate. Stored values remain in PKR; display is converted automatically.
         </p>
+      </div>
+
+      {/* ── Report Template ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+        <p className="mb-1 text-sm font-semibold text-[var(--text)]">Report Template</p>
+        <p className="mb-4 text-xs text-[var(--muted)]">Default PDF layout used when exporting reports. You can still override it from the export controls on each report page.</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {REPORT_TEMPLATE_OPTIONS.map(o => (
+            <button key={o.value} type="button" onClick={() => setReportTemplate(o.value)}
+              className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition ${reportTemplate === o.value ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:border-[var(--primary)]/40"}`}>
+              <ScrollText className="h-5 w-5 text-[var(--text)]" />
+              <p className="text-sm font-semibold text-[var(--text)]">{o.label}</p>
+              <p className="text-xs text-[var(--muted)]">{o.desc}</p>
+            </button>
+          ))}
+        </div>
       </div>
 
       {themes.length > 0 && (

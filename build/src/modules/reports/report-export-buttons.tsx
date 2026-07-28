@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth-store";
+import { useReportTemplateStore, REPORT_TEMPLATE_OPTIONS } from "@/store/report-template-store";
 import { downloadReportExport, type ExportFormat, type PdfTemplate } from "@/services/report-service";
 
 const FORMATS: { format: ExportFormat; label: string }[] = [
@@ -9,17 +10,12 @@ const FORMATS: { format: ExportFormat; label: string }[] = [
   { format: "pdf", label: "PDF" },
 ];
 
-const PDF_TEMPLATES: { value: PdfTemplate; label: string }[] = [
-  { value: "classic", label: "Classic" },
-  { value: "corporate", label: "Corporate" },
-  { value: "compact", label: "Compact" },
-];
-
 export function ReportExportButtons({ path, filename }: { path: string; filename: string }) {
   const canExport = useAuthStore((state) => state.hasPermission("reports:export"));
+  const defaultTemplate = useReportTemplateStore((state) => state.reportTemplate);
   const [pending, setPending] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>("classic");
+  const [pdfTemplate, setPdfTemplate] = useState<PdfTemplate>(defaultTemplate);
 
   if (!canExport) return null;
 
@@ -44,7 +40,7 @@ export function ReportExportButtons({ path, filename }: { path: string; filename
           onChange={(event) => setPdfTemplate(event.target.value as PdfTemplate)}
           title="PDF template style"
         >
-          {PDF_TEMPLATES.map((template) => (
+          {REPORT_TEMPLATE_OPTIONS.map((template) => (
             <option key={template.value} value={template.value}>
               {template.label} template
             </option>
