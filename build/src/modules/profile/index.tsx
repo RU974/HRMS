@@ -10,11 +10,12 @@ import { useAuthStore, getCurrentPermissionKeys } from "@/store/auth-store";
 import { getUserRoleKeys, isSuperAdminRole } from "@/config/rbac";
 import { me, changePassword, updateProfile } from "@/services/auth-service";
 import { toast } from "@/components/notifications/toast";
+import { MyPayslipsTab } from "./my-payslips-tab";
 
 const inputClass =
   "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30";
 
-type ActiveTab = "profile" | "password" | "permissions";
+type ActiveTab = "profile" | "password" | "payslips" | "permissions";
 
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
@@ -41,10 +42,12 @@ function Alert({ type, message }: { type: "success" | "error"; message: string }
 
 export function ProfilePage() {
   const queryClient = useQueryClient();
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, hasPermission } = useAuthStore();
   const roles = getUserRoleKeys(user);
   const permissions = getCurrentPermissionKeys();
   const showRestrictedCommunicationLinks = isSuperAdminRole(user);
+  const canViewOwnPayslips =
+    hasPermission("payroll:view_own") || hasPermission("payroll:view") || hasPermission("payroll:manage_settings");
 
   const [tab, setTab] = useState<ActiveTab>("profile");
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -133,6 +136,7 @@ export function ProfilePage() {
   const tabs: { key: ActiveTab; label: string }[] = [
     { key: "profile", label: "Edit Profile" },
     { key: "password", label: "Change Password" },
+    ...(canViewOwnPayslips ? [{ key: "payslips" as const, label: "My Payslips" }] : []),
     { key: "permissions", label: "Roles & Permissions" },
   ];
 
@@ -362,6 +366,9 @@ export function ProfilePage() {
           </form>
         </Card>
       )}
+
+      {/* Tab: My Payslips */}
+      {tab === "payslips" && canViewOwnPayslips && <MyPayslipsTab />}
 
       {/* Tab: Roles & Permissions */}
       {tab === "permissions" && (

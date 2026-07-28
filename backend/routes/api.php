@@ -284,6 +284,7 @@ $registerRoutes = function (): void {
                 Route::get('payroll/bank-export', [PayrollController::class, 'bankExport']);
             });
             Route::apiResource('payroll', PayrollController::class);
+            Route::get('payslips/{id}/pdf', [PayslipController::class, 'downloadPdf']);
             Route::apiResource('payslips', PayslipController::class);
             Route::apiResource('bonuses', BonusController::class);
             Route::apiResource('deductions', DeductionController::class);

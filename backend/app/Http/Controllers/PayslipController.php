@@ -6,8 +6,10 @@ use App\Models\Employee;
 use App\Models\Payslip;
 use App\Models\Payroll;
 use App\Models\User;
+use App\Services\PayslipExportService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Response;
 
 class PayslipController extends Controller
 {
@@ -112,6 +114,20 @@ class PayslipController extends Controller
         return $this->ok(null, 'Payslip deleted successfully');
     }
 
+    public function downloadPdf(Request $request, int $id, PayslipExportService $exportService)
+    {
+        $item = Payslip::with(['employee.department', 'employee.designationRef', 'payroll'])->findOrFail($id);
+        $this->authorizeRecordAccess($request, (int) $item->employee_id);
+
+        $template = (string) $request->query('template', 'classic');
+        $pdf = $exportService->toPdf($item, $template);
+
+        return Response::make($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $item->slip_number . '.pdf"',
+        ]);
+    }
+
     public function createFromPayroll(Request $request)
     {
         $this->authorizePermission($request, 'payroll:manage_settings');
@@ -157,7 +173,7 @@ class PayslipController extends Controller
 
     private function authorizeRead(Request $request): void
     {
-        if ($request->user()?->can('payroll:manage_settings') || $request->user()?->can('payroll:view') || $request->user()?->can('payroll:view')) {
+        if ($request->user()?->can('payroll:manage_settings') || $request->user()?->can('payroll:view') || $request->user()?->can('payroll:view_own')) {
             return;
         }
         abort(403, 'You are not authorized to access payslips.');
@@ -174,7 +190,7 @@ class PayslipController extends Controller
         }
 
         $ownEmployeeId = $this->ownEmployeeId($request->user());
-        if ($request->user()?->can('payroll:view') && $ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
+        if ($request->user()?->can('payroll:view_own') && $ownEmployeeId !== null && (int) $ownEmployeeId === $employeeId) {
             return;
         }
         abort(403, 'You are not authorized to access this payslip.');
@@ -193,7 +209,7 @@ class PayslipController extends Controller
 
     private function viewOwnOnly(?User $user): bool
     {
-        return (bool) $user?->can('payroll:view')
+        return (bool) $user?->can('payroll:view_own')
             && !$user?->can('payroll:view')
             && !$user?->can('payroll:manage_settings');
     }

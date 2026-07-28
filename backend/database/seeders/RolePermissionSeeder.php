@@ -124,6 +124,7 @@ class RolePermissionSeeder extends Seeder
                 'chat:view', 'chat:create',
                 'tickets:view', 'tickets:create',
                 'reports:view_own',
+                'payroll:view_own',
                 'performance:view',
                 'approvals:view',
             ],

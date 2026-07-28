@@ -4,7 +4,7 @@ import {
   AlertCircle, BadgeCheck, Building2, ChevronRight, Globe, LockKeyhole,
   MapPinned, Palette, Plus, RefreshCw, Search, ScrollText, ShieldCheck,
   Trash2, Users, X, Eye, EyeOff, Check, Shield, Clock, Activity,
-  Edit2, Server, Layers, Key,
+  Edit2, Server, Layers, Key, Receipt,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -23,6 +23,7 @@ import { useThemeStore } from "@/store/theme-store";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import type { CurrencyCode } from "@/store/currency-store";
 import { useReportTemplateStore, REPORT_TEMPLATE_OPTIONS } from "@/store/report-template-store";
+import { usePayslipTemplateStore, PAYSLIP_TEMPLATE_OPTIONS } from "@/store/payslip-template-store";
 import { hasAllPermissions, hasAnyPermission, hasPermission } from "@/utils/permissions";
 import { LicensingTab } from "./licensing-tab";
 
@@ -948,6 +949,7 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
   const [error, setError] = useState<string | null>(null);
   const { currency, setCurrency } = useCurrencyStore();
   const { reportTemplate, setReportTemplate } = useReportTemplateStore();
+  const { payslipTemplate, setPayslipTemplate } = usePayslipTemplateStore();
 
   const canCompanyScope = Boolean(user?.company_id);
   const options = [
@@ -1044,6 +1046,22 @@ function AppearanceTab({ themes, onReload, busy }: { themes: ThemeItem[]; onRelo
             <button key={o.value} type="button" onClick={() => setReportTemplate(o.value)}
               className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition ${reportTemplate === o.value ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:border-[var(--primary)]/40"}`}>
               <ScrollText className="h-5 w-5 text-[var(--text)]" />
+              <p className="text-sm font-semibold text-[var(--text)]">{o.label}</p>
+              <p className="text-xs text-[var(--muted)]">{o.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Payslip Template ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+        <p className="mb-1 text-sm font-semibold text-[var(--text)]">Payslip Template</p>
+        <p className="mb-4 text-xs text-[var(--muted)]">Default PDF layout used when generating employee payslips from the Payroll module.</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {PAYSLIP_TEMPLATE_OPTIONS.map(o => (
+            <button key={o.value} type="button" onClick={() => setPayslipTemplate(o.value)}
+              className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition ${payslipTemplate === o.value ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)] hover:border-[var(--primary)]/40"}`}>
+              <Receipt className="h-5 w-5 text-[var(--text)]" />
               <p className="text-sm font-semibold text-[var(--text)]">{o.label}</p>
               <p className="text-xs text-[var(--muted)]">{o.desc}</p>
             </button>

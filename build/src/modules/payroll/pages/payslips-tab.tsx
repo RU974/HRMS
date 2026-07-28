@@ -13,11 +13,13 @@ import {
   type Payslip,
   createPayslip,
   deletePayslip,
+  downloadPayslipPdf,
   listPayroll,
   listPayslips,
   updatePayslip,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
+import { usePayslipTemplateStore } from "@/store/payslip-template-store";
 import { Badge, SummaryCard, fmt, sel } from "./payroll-shared";
 
 const payslipStatuses = ["draft", "issued", "cancelled"] as const;
@@ -40,6 +42,8 @@ const emptyPayslipForm: PayslipFormInput = { employee_id: 0, payroll_id: 0, slip
 export function PayslipsTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
+  const { payslipTemplate } = usePayslipTemplateStore();
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const payslipsQ  = useQuery({ queryKey: ["payroll", "payslips"],  queryFn: async () => (await listPayslips()).data ?? [] });
   const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployees()).data ?? [] });
@@ -86,6 +90,17 @@ export function PayslipsTab() {
 
   function onSubmit(values: PayslipFormValues) {
     (payslipEdit ? payslipUpdate : payslipCreate).mutate(values);
+  }
+
+  async function handleDownloadPdf(item: Payslip) {
+    setPdfDownloading(true);
+    try {
+      await downloadPayslipPdf(item.id, item.slip_number, payslipTemplate);
+    } catch (e) {
+      toast.error("Download failed", (e as Error).message);
+    } finally {
+      setPdfDownloading(false);
+    }
   }
 
   return (
@@ -164,10 +179,16 @@ export function PayslipsTab() {
                 <SummaryCard label="Base" value={fmt(Number(payslipDetail.payroll.base_salary))} />
               </div>
             )}
-            {payslipDetail.file_url
-              ? <a href={payslipDetail.file_url} target="_blank" rel="noreferrer" className="inline-block rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white">Download Payslip PDF</a>
-              : <p className="text-sm text-[var(--muted)]">No file attached.</p>
-            }
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={pdfDownloading} onClick={() => void handleDownloadPdf(payslipDetail)}>
+                {pdfDownloading ? "Generating…" : "Download Payslip PDF"}
+              </Button>
+              {payslipDetail.file_url && (
+                <a href={payslipDetail.file_url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text)]">
+                  Open Attached File
+                </a>
+              )}
+            </div>
           </div>
         </Modal>
       )}

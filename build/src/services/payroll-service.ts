@@ -286,6 +286,21 @@ export function approvePayroll(id: number) {
   return apiClient<PayrollRecord>(`/payroll/${id}/approve`, { method: "POST" });
 }
 
+export async function downloadPayslipPdf(id: number, slipNumber: string, template: string): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const response = await fetch(`${API_BASE_URL}/payslips/${id}/pdf?template=${encodeURIComponent(template)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${slipNumber}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function downloadBankExport(month: number, year: number): Promise<void> {
   const token = useAuthStore.getState().token;
   const response = await fetch(`${API_BASE_URL}/payroll/bank-export?month=${month}&year=${year}`, {
