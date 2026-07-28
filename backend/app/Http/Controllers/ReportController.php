@@ -10,6 +10,7 @@ use App\Models\Report;
 use App\Services\ReportAnalyticsService;
 use App\Services\ReportExportService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
@@ -381,9 +382,14 @@ class ReportController extends Controller
             $template = 'classic';
         }
 
+        $company = $request->user()?->company;
+        $logoPath = $company?->logo_path ? Storage::disk('public')->path($company->logo_path) : null;
+        $logoUri = $logoPath && is_file($logoPath) ? 'file://' . str_replace('\\', '/', $logoPath) : null;
+
         return [
             'template' => $template,
-            'company_name' => $request->user()?->company?->name ?? 'HRMS',
+            'company_name' => $company->name ?? 'HRMS',
+            'company_logo' => $logoUri,
             'generated_by' => $request->user()?->name,
         ];
     }

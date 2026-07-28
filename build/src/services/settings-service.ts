@@ -28,6 +28,7 @@ export type CompanyItem = {
   address?: string | null;
   timezone?: string | null;
   is_active?: boolean;
+  logo_url?: string | null;
   branches_count?: number;
   users_count?: number;
 };
@@ -78,9 +79,32 @@ export const createUser = (payload: Record<string, unknown>) => apiClient<UserIt
 export const updateUser = (id: string, payload: Record<string, unknown>) => apiClient<UserItem>(`/settings/users/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 export const deleteUser = (id: string) => apiClient<null>(`/settings/users/${id}`, { method: "DELETE" });
 
+function toCompanyFormData(payload: Record<string, unknown>): FormData {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === null || value === undefined) continue;
+    if (value instanceof File) fd.append(key, value);
+    else if (typeof value === "boolean") fd.append(key, value ? "1" : "0");
+    else fd.append(key, String(value));
+  }
+  return fd;
+}
+
 export const listCompanies = () => apiClient<CompanyItem[]>("/settings/companies");
-export const createCompany = (payload: Record<string, unknown>) => apiClient<CompanyItem>("/settings/companies", { method: "POST", body: JSON.stringify(payload) });
-export const updateCompany = (id: string, payload: Record<string, unknown>) => apiClient<CompanyItem>(`/settings/companies/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const createCompany = (payload: Record<string, unknown>) => {
+  if (payload.logo instanceof File) {
+    return apiClient<CompanyItem>("/settings/companies", { method: "POST", body: toCompanyFormData(payload) });
+  }
+  return apiClient<CompanyItem>("/settings/companies", { method: "POST", body: JSON.stringify(payload) });
+};
+export const updateCompany = (id: string, payload: Record<string, unknown>) => {
+  if (payload.logo instanceof File || payload.remove_logo) {
+    const fd = toCompanyFormData(payload);
+    fd.append("_method", "PUT");
+    return apiClient<CompanyItem>(`/settings/companies/${id}`, { method: "POST", body: fd });
+  }
+  return apiClient<CompanyItem>(`/settings/companies/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+};
 export const deleteCompany = (id: string) => apiClient<null>(`/settings/companies/${id}`, { method: "DELETE" });
 
 export const listBranches = () => apiClient<BranchItem[]>("/settings/branches");

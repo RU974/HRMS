@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use App\Services\CompanySettingsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class CompanySettingsController extends Controller
 {
@@ -51,7 +52,11 @@ class CompanySettingsController extends Controller
             'address' => 'nullable|string',
             'timezone' => 'nullable|string|max:80',
             'is_active' => 'nullable|boolean',
+            'logo' => 'nullable|image|max:5120',
+            'remove_logo' => 'nullable|boolean',
         ]);
+
+        $validated = $this->applyLogo($request, $validated);
 
         $companyId = $request->user()?->company_id;
         $company = $this->service->upsert($companyId, $validated);
@@ -72,9 +77,36 @@ class CompanySettingsController extends Controller
             'address' => 'nullable|string',
             'timezone' => 'nullable|string|max:80',
             'is_active' => 'nullable|boolean',
+            'logo' => 'nullable|image|max:5120',
+            'remove_logo' => 'nullable|boolean',
         ]);
 
+        $validated = $this->applyLogo($request, $validated, $company);
+
         return $this->ok($this->service->upsert($id, $validated), 'Company updated successfully');
+    }
+
+    /**
+     * Uploads a new logo (storing it in the public disk) or clears it when
+     * remove_logo is set, and folds the result into logo_path.
+     */
+    private function applyLogo(Request $request, array $validated, ?Company $company = null): array
+    {
+        if ($request->hasFile('logo')) {
+            if ($company?->logo_path) {
+                Storage::disk('public')->delete($company->logo_path);
+            }
+            $validated['logo_path'] = Storage::disk('public')->putFile('company-logos', $request->file('logo'));
+        } elseif ($request->boolean('remove_logo')) {
+            if ($company?->logo_path) {
+                Storage::disk('public')->delete($company->logo_path);
+            }
+            $validated['logo_path'] = null;
+        }
+
+        unset($validated['logo'], $validated['remove_logo']);
+
+        return $validated;
     }
 
     public function destroy(Request $request, string $id)

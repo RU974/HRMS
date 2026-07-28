@@ -8,6 +8,7 @@
     .titlebar { display: table; width: 100%; border-bottom: 1px solid #111827; padding-bottom: 5px; margin-bottom: 10px; }
     .titlebar .left { display: table-cell; font-size: 13px; font-weight: bold; }
     .titlebar .right { display: table-cell; text-align: right; font-size: 8px; color: #6b7280; vertical-align: bottom; }
+    .titlebar .logo { height: 18px; vertical-align: middle; margin-right: 6px; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; background: #111827; color: #ffffff; padding: 4px 6px; font-size: 8.5px; text-transform: uppercase; }
     td { padding: 3px 6px; font-size: 8.5px; border-bottom: 0.5px solid #d1d5db; }
@@ -18,7 +19,12 @@
 <body>
     <div class="titlebar">
         <div class="left">{{ $title }}</div>
-        <div class="right">{{ $companyName }} &middot; {{ $generatedAt }}</div>
+        <div class="right">
+            @if(!empty($companyLogo))
+                <img class="logo" src="{{ $companyLogo }}">
+            @endif
+            {{ $companyName }} &middot; {{ $generatedAt }}
+        </div>
     </div>
 
     <table>

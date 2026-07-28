@@ -8,6 +8,7 @@
     .titlebar { display: table; width: 100%; border-bottom: 1px solid #111827; padding-bottom: 5px; margin-bottom: 10px; }
     .titlebar .left { display: table-cell; font-size: 13px; font-weight: bold; }
     .titlebar .right { display: table-cell; text-align: right; font-size: 8px; color: #6b7280; vertical-align: bottom; }
+    .titlebar .logo { height: 18px; vertical-align: middle; margin-right: 6px; }
     .info { margin-bottom: 8px; font-size: 8.5px; color: #374151; }
     .info span { margin-right: 14px; }
     table { width: 100%; border-collapse: collapse; }
@@ -22,7 +23,12 @@
 <body>
     <div class="titlebar">
         <div class="left">Payslip &mdash; {{ $payslip->slip_number }}</div>
-        <div class="right">{{ $companyName }} &middot; {{ $generatedAt }}</div>
+        <div class="right">
+            @if(!empty($companyLogo))
+                <img class="logo" src="{{ $companyLogo }}">
+            @endif
+            {{ $companyName }} &middot; {{ $generatedAt }}
+        </div>
     </div>
 
     <div class="info">

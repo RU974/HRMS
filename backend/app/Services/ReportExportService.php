@@ -23,7 +23,7 @@ class ReportExportService
      * Builds the raw export payload (content/mime/filename) without wrapping
      * it in an HTTP response, so it can also be used as a mail attachment.
      *
-     * $context may include: template (pdf style), company_name, generated_by.
+     * $context may include: template (pdf style), company_name, company_logo, generated_by.
      */
     public function buildExport(string $filename, array $columns, array $rows, string $format, array $context = []): array
     {
@@ -110,6 +110,7 @@ class ReportExportService
             'columns' => $columns,
             'rows' => $displayRows,
             'companyName' => $context['company_name'] ?? 'HRMS',
+            'companyLogo' => $context['company_logo'] ?? null,
             'generatedBy' => $context['generated_by'] ?? null,
             'generatedAt' => $context['generated_at'] ?? now()->format('M j, Y g:i A'),
         ])->setPaper('a4', 'portrait');

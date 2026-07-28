@@ -6,6 +6,7 @@
     @page { margin: 0 0 40px 0; }
     body { font-family: DejaVu Sans, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
     .band { background: #4338ca; color: #ffffff; padding: 22px 40px; margin-bottom: 22px; }
+    .band .logo { height: 32px; margin-bottom: 8px; background: #ffffff; padding: 4px 8px; border-radius: 4px; }
     .band .company { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.85; margin-bottom: 6px; }
     .band h1 { font-size: 20px; margin: 0 0 6px 0; }
     .band .meta { font-size: 10px; opacity: 0.9; }
@@ -19,6 +20,9 @@
 </head>
 <body>
     <div class="band">
+        @if(!empty($companyLogo))
+            <img class="logo" src="{{ $companyLogo }}">
+        @endif
         <div class="company">{{ $companyName }}</div>
         <h1>{{ $title }}</h1>
         <div class="meta">

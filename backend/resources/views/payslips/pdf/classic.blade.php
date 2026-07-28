@@ -6,6 +6,7 @@
     @page { margin: 50px 40px; }
     body { font-family: DejaVu Sans, sans-serif; color: #1f2937; font-size: 11px; }
     .header { border-bottom: 2px solid #1f2937; padding-bottom: 10px; margin-bottom: 18px; }
+    .header .logo { height: 36px; margin-bottom: 8px; }
     .header h1 { font-size: 18px; margin: 0 0 4px 0; }
     .header .meta { font-size: 10px; color: #4b5563; }
     .info { display: table; width: 100%; margin-bottom: 16px; }
@@ -23,6 +24,9 @@
 </head>
 <body>
     <div class="header">
+        @if(!empty($companyLogo))
+            <img class="logo" src="{{ $companyLogo }}">
+        @endif
         <h1>Payslip &mdash; {{ $payslip->slip_number }}</h1>
         <div class="meta">
             {{ $companyName }} @if($companyAddress) &middot; {{ $companyAddress }} @endif &middot; Generated {{ $generatedAt }}

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Company;
 use App\Models\Payslip;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Storage;
 
 class PayslipExportService
 {
@@ -38,6 +39,7 @@ class PayslipExportService
             'payslip' => $payslip,
             'companyName' => $company->name ?? 'HRMS',
             'companyAddress' => $company->address ?? null,
+            'companyLogo' => $this->resolveLogoPath($company),
             'employeeName' => $employeeName,
             'employeeNumber' => $employee?->employee_number ?? '—',
             'departmentName' => $employee?->department?->name ?? '—',
@@ -53,5 +55,20 @@ class PayslipExportService
         ])->setPaper('a4', 'portrait');
 
         return $pdf->output();
+    }
+
+    /**
+     * Dompdf embeds images most reliably from a local filesystem path
+     * rather than a public URL, so resolve the stored logo to one.
+     */
+    private function resolveLogoPath(?Company $company): ?string
+    {
+        if (!$company?->logo_path) {
+            return null;
+        }
+
+        $path = Storage::disk('public')->path($company->logo_path);
+
+        return is_file($path) ? 'file://' . str_replace('\\', '/', $path) : null;
     }
 }

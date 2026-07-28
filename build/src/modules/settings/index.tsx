@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertCircle, BadgeCheck, Building2, ChevronRight, Globe, LockKeyhole,
   MapPinned, Palette, Plus, RefreshCw, Search, ScrollText, ShieldCheck,
   Trash2, Users, X, Eye, EyeOff, Check, Shield, Clock, Activity,
-  Edit2, Server, Layers, Key, Receipt,
+  Edit2, Server, Layers, Key, Receipt, ImageUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -625,11 +625,33 @@ function RolesTab({ roles, permissions, onReload, busy }: {
 function CompanyModal({ open, onClose, company, onSave, busy }:
   { open: boolean; onClose: () => void; company: CompanyItem | null; onSave: (data: Record<string, unknown>) => Promise<void>; busy: boolean }) {
   const [form, setForm] = useState({ name: "", email: "", phone: "", website: "", address: "", timezone: "Asia/Karachi", is_active: true });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
 
   useEffect(() => {
     if (open) setForm(company ? { name: company.name, email: company.email ?? "", phone: company.phone ?? "", website: company.website ?? "", address: company.address ?? "", timezone: company.timezone ?? "Asia/Karachi", is_active: company.is_active ?? true }
       : { name: "", email: "", phone: "", website: "", address: "", timezone: "Asia/Karachi", is_active: true });
+    setLogoFile(null);
+    setLogoPreview(null);
+    setRemoveLogo(false);
   }, [open, company]);
+
+  function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setLogoFile(file);
+    setRemoveLogo(false);
+    setLogoPreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  const displayedLogo = logoPreview ?? (removeLogo ? null : company?.logo_url ?? null);
+
+  async function handleSubmit() {
+    const data: Record<string, unknown> = { ...form };
+    if (logoFile) data.logo = logoFile;
+    else if (removeLogo) data.remove_logo = true;
+    await onSave(data);
+  }
 
   const timezones = [
     "UTC",
@@ -682,6 +704,29 @@ function CompanyModal({ open, onClose, company, onSave, busy }:
         <FormField label="Address">
           <textarea className={inputCls} rows={2} placeholder="Head office address" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />
         </FormField>
+        <FormField label="Company Logo">
+          <div className="flex items-center gap-3">
+            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--background)]">
+              {displayedLogo ? (
+                <img src={displayedLogo} alt="Company logo" className="h-full w-full object-contain" />
+              ) : (
+                <ImageUp className="h-5 w-5 text-[var(--muted)]" />
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="cursor-pointer text-xs font-medium text-[var(--primary)] hover:underline">
+                {displayedLogo ? "Change logo" : "Upload logo"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
+              </label>
+              {displayedLogo && (
+                <button type="button" className="text-left text-xs text-[var(--muted)] hover:underline" onClick={() => { setLogoFile(null); setLogoPreview(null); setRemoveLogo(true); }}>
+                  Remove logo
+                </button>
+              )}
+              <p className="text-[11px] text-[var(--muted)]">Shown on payslips and PDF reports. Max 5MB.</p>
+            </div>
+          </div>
+        </FormField>
         <label className="flex items-center gap-3 cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3">
           <div className={`relative h-5 w-9 rounded-full transition ${form.is_active ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}
                onClick={() => setForm(p => ({ ...p, is_active: !p.is_active }))}>
@@ -694,7 +739,7 @@ function CompanyModal({ open, onClose, company, onSave, busy }:
         </label>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button disabled={!form.name || busy} onClick={() => void onSave(form)}>
+          <Button disabled={!form.name || busy} onClick={() => void handleSubmit()}>
             {busy ? "Saving…" : company ? "Save Changes" : "Create Company"}
           </Button>
         </div>
