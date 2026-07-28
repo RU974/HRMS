@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import { useAuthStore } from "@/store/auth-store";
@@ -62,6 +62,65 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 
 function EmptyRow({ cols, message }: { cols: number; message: string }) {
   return <tr><td colSpan={cols} className="p-6 text-center text-[var(--muted)]">{message}</td></tr>;
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────────────
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+function usePagination<T>(rows: T[], resetKey: unknown) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
+
+  useEffect(() => { setPage(1); }, [resetKey]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * pageSize;
+  const paged = rows.slice(start, start + pageSize);
+
+  return { page: safePage, setPage, pageSize, setPageSize, totalPages, paged, total: rows.length };
+}
+
+function Pagination({
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  totalPages,
+  total,
+}: {
+  page: number;
+  setPage: (updater: (p: number) => number) => void;
+  pageSize: number;
+  setPageSize: (n: number) => void;
+  totalPages: number;
+  total: number;
+}) {
+  if (total === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+      <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+        Rows per page
+        <select
+          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
+          value={pageSize}
+          onChange={(e) => { setPageSize(Number(e.target.value)); setPage(() => 1); }}
+        >
+          {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-[var(--muted)]">Page {page} of {totalPages}</p>
+        <Button variant="outline" className="text-xs px-3 py-1.5" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          ← Prev
+        </Button>
+        <Button variant="outline" className="text-xs px-3 py-1.5" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          Next →
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function TableHead({ cols }: { cols: string[] }) {
@@ -272,6 +331,8 @@ function CategoriesTab() {
   const [form, setForm] = useState({ name: "", description: "" });
 
   const query = useQuery({ queryKey: ["inventory", "categories"], queryFn: listInventoryCategories });
+  const categories = query.data ?? [];
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(categories, "categories");
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -302,14 +363,14 @@ function CategoriesTab() {
     <>
       <SectionCard>
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm text-[var(--muted)]">{query.data?.length ?? 0} categories</p>
+          <p className="text-sm text-[var(--muted)]">{total} categories</p>
           <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Category</Button>
         </div>
         <table className="rtable w-full text-sm">
           <TableHead cols={["Name", "Description", "Items", "Actions"]} />
           <tbody>
             {query.isLoading && <tr><td colSpan={4} className="p-6 text-center"><LoadingSpinner /></td></tr>}
-            {(query.data ?? []).map((cat) => (
+            {paged.map((cat) => (
               <tr key={cat.id} className="border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10">
                 <td className="p-3 font-medium" data-label="Name">{cat.name}</td>
                 <td className="p-3 text-[var(--muted)]" data-label="Description">{cat.description ?? "—"}</td>
@@ -322,9 +383,10 @@ function CategoriesTab() {
                 </td>
               </tr>
             ))}
-            {!query.isLoading && (query.data?.length ?? 0) === 0 && <EmptyRow cols={4} message="No categories yet. Create one to get started." />}
+            {!query.isLoading && total === 0 && <EmptyRow cols={4} message="No categories yet. Create one to get started." />}
           </tbody>
         </table>
+        <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} total={total} />
       </SectionCard>
 
       {open && (
@@ -467,12 +529,13 @@ function ItemsTab() {
 
   const categories = Array.isArray(categoriesQ.data) ? categoriesQ.data : [];
   const items = Array.isArray(itemsQ.data) ? itemsQ.data : [];
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(items, showArchived);
 
   return (
     <>
       <SectionCard>
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <p className="text-sm text-[var(--muted)] mr-auto">{items.length} item{items.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-[var(--muted)] mr-auto">{total} item{total !== 1 ? "s" : ""}</p>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--muted)]">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded" />
             Show archived
@@ -487,7 +550,7 @@ function ItemsTab() {
             <TableHead cols={["Name", "SKU", "Category", "Qty", "Available", "Cost", "Location", "Condition", "Actions"]} />
             <tbody>
               {itemsQ.isLoading && <tr><td colSpan={9} className="p-6 text-center"><LoadingSpinner /></td></tr>}
-              {items.map((item) => (
+              {paged.map((item) => (
                 <tr
                   key={item.id}
                   className={`border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10 ${item.deleted_at ? "opacity-50" : ""}`}
@@ -522,10 +585,11 @@ function ItemsTab() {
                   </td>
                 </tr>
               ))}
-              {!itemsQ.isLoading && items.length === 0 && <EmptyRow cols={9} message="No items found." />}
+              {!itemsQ.isLoading && total === 0 && <EmptyRow cols={9} message="No items found." />}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} total={total} />
       </SectionCard>
 
       {/* Create / Edit Modal */}
@@ -691,6 +755,7 @@ function AssignmentsTab() {
   const assignments = Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [];
   const availableItems = (Array.isArray(itemsQ.data) ? itemsQ.data : []).filter((i) => !i.deleted_at);
   const employees = employeesQ.data?.data ?? [];
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(assignments, statusFilter);
 
   return (
     <>
@@ -714,7 +779,7 @@ function AssignmentsTab() {
             <TableHead cols={["Item", "SKU", "Employee", "Qty", "Assigned", "Returned", "Status", "Notes", "Actions"]} />
             <tbody>
               {assignmentsQ.isLoading && <tr><td colSpan={9} className="p-6 text-center"><LoadingSpinner /></td></tr>}
-              {assignments.map((a) => (
+              {paged.map((a) => (
                 <tr key={a.id} className="border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10">
                   <td className="p-3 font-medium" data-label="Item">{a.item?.name ?? "—"}</td>
                   <td className="p-3 text-[var(--muted)]" data-label="SKU">{a.item?.sku ?? "—"}</td>
@@ -738,10 +803,11 @@ function AssignmentsTab() {
                   </td>
                 </tr>
               ))}
-              {!assignmentsQ.isLoading && assignments.length === 0 && <EmptyRow cols={9} message="No assignments found." />}
+              {!assignmentsQ.isLoading && total === 0 && <EmptyRow cols={9} message="No assignments found." />}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} total={total} />
       </SectionCard>
 
       {/* Assign Modal */}
