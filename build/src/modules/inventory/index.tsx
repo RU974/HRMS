@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import { useAuthStore } from "@/store/auth-store";
-import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, QrCode, Printer } from "lucide-react";
+import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, QrCode, Printer, Search } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
@@ -240,7 +240,7 @@ function QRModal({ item, companyId, onClose }: { item: InventoryItem; companyId:
   );
 }
 
-function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; companyId: string | null | undefined; onClose: () => void }) {
+function BulkQRSheet({ items, companyId, onClose, label = "All" }: { items: InventoryItem[]; companyId: string | null | undefined; onClose: () => void; label?: string }) {
   const activeItems = items.filter((i) => !i.deleted_at);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -280,27 +280,33 @@ function BulkQRSheet({ items, companyId, onClose }: { items: InventoryItem[]; co
   }
 
   return (
-    <Modal title={`Print All QR Codes (${activeItems.length} items)`} onClose={onClose}>
+    <Modal title={`Print ${label} QR Codes (${activeItems.length} items)`} onClose={onClose}>
       <div className="space-y-4">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 max-h-64 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {activeItems.map((item) => (
-              <div key={item.id} className="flex flex-col items-center gap-1 rounded-lg border border-[var(--border)] p-2">
-                <QRCodeSVG value={buildQRPayload(item, companyId)} size={64} level="M" />
-                <p className="text-[10px] text-center font-medium leading-tight line-clamp-2">{item.name}</p>
-                {item.sku && <p className="text-[9px] text-[var(--muted)]">{item.sku}</p>}
-                {item.assigned_to_name && <p className="text-[9px] text-[var(--muted)]">{item.assigned_to_name}</p>}
+        {activeItems.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">No active items to print.</p>
+        ) : (
+          <>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 max-h-64 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {activeItems.map((item) => (
+                  <div key={item.id} className="flex flex-col items-center gap-1 rounded-lg border border-[var(--border)] p-2">
+                    <QRCodeSVG value={buildQRPayload(item, companyId)} size={64} level="M" />
+                    <p className="text-[10px] text-center font-medium leading-tight line-clamp-2">{item.name}</p>
+                    {item.sku && <p className="text-[9px] text-[var(--muted)]">{item.sku}</p>}
+                    {item.assigned_to_name && <p className="text-[9px] text-[var(--muted)]">{item.assigned_to_name}</p>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-        <p className="text-xs text-[var(--muted)]">
-          Opens a printable sheet with all {activeItems.length} active item QR labels. Each label includes name, SKU, location, quantity, and the assigned person (if any).
-        </p>
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Opens a printable sheet with {activeItems.length} item QR labels. Each label includes name, SKU, location, quantity, and the assigned person (if any).
+            </p>
+          </>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handlePrint}>
-            <Printer className="mr-1.5 h-4 w-4" /> Print All Labels
+          <Button onClick={handlePrint} disabled={activeItems.length === 0}>
+            <Printer className="mr-1.5 h-4 w-4" /> Print {label} Labels
           </Button>
         </div>
 
@@ -444,7 +450,10 @@ function ItemsTab() {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [qrItem, setQrItem] = useState<InventoryItem | null>(null);
   const [showBulkQR, setShowBulkQR] = useState(false);
+  const [printSelected, setPrintSelected] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [form, setForm] = useState<ItemForm>({
     name: "", category_id: "", sku: "", quantity: "0",
     unit_cost: "0", location: "", condition: "good", description: "",
@@ -529,17 +538,65 @@ function ItemsTab() {
 
   const categories = Array.isArray(categoriesQ.data) ? categoriesQ.data : [];
   const items = Array.isArray(itemsQ.data) ? itemsQ.data : [];
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(items, showArchived);
+
+  const q = search.trim().toLowerCase();
+  const filteredItems = q
+    ? items.filter((item) =>
+        [item.name, item.sku, item.location, item.category?.name, item.condition, item.assigned_to_name]
+          .some((v) => (v ?? "").toString().toLowerCase().includes(q))
+      )
+    : items;
+
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(filteredItems, `${showArchived}|${q}`);
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  const allPagedSelected = paged.length > 0 && paged.every((item) => selectedIds.has(item.id));
+
+  function toggleSelectAllPaged() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPagedSelected) {
+        paged.forEach((item) => next.delete(item.id));
+      } else {
+        paged.forEach((item) => next.add(item.id));
+      }
+      return next;
+    });
+  }
+
+  const selectedItems = items.filter((item) => selectedIds.has(item.id));
 
   return (
     <>
       <SectionCard>
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <p className="text-sm text-[var(--muted)] mr-auto">{total} item{total !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-[var(--muted)]">{total} item{total !== 1 ? "s" : ""}</p>
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, SKU, location, category…"
+              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] pl-9 pr-3 text-sm"
+            />
+          </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--muted)]">
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} className="rounded" />
             Show archived
           </label>
+          {selectedIds.size > 0 && (
+            <Button variant="outline" onClick={() => setPrintSelected(true)}>
+              <Printer className="mr-1.5 h-4 w-4" />Print Selected ({selectedIds.size})
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setShowBulkQR(true)} disabled={items.length === 0}>
             <QrCode className="mr-1.5 h-4 w-4" />Print All QR
           </Button>
@@ -547,14 +604,26 @@ function ItemsTab() {
         </div>
         <div className="overflow-x-auto">
           <table className="rtable w-full text-sm">
-            <TableHead cols={["Name", "SKU", "Category", "Qty", "Available", "Cost", "Location", "Condition", "Actions"]} />
+            <thead>
+              <tr className="border-b border-[var(--border)] text-left text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                <th className="p-3 w-10">
+                  <input type="checkbox" className="rounded" checked={allPagedSelected} onChange={toggleSelectAllPaged} aria-label="Select all on page" />
+                </th>
+                {["Name", "SKU", "Category", "Qty", "Available", "Cost", "Location", "Condition", "Actions"].map((c, i, arr) => (
+                  <th key={c} className={`p-3 ${i === arr.length - 1 ? "text-right" : ""}`}>{c}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {itemsQ.isLoading && <tr><td colSpan={9} className="p-6 text-center"><LoadingSpinner /></td></tr>}
+              {itemsQ.isLoading && <tr><td colSpan={10} className="p-6 text-center"><LoadingSpinner /></td></tr>}
               {paged.map((item) => (
                 <tr
                   key={item.id}
                   className={`border-b border-[var(--border)]/60 last:border-0 hover:bg-[var(--border)]/10 ${item.deleted_at ? "opacity-50" : ""}`}
                 >
+                  <td className="p-3">
+                    <input type="checkbox" className="rounded" checked={selectedIds.has(item.id)} onChange={() => toggleSelected(item.id)} aria-label={`Select ${item.name}`} />
+                  </td>
                   <td className="p-3 font-medium" data-label="Name">{item.name}</td>
                   <td className="p-3 text-[var(--muted)]" data-label="SKU">{item.sku ?? "—"}</td>
                   <td className="p-3 text-[var(--muted)]" data-label="Category">{item.category?.name ?? "—"}</td>
@@ -585,7 +654,7 @@ function ItemsTab() {
                   </td>
                 </tr>
               ))}
-              {!itemsQ.isLoading && total === 0 && <EmptyRow cols={9} message="No items found." />}
+              {!itemsQ.isLoading && total === 0 && <EmptyRow cols={10} message="No items found." />}
             </tbody>
           </table>
         </div>
@@ -694,6 +763,11 @@ function ItemsTab() {
       {/* Bulk QR Sheet Modal */}
       {showBulkQR && (
         <BulkQRSheet items={items} companyId={companyId} onClose={() => setShowBulkQR(false)} />
+      )}
+
+      {/* Print Selected QR Sheet Modal */}
+      {printSelected && (
+        <BulkQRSheet items={selectedItems} companyId={companyId} onClose={() => setPrintSelected(false)} label="Selected" />
       )}
     </>
   );
