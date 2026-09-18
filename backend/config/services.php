@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ORBIT_MODEL', 'claude-sonnet-5'),
+        'url' => env('ANTHROPIC_API_URL', 'https://api.anthropic.com/v1/messages'),
+    ],
+
     'biometric_agent' => [
         'secret' => env('BIOMETRIC_AGENT_SECRET'),
     ],

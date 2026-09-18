@@ -31,6 +31,7 @@ class Employee extends Model
         'manager_id',
         'basic_salary',
         'allowances',
+        'salary_grade_id',
         'profile_image',
         'department_id',
         'designation_id',
@@ -51,6 +52,11 @@ class Employee extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function salaryGrade(): BelongsTo
+    {
+        return $this->belongsTo(SalaryGrade::class);
     }
 
     public function user(): BelongsTo

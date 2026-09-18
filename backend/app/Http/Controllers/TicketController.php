@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
-use App\Models\User;
 use App\Services\TicketService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 
 class TicketController extends Controller
 {
@@ -17,11 +17,24 @@ class TicketController extends Controller
     {
     }
 
+    /**
+     * Rule::exists(...) scoped to the requester's company — except for Super
+     * Admin, whose company_id is null and who operates cross-company (see
+     * CompanyScope), where the rule stays unscoped rather than matching nothing.
+     */
+    private function existsInOwnCompany(Request $request, string $table): Exists
+    {
+        $rule = Rule::exists($table, 'id');
+        $companyId = $request->user()?->company_id;
+
+        return $companyId ? $rule->where('company_id', $companyId) : $rule;
+    }
+
     public function index(Request $request)
     {
         $this->authorizeAnyPermission($request, ['tickets:view', 'tickets:create', 'tickets:manage_settings']);
 
-        $filters   = $request->only(['search', 'status', 'priority', 'category', 'department_id', 'mine']);
+        $filters   = $request->only(['search', 'status', 'priority', 'category', 'department_id', 'mine', 'assigned_to_me']);
         $paginated = $this->ticketService->listTickets($request->user(), $filters)->paginate(15);
 
         return $this->ok([
@@ -40,7 +53,11 @@ class TicketController extends Controller
         $this->authorizePermission($request, 'tickets:create');
 
         $validated = $request->validate([
-            'department_id' => ['required', 'integer', 'exists:departments,id'],
+            'department_id' => [
+                'required',
+                'integer',
+                $this->existsInOwnCompany($request, 'departments')->whereNull('deleted_at'),
+            ],
             'category'      => ['required', Rule::in(['IT', 'HR', 'Finance', 'Admin', 'General'])],
             'priority'      => ['required', Rule::in(['low', 'medium', 'high', 'critical'])],
             'title'         => ['required', 'string', 'max:255'],
@@ -64,23 +81,12 @@ class TicketController extends Controller
 
         $user = $request->user();
 
-        if (
-            !$user->hasAnyRole([User::ROLE_SUPER_ADMIN, User::ROLE_COMPANY_ADMIN]) &&
-            !$user->hasAnyRole([User::ROLE_DEPARTMENT_MANAGER, User::ROLE_IT_SUPPORT, User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE]) &&
-            (string) $ticket->created_by !== (string) $user->id
-        ) {
-            abort(403, 'You are not authorized to view this ticket.');
-        }
+        $this->authorize('view', $ticket);
 
-        // Strip internal comments from non-agents/admins
-        if (!$user->hasAnyRole([
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_COMPANY_ADMIN,
-            User::ROLE_DEPARTMENT_MANAGER,
-            User::ROLE_IT_SUPPORT,
-            User::ROLE_HR_MANAGER,
-            User::ROLE_HR_EXECUTIVE,
-        ])) {
+        // Strip internal comments from non-agents/admins. HR Executive only holds
+        // requester-level ticket access (view/create, no assign/edit), so it does
+        // not see internal notes even on its own tickets.
+        if (!$user->can('seeInternalNotes', $ticket)) {
             $ticket->setRelation(
                 'comments',
                 $ticket->comments->where('is_internal', false)->values()
@@ -95,6 +101,7 @@ class TicketController extends Controller
         $this->authorizeAnyPermission($request, ['tickets:edit', 'tickets:manage_settings']);
 
         $ticket = Ticket::findOrFail($id);
+        $this->authorize('manage', $ticket);
 
         $validated = $request->validate([
             'title'       => ['sometimes', 'string', 'max:255'],
@@ -102,7 +109,7 @@ class TicketController extends Controller
             'category'    => ['sometimes', Rule::in(['IT', 'HR', 'Finance', 'Admin', 'General'])],
             'priority'    => ['sometimes', Rule::in(['low', 'medium', 'high', 'critical'])],
             'status'      => ['sometimes', Rule::in(['open', 'in_progress', 'resolved', 'closed', 'reopened'])],
-            'assigned_to' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
+            'assigned_to' => ['sometimes', 'nullable', 'integer', $this->existsInOwnCompany($request, 'users')],
         ]);
 
         if (isset($validated['status']) && $validated['status'] !== $ticket->status) {
@@ -111,7 +118,8 @@ class TicketController extends Controller
         }
 
         if (array_key_exists('assigned_to', $validated)) {
-            $this->ticketService->assignTicket($ticket, $validated['assigned_to']);
+            $this->ticketService->ensureAssigneeEligible($ticket, $request->user(), $validated['assigned_to']);
+            $this->ticketService->assignTicket($ticket, $validated['assigned_to'] !== null ? (string) $validated['assigned_to'] : null);
             unset($validated['assigned_to']);
         }
 
@@ -130,6 +138,7 @@ class TicketController extends Controller
         $this->authorizePermission($request, 'tickets:delete');
 
         $ticket = Ticket::findOrFail($id);
+        $this->authorize('manage', $ticket);
         $ticket->delete();
 
         return $this->ok(null, 'Ticket deleted successfully');
@@ -140,14 +149,27 @@ class TicketController extends Controller
         $this->authorizeAnyPermission($request, ['tickets:assign', 'tickets:manage_settings']);
 
         $ticket = Ticket::findOrFail($id);
+        $this->authorize('manage', $ticket);
 
         $validated = $request->validate([
-            'assigned_to' => ['required', 'integer', 'exists:users,id'],
+            'assigned_to' => ['required', 'integer', $this->existsInOwnCompany($request, 'users')],
         ]);
 
-        $ticket = $this->ticketService->assignTicket($ticket, $validated['assigned_to']);
+        $this->ticketService->ensureAssigneeEligible($ticket, $request->user(), $validated['assigned_to']);
+
+        $ticket = $this->ticketService->assignTicket($ticket, (string) $validated['assigned_to']);
 
         return $this->ok($ticket, 'Ticket assigned successfully');
+    }
+
+    public function assignableUsers(Request $request, string $id)
+    {
+        $this->authorizeAnyPermission($request, ['tickets:assign', 'tickets:manage_settings']);
+
+        $ticket = Ticket::findOrFail($id);
+        $this->authorize('manage', $ticket);
+
+        return $this->ok($this->ticketService->getAssignableUsers($ticket));
     }
 
     public function uploadAttachment(Request $request, string $ticketId)
@@ -157,6 +179,7 @@ class TicketController extends Controller
         $ticketQuery = Ticket::query();
         $this->scopeToCompany($request, $ticketQuery);
         $ticket = $ticketQuery->findOrFail($ticketId);
+        $this->authorize('view', $ticket);
 
         $request->validate([
             'file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,docx,xlsx'],
@@ -187,7 +210,8 @@ class TicketController extends Controller
 
         $dlQuery = Ticket::query();
         $this->scopeToCompany($request, $dlQuery);
-        $dlQuery->findOrFail($ticketId);
+        $ticket = $dlQuery->findOrFail($ticketId);
+        $this->authorize('view', $ticket);
 
         $attachment = TicketAttachment::where('ticket_id', $ticketId)->findOrFail($attachmentId);
 
@@ -204,13 +228,24 @@ class TicketController extends Controller
 
     public function changeStatus(Request $request, string $id)
     {
-        $this->authorizeAnyPermission($request, ['tickets:edit', 'tickets:manage_settings']);
-
         $ticket = Ticket::findOrFail($id);
+        $user   = $request->user();
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['open', 'in_progress', 'resolved', 'closed', 'reopened'])],
         ]);
+
+        // A ticket's own creator may reopen it after resolution without
+        // holding tickets:edit — everything else requires agent management
+        // rights, scoped to this ticket (see TicketPolicy::manage).
+        $isOwnerReopening = $validated['status'] === 'reopened'
+            && $ticket->status === 'resolved'
+            && (string) $ticket->created_by === (string) $user->id;
+
+        if (!$isOwnerReopening) {
+            $this->authorizeAnyPermission($request, ['tickets:edit', 'tickets:manage_settings']);
+            $this->authorize('manage', $ticket);
+        }
 
         $ticket = $this->ticketService->changeStatus($ticket, $validated['status']);
 

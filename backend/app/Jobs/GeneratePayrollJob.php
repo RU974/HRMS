@@ -7,8 +7,11 @@ use App\Models\BackgroundRun;
 use App\Models\Bonus;
 use App\Models\Deduction;
 use App\Models\Employee;
+use App\Models\LoanAdvance;
 use App\Models\Payroll;
+use App\Models\PayrollProcessing;
 use App\Services\PayrollCalculator;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -33,6 +36,7 @@ class GeneratePayrollJob implements ShouldQueue
         private readonly array $employeeIds,
         private readonly int $month,
         private readonly int $year,
+        private readonly ?int $payrollProcessingId = null,
     ) {
     }
 
@@ -46,40 +50,39 @@ class GeneratePayrollJob implements ShouldQueue
         $run->update(['status' => BackgroundRun::STATUS_PROCESSING]);
 
         try {
-            $employees = Employee::with(['shift'])->whereIn('id', $this->employeeIds)->get();
-
-            $existingEmployeeIds = Payroll::where('month', $this->month)
-                ->where('year', $this->year)
-                ->pluck('employee_id')
-                ->flip();
-
-            $allBonuses = Bonus::whereIn('employee_id', $this->employeeIds)
-                ->whereYear('effective_date', $this->year)
-                ->whereMonth('effective_date', $this->month)
-                ->get()
-                ->groupBy('employee_id');
-
-            $allDeductions = Deduction::whereIn('employee_id', $this->employeeIds)
-                ->whereYear('effective_date', $this->year)
-                ->whereMonth('effective_date', $this->month)
-                ->get()
-                ->groupBy('employee_id');
-
-            $allAttendances = Attendance::whereIn('employee_id', $this->employeeIds)
-                ->whereYear('date', $this->year)
-                ->whereMonth('date', $this->month)
-                ->whereNotNull('check_out')
-                ->get()
-                ->groupBy('employee_id');
-
             $created = 0;
             $skipped = 0;
             $failed = 0;
 
-            DB::transaction(function () use (
-                $employees, $existingEmployeeIds, $allBonuses, $allDeductions, $allAttendances,
-                $calculator, &$created, &$skipped, &$failed
-            ) {
+            DB::transaction(function () use ($calculator, &$created, &$skipped, &$failed) {
+                $this->ensureLoanEmiDeductions($this->employeeIds, $this->month, $this->year);
+
+                $employees = Employee::with(['shift'])->whereIn('id', $this->employeeIds)->get();
+
+                $existingEmployeeIds = Payroll::where('month', $this->month)
+                    ->where('year', $this->year)
+                    ->pluck('employee_id')
+                    ->flip();
+
+                $allBonuses = Bonus::whereIn('employee_id', $this->employeeIds)
+                    ->whereYear('effective_date', $this->year)
+                    ->whereMonth('effective_date', $this->month)
+                    ->get()
+                    ->groupBy('employee_id');
+
+                $allDeductions = Deduction::whereIn('employee_id', $this->employeeIds)
+                    ->whereYear('effective_date', $this->year)
+                    ->whereMonth('effective_date', $this->month)
+                    ->get()
+                    ->groupBy('employee_id');
+
+                $allAttendances = Attendance::whereIn('employee_id', $this->employeeIds)
+                    ->whereYear('date', $this->year)
+                    ->whereMonth('date', $this->month)
+                    ->whereNotNull('check_out')
+                    ->get()
+                    ->groupBy('employee_id');
+
                 foreach ($employees as $employee) {
                     if (isset($existingEmployeeIds[$employee->id])) {
                         $skipped++;
@@ -87,26 +90,37 @@ class GeneratePayrollJob implements ShouldQueue
                     }
 
                     try {
+                        $employeeBonuses = $allBonuses->get($employee->id, collect());
+                        $employeeDeductions = $allDeductions->get($employee->id, collect());
+
                         $components = $calculator->calculateForEmployee(
                             $employee, $this->month, $this->year,
-                            $allBonuses->get($employee->id, collect()),
-                            $allDeductions->get($employee->id, collect()),
+                            $employeeBonuses,
+                            $employeeDeductions,
                             $allAttendances->get($employee->id, collect()),
                         );
 
-                        Payroll::create([
+                        $payroll = Payroll::create([
                             'employee_id' => $employee->id,
                             'month' => $this->month,
                             'year' => $this->year,
                             'base_salary' => $components['base_salary'],
                             'allowances' => $components['allowances'],
                             'bonus' => $components['bonuses'],
+                            'overtime_hours' => $components['overtime_hours'],
+                            'overtime_pay' => $components['overtime_pay'],
                             'deductions' => $components['deductions'],
                             'tax' => $components['tax'],
                             'net_salary' => $components['net_salary'],
                             'status' => Payroll::STATUS_DRAFT,
                             'payment_date' => null,
                         ]);
+
+                        // Link the bonus/deduction rows that fed this payroll so it's
+                        // traceable which records were factored in, and so the payroll
+                        // can later be flagged stale if one of them changes.
+                        Bonus::whereIn('id', $employeeBonuses->pluck('id'))->whereNull('payroll_id')->update(['payroll_id' => $payroll->id]);
+                        Deduction::whereIn('id', $employeeDeductions->pluck('id'))->whereNull('payroll_id')->update(['payroll_id' => $payroll->id]);
 
                         $created++;
                     } catch (\Throwable $e) {
@@ -125,13 +139,84 @@ class GeneratePayrollJob implements ShouldQueue
                 'status' => BackgroundRun::STATUS_DONE,
                 'summary' => compact('created', 'skipped', 'failed'),
             ]);
+
+            $this->updateProcessingStatus('completed', "Generated {$created}, skipped {$skipped}, failed {$failed}.");
         } catch (\Throwable $e) {
             $run->update([
                 'status' => BackgroundRun::STATUS_FAILED,
                 'error' => $e->getMessage(),
             ]);
+            $this->updateProcessingStatus('cancelled', 'Generation failed: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Auto-create this month's EMI deduction for every active loan/advance
+     * held by the employees being processed, and pay it down against the
+     * loan's outstanding balance. Previously LoanAdvance had no connection
+     * to payroll generation at all — EMIs had to be entered manually and
+     * outstanding_balance never moved unless someone remembered to edit it.
+     *
+     * @param int[] $employeeIds
+     */
+    private function ensureLoanEmiDeductions(array $employeeIds, int $month, int $year): void
+    {
+        $activeLoans = LoanAdvance::whereIn('employee_id', $employeeIds)
+            ->where('status', 'active')
+            ->where('emi_amount', '>', 0)
+            ->get();
+
+        if ($activeLoans->isEmpty()) {
+            return;
+        }
+
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+
+        foreach ($activeLoans as $loan) {
+            $alreadyDeducted = Deduction::where('loan_advance_id', $loan->id)
+                ->whereYear('effective_date', $year)
+                ->whereMonth('effective_date', $month)
+                ->exists();
+
+            if ($alreadyDeducted) {
+                continue;
+            }
+
+            $amount = round(min((float) $loan->emi_amount, (float) $loan->outstanding_balance), 2);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            Deduction::create([
+                'employee_id' => $loan->employee_id,
+                'loan_advance_id' => $loan->id,
+                'title' => 'Loan EMI - ' . $loan->title,
+                'amount' => $amount,
+                'type' => 'loan',
+                'effective_date' => $periodStart->toDateString(),
+                'notes' => 'Auto-generated EMI deduction for this payroll run.',
+            ]);
+
+            $loan->outstanding_balance = round(max(0, (float) $loan->outstanding_balance - $amount), 2);
+            if ($loan->outstanding_balance <= 0) {
+                $loan->status = 'completed';
+            }
+            $loan->save();
+        }
+    }
+
+    private function updateProcessingStatus(string $status, string $notes): void
+    {
+        if (!$this->payrollProcessingId) {
+            return;
+        }
+
+        PayrollProcessing::where('id', $this->payrollProcessingId)->update([
+            'status' => $status,
+            'processed_at' => now(),
+            'notes' => $notes,
+        ]);
     }
 
     public function failed(?\Throwable $exception): void

@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\Payslip;
 use App\Models\Payroll;
 use App\Models\User;
+use App\Services\PayrollNotificationService;
 use App\Services\PayslipExportService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -80,6 +81,10 @@ class PayslipController extends Controller
             throw $e;
         }
 
+        if ($item->status === 'issued') {
+            app(PayrollNotificationService::class)->notifyPayslipIssued($item);
+        }
+
         return $this->ok($item->load(['employee', 'payroll']), 'Payslip created successfully', 201);
     }
 
@@ -101,7 +106,13 @@ class PayslipController extends Controller
             'file_url' => 'nullable|string|max:500',
             'notes' => 'nullable|string|max:1000',
         ]);
+        $wasIssued = $item->status === 'issued';
         $item->update($validated);
+
+        if (!$wasIssued && $item->status === 'issued') {
+            app(PayrollNotificationService::class)->notifyPayslipIssued($item);
+        }
+
         return $this->ok($item->load(['employee', 'payroll']), 'Payslip updated successfully');
     }
 
@@ -152,6 +163,10 @@ class PayslipController extends Controller
 
         if (!$item->wasRecentlyCreated && $item->issue_date !== $validated['issue_date']) {
             $item->update(['issue_date' => $validated['issue_date']]);
+        }
+
+        if ($item->wasRecentlyCreated) {
+            app(PayrollNotificationService::class)->notifyPayslipIssued($item);
         }
 
         return $this->ok($item->load(['employee', 'payroll']), 'Salary slip created successfully');

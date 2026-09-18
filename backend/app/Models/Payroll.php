@@ -14,11 +14,25 @@ class Payroll extends Model
         'base_salary',
         'allowances',   // ← added: was missing, causing PayrollCalculator output to be silently dropped
         'bonus',
+        'overtime_hours',
+        'overtime_pay',
         'deductions',
         'tax',
         'net_salary',
         'payment_date',
         'status',
+        'approved_by',
+        'approved_at',
+        'paid_by',
+        'paid_at',
+        'rejected_at',
+        'rejection_reason',
+    ];
+
+    protected $casts = [
+        'approved_at' => 'datetime',
+        'paid_at'     => 'datetime',
+        'rejected_at' => 'datetime',
     ];
 
     // ── Lifecycle states ──────────────────────────────────────────
@@ -47,6 +61,16 @@ class Payroll extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function payer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by');
     }
 
     // ── Helpers ───────────────────────────────────────────────────

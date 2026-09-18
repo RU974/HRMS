@@ -74,6 +74,7 @@ export interface TicketFilters {
   search?: string;
   page?: number;
   mine?: string;
+  assigned_to_me?: string;
 }
 
 export interface PaginatedTickets {
@@ -94,6 +95,7 @@ export const listTickets = (filters?: TicketFilters) => {
   if (filters?.department_id) qs.set("department_id", filters.department_id);
   if (filters?.search)        qs.set("search",        filters.search);
   if (filters?.mine)          qs.set("mine",          filters.mine);
+  if (filters?.assigned_to_me) qs.set("assigned_to_me", filters.assigned_to_me);
   if (filters?.page && filters.page > 1) qs.set("page", String(filters.page));
   const query = qs.toString();
   return apiClient<PaginatedTickets>(`/tickets${query ? `?${query}` : ""}`);
@@ -119,6 +121,9 @@ export const assignTicket = (id: string, assigned_to: number) =>
     method: "POST",
     body: JSON.stringify({ assigned_to }),
   });
+
+export const getAssignableUsers = (ticketId: string) =>
+  apiClient<TicketUser[]>(`/tickets/${ticketId}/assignable-users`);
 
 export const changeTicketStatus = (id: string, status: string) =>
   apiClient<Ticket>(`/tickets/${id}/status`, {

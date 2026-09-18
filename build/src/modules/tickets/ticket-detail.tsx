@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, Download, FileText, Paperclip, Send, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, FileText, Paperclip, Send, X, PlusCircle, RefreshCw, UserCheck, MessageSquare, Activity } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/loaders/loading-spinner";
@@ -14,11 +14,11 @@ import {
   addTicketComment,
   uploadTicketAttachment,
   downloadTicketAttachment,
+  getAssignableUsers,
   type Ticket,
   type TicketAttachment,
   type TicketActivity,
 } from "@/services/ticket-service";
-import { listUsers } from "@/services/settings-service";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -149,7 +149,7 @@ function TicketMeta({
   canAssign: boolean;
   onStatusChange: (s: string) => void;
   onAssignChange: (userId: number) => void;
-  users: { id: string; name: string }[];
+  users: { id: number; name: string }[];
 }) {
   const user = useAuthStore(s => s.user);
   const isOwner = ticket.created_by === user?.id;
@@ -399,8 +399,14 @@ function activityLabel(a: TicketActivity): string {
       const to   = String(a.meta?.to   ?? "?").replace("_", " ");
       return `Status changed from ${from} to ${to} by ${actor}`;
     }
-    case "assigned":
-      return `Assigned to ${String(a.meta?.to_name ?? "Unknown")} by ${actor}`;
+    case "assigned": {
+      const from = a.meta?.from_name ? String(a.meta.from_name) : null;
+      const to   = String(a.meta?.to_name ?? "Unassigned");
+      if (to === "Unassigned") return `Unassigned by ${actor}`;
+      return from && from !== "Unassigned"
+        ? `Reassigned from ${from} to ${to} by ${actor}`
+        : `Assigned to ${to} by ${actor}`;
+    }
     case "commented":
       return a.meta?.is_internal === true
         ? `Internal note added by ${actor}`
@@ -410,6 +416,13 @@ function activityLabel(a: TicketActivity): string {
   }
 }
 
+const ACTIVITY_ICON: Record<string, { Icon: typeof Activity; colorClass: string }> = {
+  created:        { Icon: PlusCircle,     colorClass: "border-blue-400 text-blue-500" },
+  status_changed: { Icon: RefreshCw,      colorClass: "border-violet-400 text-violet-500" },
+  assigned:       { Icon: UserCheck,      colorClass: "border-emerald-400 text-emerald-500" },
+  commented:      { Icon: MessageSquare,  colorClass: "border-amber-400 text-amber-500" },
+};
+
 function ActivityLog({ activities }: { activities: TicketActivity[] }) {
   if (!activities || activities.length === 0) return null;
 
@@ -417,20 +430,23 @@ function ActivityLog({ activities }: { activities: TicketActivity[] }) {
     <div className="mt-6">
       <h3 className="mb-3 text-base font-semibold text-[var(--text)]">Activity Log</h3>
       <div className="relative flex flex-col">
-        {activities.map((a, i) => (
-          <div key={a.id} className="relative flex gap-3 pb-4 last:pb-0">
-            {i < activities.length - 1 && (
-              <div className="absolute left-[9px] top-5 h-full w-px bg-[var(--border)]" />
-            )}
-            <div className="relative mt-1 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-              <div className="h-2.5 w-2.5 rounded-full border-2 border-[var(--primary)] bg-[var(--card)]" />
+        {activities.map((a, i) => {
+          const { Icon, colorClass } = ACTIVITY_ICON[a.action] ?? { Icon: Activity, colorClass: "border-[var(--primary)] text-[var(--primary)]" };
+          return (
+            <div key={a.id} className="relative flex gap-3 pb-4 last:pb-0">
+              {i < activities.length - 1 && (
+                <div className="absolute left-[9px] top-5 h-full w-px bg-[var(--border)]" />
+              )}
+              <div className={`relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 bg-[var(--card)] ${colorClass}`}>
+                <Icon className="h-2.5 w-2.5" strokeWidth={3} />
+              </div>
+              <div>
+                <p className="text-sm text-[var(--text)]">{activityLabel(a)}</p>
+                <p className="text-xs text-[var(--muted)]">{fmtDateShort(a.created_at)}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-[var(--text)]">{activityLabel(a)}</p>
-              <p className="text-xs text-[var(--muted)]">{fmtDateShort(a.created_at)}</p>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -456,9 +472,9 @@ export function TicketDetailPage() {
   });
 
   const usersQuery = useQuery({
-    queryKey: ["users", "list"],
-    queryFn: listUsers,
-    enabled: canAssign,
+    queryKey: ["tickets", id, "assignable-users"],
+    queryFn: () => getAssignableUsers(id!),
+    enabled: canAssign && Boolean(id),
   });
 
   const statusMutation = useMutation({

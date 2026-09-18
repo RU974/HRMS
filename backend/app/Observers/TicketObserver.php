@@ -22,7 +22,14 @@ class TicketObserver
         if ($statusChanged) {
             $newStatus = $ticket->status;
 
-            $this->notificationService->notifyStatusChanged($ticket);
+            // Auto-close (tickets:auto-close scheduled command) already sends its
+            // own, more specific notification — skip the generic one here to
+            // avoid double-notifying the creator for the same event.
+            $isAutoClose = $newStatus === 'closed' && $ticket->closed_by === null;
+
+            if (!$isAutoClose) {
+                $this->notificationService->notifyStatusChanged($ticket);
+            }
 
             if ($newStatus === 'reopened') {
                 $this->notificationService->notifyTicketReopened($ticket);

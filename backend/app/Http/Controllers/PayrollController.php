@@ -6,7 +6,9 @@ use App\Jobs\GeneratePayrollJob;
 use App\Models\BackgroundRun;
 use App\Models\Employee;
 use App\Models\Payroll;
+use App\Models\PayrollProcessing;
 use App\Models\User;
+use App\Services\PayrollNotificationService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
@@ -55,17 +57,18 @@ class PayrollController extends Controller
         $this->authorizePermission($request, 'payroll:manage_settings');
 
         $validated = $request->validate([
-            'employee_id'  => 'required|exists:employees,id',
-            'month'        => 'required|integer|min:1|max:12',
-            'year'         => 'required|integer|min:2000',
-            'base_salary'  => 'required|numeric|min:0',
-            'allowances'   => 'nullable|numeric|min:0',
-            'bonus'        => 'nullable|numeric|min:0',
-            'deductions'   => 'nullable|numeric|min:0',
-            'tax'          => 'nullable|numeric|min:0',
-            'net_salary'   => 'required|numeric|min:0',
-            'payment_date' => 'nullable|date',
-            'status'       => 'nullable|in:' . implode(',', Payroll::lifecycleStates()),
+            'employee_id'    => 'required|exists:employees,id',
+            'month'          => 'required|integer|min:1|max:12',
+            'year'           => 'required|integer|min:2000',
+            'base_salary'    => 'required|numeric|min:0',
+            'allowances'     => 'nullable|numeric|min:0',
+            'bonus'          => 'nullable|numeric|min:0',
+            'overtime_hours' => 'nullable|numeric|min:0',
+            'overtime_pay'   => 'nullable|numeric|min:0',
+            'deductions'     => 'nullable|numeric|min:0',
+            'tax'            => 'nullable|numeric|min:0',
+            'payment_date'   => 'nullable|date',
+            'status'         => 'nullable|in:' . implode(',', Payroll::lifecycleStates()),
         ]);
 
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
@@ -73,8 +76,14 @@ class PayrollController extends Controller
         $validated['status'] = $validated['status'] ?? Payroll::STATUS_DRAFT;
         $validated['allowances'] = $validated['allowances'] ?? 0;
         $validated['bonus'] = $validated['bonus'] ?? 0;
+        $validated['overtime_hours'] = $validated['overtime_hours'] ?? 0;
+        $validated['overtime_pay'] = $validated['overtime_pay'] ?? 0;
         $validated['deductions'] = $validated['deductions'] ?? 0;
         $validated['tax'] = $validated['tax'] ?? 0;
+        // net_salary is always derived server-side rather than trusted from the
+        // client — manual entry previously let base/allowances/bonus/deductions/tax
+        // and net_salary disagree with each other with nothing to catch it.
+        $validated['net_salary'] = $this->computeNetSalary($validated);
 
         try {
             $payroll = Payroll::create($validated);
@@ -107,6 +116,11 @@ class PayrollController extends Controller
 
     // ──────────────────────────────────────────────────────────────
     //  PUT /api/payroll/{id}
+    //  Financial fields can only be edited while the record is still a
+    //  draft — once it's reviewed/approved/paid, corrections must go
+    //  through reject (back to draft) rather than a silent direct edit.
+    //  Status itself is never set here: it only moves via approve/
+    //  reject/mark-paid, so every transition is auditable.
     // ──────────────────────────────────────────────────────────────
     public function update(Request $request, int $id)
     {
@@ -115,16 +129,28 @@ class PayrollController extends Controller
         $payroll = Payroll::findOrFail($id);
         $this->assertPayrollInCompany($request, $payroll);
 
+        if ($payroll->status !== Payroll::STATUS_DRAFT) {
+            return $this->fail(
+                "Cannot edit a payroll record in '{$payroll->status}' status. Reject it back to draft first.",
+                422
+            );
+        }
+
         $validated = $request->validate([
-            'base_salary'  => 'sometimes|numeric|min:0',
-            'allowances'   => 'nullable|numeric|min:0',
-            'bonus'        => 'nullable|numeric|min:0',
-            'deductions'   => 'nullable|numeric|min:0',
-            'tax'          => 'nullable|numeric|min:0',
-            'net_salary'   => 'sometimes|numeric|min:0',
-            'payment_date' => 'nullable|date',
-            'status'       => 'sometimes|in:' . implode(',', Payroll::lifecycleStates()),
+            'base_salary'    => 'sometimes|numeric|min:0',
+            'allowances'     => 'nullable|numeric|min:0',
+            'bonus'          => 'nullable|numeric|min:0',
+            'overtime_hours' => 'nullable|numeric|min:0',
+            'overtime_pay'   => 'nullable|numeric|min:0',
+            'deductions'     => 'nullable|numeric|min:0',
+            'tax'            => 'nullable|numeric|min:0',
+            'payment_date'   => 'nullable|date',
         ]);
+
+        $merged = array_merge($payroll->only([
+            'base_salary', 'allowances', 'bonus', 'overtime_pay', 'deductions', 'tax',
+        ]), $validated);
+        $validated['net_salary'] = $this->computeNetSalary($merged);
 
         $payroll->update($validated);
 
@@ -200,6 +226,7 @@ class PayrollController extends Controller
                 SUM(base_salary)       AS total_base_salary,
                 SUM(allowances)        AS total_allowances,
                 SUM(bonus)             AS total_bonus,
+                SUM(overtime_pay)      AS total_overtime,
                 SUM(deductions)        AS total_deductions,
                 SUM(tax)               AS total_tax,
                 SUM(net_salary)        AS total_net_salary
@@ -249,11 +276,21 @@ class PayrollController extends Controller
             'requested_by' => $request->user()?->id,
         ]);
 
+        // Keep the payroll-processings batch tracker in sync with the actual
+        // generation run instead of it being a disconnected manual status label.
+        $processing = PayrollProcessing::firstOrNew([
+            'month'      => $month,
+            'year'       => $year,
+            'company_id' => $request->user()?->company_id,
+        ]);
+        $processing->status = 'processing';
+        $processing->save();
+
         // Dispatched sync rather than queued: this app has no supervised, always-on
         // queue worker (only a manually-started `queue:listen` in a second terminal),
         // so a queued dispatch leaves the BackgroundRun stuck at "queued" forever
         // whenever that process isn't running, and the frontend just hangs polling it.
-        GeneratePayrollJob::dispatchSync($run->id, $employeeIds, $month, $year);
+        GeneratePayrollJob::dispatchSync($run->id, $employeeIds, $month, $year, $processing->id);
 
         return $this->ok(['background_run_id' => $run->id], 'Payroll generation has been queued.', 202);
     }
@@ -282,7 +319,45 @@ class PayrollController extends Controller
 
         $payroll->transitionTo($next);
 
+        if ($next === Payroll::STATUS_APPROVED) {
+            $payroll->update([
+                'approved_by' => $request->user()?->id,
+                'approved_at' => now(),
+            ]);
+        }
+
         return $this->ok($payroll->fresh('employee'), "Payroll moved to '{$next}'.");
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  POST /api/payroll/{id}/reject   (payroll:manage_settings)
+    //  Sends draft/reviewed/pending payroll back to draft with a reason,
+    //  so a review-stage mistake doesn't require bypassing the lifecycle
+    //  via a direct update(). Approved/paid records cannot be rejected —
+    //  once paid, corrections need a fresh payroll adjustment instead.
+    // ──────────────────────────────────────────────────────────────
+    public function rejectPayroll(Request $request, int $id)
+    {
+        $this->authorizePermission($request, 'payroll:manage_settings');
+
+        $payroll = Payroll::with('employee')->findOrFail($id);
+        $this->assertPayrollInCompany($request, $payroll);
+
+        if (!in_array($payroll->status, [Payroll::STATUS_REVIEWED, Payroll::STATUS_PENDING], true)) {
+            return $this->fail("Cannot reject payroll from '{$payroll->status}' status.", 422);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $payroll->transitionTo(Payroll::STATUS_DRAFT);
+        $payroll->update([
+            'rejected_at' => now(),
+            'rejection_reason' => $validated['reason'],
+        ]);
+
+        return $this->ok($payroll->fresh('employee'), 'Payroll sent back to draft.');
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -350,10 +425,14 @@ class PayrollController extends Controller
             return $this->fail('Could not transition payroll to paid status.', 500);
         }
 
-        // Stamp payment date if not already set
-        if (empty($payroll->payment_date)) {
-            $payroll->update(['payment_date' => now()->toDateString()]);
-        }
+        $payroll->update([
+            'paid_by' => $request->user()?->id,
+            'paid_at' => now(),
+            // Stamp payment date if not already set
+            'payment_date' => $payroll->payment_date ?: now()->toDateString(),
+        ]);
+
+        app(PayrollNotificationService::class)->notifyPaid($payroll);
 
         return $this->ok($payroll->fresh('employee'), 'Payroll marked as paid.');
     }
@@ -368,6 +447,23 @@ class PayrollController extends Controller
     private function assertPayrollInCompany(Request $request, Payroll $payroll): void
     {
         $this->assertEmployeeInCompany($request, (int) $payroll->employee_id);
+    }
+
+    /**
+     * Derive net_salary from the other components rather than trusting a
+     * client-supplied value, so a payroll record can never persist with a
+     * net_salary that doesn't reconcile with its own line items.
+     */
+    private function computeNetSalary(array $components): float
+    {
+        $gross = (float) ($components['base_salary'] ?? 0)
+            + (float) ($components['allowances'] ?? 0)
+            + (float) ($components['bonus'] ?? 0)
+            + (float) ($components['overtime_pay'] ?? 0);
+
+        $net = $gross - (float) ($components['deductions'] ?? 0) - (float) ($components['tax'] ?? 0);
+
+        return round(max(0, $net), 2);
     }
 
     /**

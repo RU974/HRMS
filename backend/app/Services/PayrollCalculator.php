@@ -30,7 +30,10 @@ class PayrollCalculator
         ?\Illuminate\Support\Collection $preloadedDeductions = null,
         ?\Illuminate\Support\Collection $preloadedAttendances = null
     ): array {
-        $baseSalary = (float) ($employee->basic_salary ?? $employee->salary ?? 0);
+        // basic_salary defaults to 0 (not null) for employees created before that
+        // column existed, so "?? $employee->salary" never actually falls back —
+        // 0 is not null. Use "?:" so a zero/unset basic_salary falls back too.
+        $baseSalary = (float) ($employee->basic_salary ?: $employee->salary ?: 0);
         $allowances = (float) ($employee->allowances ?? 0);
 
         $bonuses = $preloadedBonuses ?? Bonus::where('employee_id', $employee->id)
@@ -93,7 +96,7 @@ class PayrollCalculator
 
         // taxable components: base, taxable bonuses, overtime
         $taxableAmount = $baseSalary + $taxableBonuses + $overtimePay;
-        $tax = $this->taxCalculator->calculate($taxableAmount);
+        $tax = $this->taxCalculator->calculate($taxableAmount, $employee->company_id ?? null);
 
         $net = round(max(0, $gross - $deductionsTotal - $tax), 2);
 

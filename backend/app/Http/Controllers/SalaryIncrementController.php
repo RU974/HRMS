@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Employee;
 use App\Models\SalaryIncrement;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SalaryIncrementController extends Controller
 {
@@ -40,7 +41,28 @@ class SalaryIncrementController extends Controller
 
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
-        $increment = SalaryIncrement::create($validated);
+        $increment = DB::transaction(function () use ($validated) {
+            $increment = SalaryIncrement::create($validated);
+
+            // Recording an increment used to be a pure log entry with no effect on
+            // pay — the employee's basic_salary never actually changed, so payroll
+            // generation kept using the pre-increment figure. Only apply it if this
+            // is the most recent increment on record, so backdating an older
+            // correction doesn't clobber a newer increment already applied.
+            $latestEffectiveDate = SalaryIncrement::where('employee_id', $increment->employee_id)
+                ->max('effective_date');
+
+            if ($increment->effective_date >= $latestEffectiveDate) {
+                $employee = Employee::find($increment->employee_id);
+                if ($employee) {
+                    $employee->basic_salary = $validated['new_salary'];
+                    $employee->salary = (float) $validated['new_salary'] + (float) ($employee->allowances ?? 0);
+                    $employee->save();
+                }
+            }
+
+            return $increment;
+        });
 
         return $this->ok($increment->load('employee:id,name'), 'Salary increment recorded.', 201);
     }

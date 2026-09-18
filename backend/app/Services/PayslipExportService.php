@@ -27,6 +27,9 @@ class PayslipExportService
             'Allowances' => (float) ($payroll->allowances ?? 0),
             'Bonus' => (float) ($payroll->bonus ?? 0),
         ];
+        if ((float) ($payroll->overtime_pay ?? 0) > 0) {
+            $earnings['Overtime'] = (float) $payroll->overtime_pay;
+        }
         $deductions = [
             'Deductions' => (float) ($payroll->deductions ?? 0),
             'Tax' => (float) ($payroll->tax ?? 0),

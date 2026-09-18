@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Search, X, ChevronLeft, ChevronRight, Ticket as TicketIcon, Inbox, Filter } from "lucide-react";
+import { Plus, Search, X, ChevronLeft, ChevronRight, Ticket as TicketIcon, Inbox, Filter, AlertCircle, Clock, CheckCircle2, Timer } from "lucide-react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/loaders/loading-spinner";
 import { toast } from "@/components/notifications/toast";
 import { useAuthStore } from "@/store/auth-store";
-import { listTickets, type Ticket as TicketType } from "@/services/ticket-service";
+import { listTickets, getTicketStats, type Ticket as TicketType } from "@/services/ticket-service";
 import { listDepartments, type DepartmentItem } from "@/services/hr-management-service";
+import { SummaryCard } from "@/modules/dashboard/dashboard-widgets";
 import { CreateTicketModal } from "./create-ticket";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -33,6 +34,25 @@ function Badge({ label, colorClass }: { label: string; colorClass: string }) {
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${colorClass}`}>
       {label}
     </span>
+  );
+}
+
+const PRIORITY_BAR: Record<string, string> = {
+  low:      "bg-gray-300",
+  medium:   "bg-blue-400",
+  high:     "bg-orange-400",
+  critical: "bg-red-500",
+};
+
+function initials(name: string) {
+  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[10px] font-semibold text-white">
+      {initials(name)}
+    </div>
   );
 }
 
@@ -201,11 +221,16 @@ function TicketTable({ tickets }: { tickets: TicketType[] }) {
             <tr
               key={ticket.id}
               onClick={() => navigate(`/tickets/${ticket.id}`)}
-              className="cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--background)] last:border-0"
+              className="relative cursor-pointer border-b border-[var(--border)] transition-colors hover:bg-[var(--background)] last:border-0"
             >
               <td className="max-w-xs p-3" data-label="Title">
-                <span className="block truncate font-medium text-[var(--text)]">{ticket.title}</span>
-                <span className="block text-xs text-[var(--muted)]">{ticket.createdBy?.name}</span>
+                <span className="flex items-center gap-2">
+                  <span className={`h-6 w-1 shrink-0 rounded-full ${PRIORITY_BAR[ticket.priority] ?? "bg-gray-300"}`} />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-[var(--text)]">{ticket.title}</span>
+                    <span className="block text-xs text-[var(--muted)]">{ticket.createdBy?.name}</span>
+                  </span>
+                </span>
               </td>
               <td className="p-3 text-sm text-[var(--muted)]" data-label="Category">{ticket.category}</td>
               <td className="p-3" data-label="Priority">
@@ -215,7 +240,18 @@ function TicketTable({ tickets }: { tickets: TicketType[] }) {
                 <Badge label={ticket.status.replace("_", " ")} colorClass={STATUS_COLORS[ticket.status] ?? ""} />
               </td>
               <td className="p-3 text-sm text-[var(--muted)]" data-label="Department">{ticket.department?.name ?? "—"}</td>
-              <td className="p-3 text-sm text-[var(--muted)]" data-label="Assigned To">{ticket.assignedTo?.name ?? "Unassigned"}</td>
+              <td className="p-3" data-label="Assigned To">
+                {ticket.assignedTo ? (
+                  <span className="flex items-center gap-1.5">
+                    <Avatar name={ticket.assignedTo.name} />
+                    <span className="text-sm text-[var(--text)]">{ticket.assignedTo.name}</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                    Unassigned
+                  </span>
+                )}
+              </td>
               <td className="p-3 text-sm text-[var(--muted)]" data-label="Created">{fmtDate(ticket.created_at)}</td>
             </tr>
           ))}
@@ -252,9 +288,10 @@ function EmptyState({
 export function TicketsPage() {
   const canCreate = useAuthStore(s => s.hasPermission("tickets.create"));
   const canManage = useAuthStore(s => s.hasPermission("tickets.manage_settings"));
+  const canAssign = useAuthStore(s => s.hasPermission("tickets.assign") || canManage);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab]           = useState<"mine" | "queue">("mine");
+  const [tab, setTab]           = useState<"mine" | "assigned" | "queue">("mine");
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
   const [showCreate, setShowCreate]   = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -312,7 +349,8 @@ export function TicketsPage() {
     ...(priority     ? { priority }              : {}),
     ...(category     ? { category }              : {}),
     ...(departmentId ? { department_id: departmentId } : {}),
-    ...(tab === "mine" && canManage ? { mine: "1" } : {}),
+    ...(tab === "mine" && (canManage || canAssign) ? { mine: "1" } : {}),
+    ...(tab === "assigned" ? { assigned_to_me: "1" } : {}),
     page,
   };
 
@@ -325,6 +363,11 @@ export function TicketsPage() {
     queryKey: ["departments"],
     queryFn: listDepartments,
     enabled: canManage,
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ["ticket-stats"],
+    queryFn: getTicketStats,
   });
 
   useEffect(() => {
@@ -363,6 +406,16 @@ export function TicketsPage() {
       );
     }
 
+    if (tab === "assigned") {
+      return (
+        <EmptyState
+          icon={<Inbox size={28} />}
+          title="Nothing assigned to you"
+          subtitle="Tickets assigned to you will show up here."
+        />
+      );
+    }
+
     return (
       <EmptyState
         icon={<TicketIcon size={28} />}
@@ -391,9 +444,47 @@ export function TicketsPage() {
         )}
       </div>
 
-      {canManage && (
+      {stats && (
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <SummaryCard
+            title="Open"
+            value={String(stats.open)}
+            icon={<AlertCircle className="h-5 w-5" />}
+            accent="amber"
+          />
+          <SummaryCard
+            title="In Progress"
+            value={String(stats.in_progress)}
+            icon={<Clock className="h-5 w-5" />}
+            accent="blue"
+          />
+          {canManage || canAssign ? (
+            <SummaryCard
+              title="Resolved This Month"
+              value={String(stats.resolved_this_month)}
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              accent="emerald"
+            />
+          ) : (
+            <SummaryCard
+              title="My Open"
+              value={String(stats.my_open)}
+              icon={<TicketIcon className="h-5 w-5" />}
+              accent="emerald"
+            />
+          )}
+          <SummaryCard
+            title="Avg Resolution"
+            value={`${stats.avg_resolution_days}d`}
+            icon={<Timer className="h-5 w-5" />}
+            accent="violet"
+          />
+        </div>
+      )}
+
+      {(canManage || canAssign) && (
         <div className="mb-4 flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 w-fit">
-          {(["mine", "queue"] as const).map(t => (
+          {(canManage ? (["mine", "assigned", "queue"] as const) : (["mine", "assigned"] as const)).map(t => (
             <button
               key={t}
               onClick={() => { setTab(t); changePage(1); }}
@@ -403,7 +494,7 @@ export function TicketsPage() {
                   : "text-[var(--muted)] hover:text-[var(--text)]"
               }`}
             >
-              {t === "mine" ? "My Tickets" : "Department Queue"}
+              {t === "mine" ? "My Tickets" : t === "assigned" ? "Assigned to Me" : "Department Queue"}
             </button>
           ))}
         </div>

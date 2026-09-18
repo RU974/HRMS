@@ -62,4 +62,30 @@ class Ticket extends Model
     {
         return $this->hasMany(TicketActivity::class)->orderBy('created_at');
     }
+
+    /**
+     * Eloquent snake_cases relation names for array/JSON output, which makes
+     * the createdBy/assignedTo relations collide with the created_by/
+     * assigned_to foreign key columns and silently overwrite the scalar id
+     * with the relation object. Restore both: the scalar id stays under the
+     * snake_case key, the relation object is exposed under its own
+     * camelCase key — matching what every API consumer (frontend TicketUser
+     * types) already expects.
+     */
+    public function toArray(): array
+    {
+        $array = parent::toArray();
+
+        if ($this->relationLoaded('createdBy')) {
+            $array['created_by'] = $this->getAttribute('created_by');
+            $array['createdBy'] = $this->getRelation('createdBy')?->toArray();
+        }
+
+        if ($this->relationLoaded('assignedTo')) {
+            $array['assigned_to'] = $this->getAttribute('assigned_to');
+            $array['assignedTo'] = $this->getRelation('assignedTo')?->toArray();
+        }
+
+        return $array;
+    }
 }

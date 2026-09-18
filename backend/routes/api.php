@@ -60,6 +60,7 @@ use App\Http\Controllers\InventoryAssignmentController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketCommentController;
 use App\Http\Controllers\TicketStatsController;
+use App\Http\Controllers\OrbitController;
 
 /*
 |--------------------------------------------------------------------------
@@ -107,6 +108,7 @@ $registerRoutes = function (): void {
         Route::get('dashboard/insights', [DashboardController::class, 'insights']);
         Route::get('dashboard/workspace', [DashboardController::class, 'workspace']);
         Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search');
+        Route::post('orbit/chat', [OrbitController::class, 'chat'])->middleware('throttle:orbit');
         Route::get('me/permissions', [RolePermissionController::class, 'myPermissions']);
         Route::get('settings/themes/current', [ThemeSettingsController::class, 'current']);
         Route::get('settings/themes/company', [ThemeSettingsController::class, 'company'])->middleware('permission:settings:manage_settings');
@@ -292,6 +294,7 @@ $registerRoutes = function (): void {
                 Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
                 Route::post('payroll/{id}/mark-paid', [PayrollController::class, 'markAsPaid']);
                 Route::post('payroll/{id}/approve', [PayrollController::class, 'approvePayroll']);
+                Route::post('payroll/{id}/reject', [PayrollController::class, 'rejectPayroll']);
                 Route::post('salary-slips/from-payroll', [PayslipController::class, 'createFromPayroll']);
                 Route::apiResource('payroll-processings', PayrollProcessingController::class);
                 Route::apiResource('tax-brackets', TaxBracketController::class)->only(['index', 'store', 'update', 'destroy']);
@@ -403,9 +406,10 @@ $registerRoutes = function (): void {
         });
 
         // Ticketing routes
-        Route::middleware('permission:tickets:view|tickets:create|tickets:edit|tickets:delete|tickets:assign|tickets:manage_settings')->group(function () {
+        Route::middleware(['throttle:communication', 'permission:tickets:view|tickets:create|tickets:edit|tickets:delete|tickets:assign|tickets:manage_settings'])->group(function () {
             // Stats must be declared before apiResource to avoid matching 'stats' as {id}
             Route::get('tickets/stats', [TicketStatsController::class, 'index']);
+            Route::get('tickets/{id}/assignable-users', [TicketController::class, 'assignableUsers']);
             Route::post('tickets/{id}/assign', [TicketController::class, 'assign']);
             Route::post('tickets/{id}/status', [TicketController::class, 'changeStatus']);
             Route::post('tickets/{ticketId}/comments', [TicketCommentController::class, 'store']);

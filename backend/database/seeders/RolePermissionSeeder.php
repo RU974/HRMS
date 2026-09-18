@@ -56,6 +56,7 @@ class RolePermissionSeeder extends Seeder
                 'announcement:view',
                 'performance:view',
                 'chat:view', 'chat:create',
+                'tickets:view', 'tickets:create',
             ],
             'Payroll Manager' => [
                 'dashboard:view',
@@ -100,6 +101,7 @@ class RolePermissionSeeder extends Seeder
                 'announcement:view',
                 'notification:view',
                 'chat:view', 'chat:create',
+                'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:assign',
             ],
             'IT Support' => [
                 'dashboard:view',

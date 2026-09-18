@@ -14,6 +14,7 @@ use App\Observers\TicketCommentObserver;
 use App\Observers\TicketObserver;
 use App\Policies\ChatConversationPolicy;
 use App\Policies\ChatMessagePolicy;
+use App\Policies\TicketPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -48,6 +49,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by(sprintf('%s|%s', (string) $request->ip(), (string) $userId));
         });
 
+        RateLimiter::for('orbit', function (Request $request): Limit {
+            $userId = $request->user()?->id ?? 'guest';
+
+            return Limit::perMinute(20)->by(sprintf('%s|%s', (string) $request->ip(), (string) $userId));
+        });
+
         RateLimiter::for('communication', function (Request $request): Limit {
             $userId = $request->user()?->id ?? 'guest';
 
@@ -76,6 +83,7 @@ class AppServiceProvider extends ServiceProvider
         // Explicitly register policies to avoid implicit resolution surprises
         Gate::policy(ChatMessage::class, ChatMessagePolicy::class);
         Gate::policy(ChatConversation::class, ChatConversationPolicy::class);
+        Gate::policy(Ticket::class, TicketPolicy::class);
 
         // Grant Super Admin unconditional access to all policies and gates.
         Gate::before(function ($user, $ability) {

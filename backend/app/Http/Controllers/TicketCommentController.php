@@ -3,14 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ticket;
-use App\Models\User;
+use App\Policies\TicketPolicy;
 use App\Services\TicketService;
 use Illuminate\Http\Request;
 
 class TicketCommentController extends Controller
 {
-    public function __construct(private readonly TicketService $ticketService)
-    {
+    public function __construct(
+        private readonly TicketService $ticketService,
+        private readonly TicketPolicy $ticketPolicy,
+    ) {
     }
 
     public function store(Request $request, string $ticketId)
@@ -23,14 +25,9 @@ class TicketCommentController extends Controller
 
         $user = $request->user();
 
-        $isAgent = $user->hasAnyRole([
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_COMPANY_ADMIN,
-            User::ROLE_DEPARTMENT_MANAGER,
-            User::ROLE_IT_SUPPORT,
-            User::ROLE_HR_MANAGER,
-            User::ROLE_HR_EXECUTIVE,
-        ]);
+        $this->authorize('view', $ticket);
+
+        $isAgent = $this->ticketPolicy->manage($user, $ticket);
 
         $validated = $request->validate([
             'body'        => ['required', 'string'],

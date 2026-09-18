@@ -13,12 +13,13 @@ return new class extends Migration {
             $table->index('company_id');
         });
 
-        // Backfill from users table
+        // Backfill from users table (subquery form works on both MySQL and
+        // SQLite — the previous multi-table UPDATE...JOIN syntax is MySQL-only
+        // and broke every RefreshDatabase-based test, which runs on SQLite).
         DB::statement('
-            UPDATE employees e
-            JOIN users u ON u.id = e.user_id
-            SET e.company_id = u.company_id
-            WHERE e.company_id IS NULL
+            UPDATE employees
+            SET company_id = (SELECT company_id FROM users WHERE users.id = employees.user_id)
+            WHERE company_id IS NULL
         ');
     }
 

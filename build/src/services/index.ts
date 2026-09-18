@@ -14,3 +14,4 @@ export * from "./payroll-service";
 export * from "./hr-management-service";
 export * from "./biometric-device-service";
 export * from "./ticket-service";
+export * from "./orbit-service";

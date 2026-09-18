@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import { TopNavbar } from "@/components/navbar/top-navbar";
 import { Breadcrumbs } from "@/components/breadcrumbs/breadcrumbs";
 import { PageLoader } from "@/app/components/page-loader";
+import { OrbitWidget } from "@/components/orbit/orbit-widget";
 import { useLayoutStore } from "@/store/layout-store";
 
 export function AppLayout() {
@@ -65,6 +66,7 @@ export function AppLayout() {
         </main>
       </div>
 
+      <OrbitWidget />
     </div>
   );
 }

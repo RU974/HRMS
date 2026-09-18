@@ -18,12 +18,21 @@ export interface PayrollRecord {
   month: number;
   year: number;
   base_salary: number | string;
+  allowances: number | string;
   bonus: number | string;
+  overtime_hours: number | string;
+  overtime_pay: number | string;
   deductions: number | string;
   tax: number | string;
   net_salary: number | string;
   payment_date: string;
   status: PayrollStatus;
+  approved_by?: number | null;
+  approved_at?: string | null;
+  paid_by?: number | null;
+  paid_at?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
   employee?: PayrollEmployee | null;
 }
 
@@ -39,12 +48,14 @@ export interface PayrollPayload {
   month: number;
   year: number;
   base_salary: number;
+  allowances?: number;
   bonus?: number;
+  overtime_hours?: number;
+  overtime_pay?: number;
   deductions?: number;
   tax?: number;
-  net_salary: number;
   payment_date: string;
-  status: PayrollStatus;
+  status?: PayrollStatus;
 }
 
 export interface PayrollGeneratePayload {
@@ -284,6 +295,10 @@ export function createSalarySlipFromPayroll(payroll_id: number, issue_date: stri
 
 export function approvePayroll(id: number) {
   return apiClient<PayrollRecord>(`/payroll/${id}/approve`, { method: "POST" });
+}
+
+export function rejectPayroll(id: number, reason: string) {
+  return apiClient<PayrollRecord>(`/payroll/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
 export async function downloadPayslipPdf(id: number, slipNumber: string, template: string): Promise<void> {

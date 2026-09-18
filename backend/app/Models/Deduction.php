@@ -10,6 +10,7 @@ class Deduction extends Model
     protected $fillable = [
         'employee_id',
         'payroll_id',
+        'loan_advance_id',
         'title',
         'amount',
         'type',
@@ -25,6 +26,11 @@ class Deduction extends Model
     public function payroll(): BelongsTo
     {
         return $this->belongsTo(Payroll::class);
+    }
+
+    public function loanAdvance(): BelongsTo
+    {
+        return $this->belongsTo(LoanAdvance::class);
     }
 }
 
