@@ -4,10 +4,16 @@ import { MicOff, VideoOff } from "lucide-react";
 interface VideoTileProps {
   stream: MediaStream | null;
   name: string;
-  /** Silence THIS tile's audio output (use for local preview to prevent echo) */
-  muted?: boolean;
-  noVideo?: boolean;
+  /** This tile is the local user (mirrored, labelled "You"). */
   isLocal?: boolean;
+  /** Camera switched off by the participant (their track keeps sending black frames). */
+  cameraOff?: boolean;
+  /** Microphone muted by the participant. */
+  micMuted?: boolean;
+  /** Currently the loudest speaker. */
+  speaking?: boolean;
+  /** Shared screens must not be cropped. */
+  fit?: "cover" | "contain";
   size?: "sm" | "lg";
 }
 
@@ -20,65 +26,67 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+/**
+ * Renders one participant's video. It is deliberately silent: remote audio is
+ * played by a single <RemoteAudio> per peer in the call window. Playing it here
+ * as well would double the audio in video calls.
+ */
 export function VideoTile({
   stream,
   name,
-  muted = false,
-  noVideo = false,
   isLocal = false,
+  cameraOff = false,
+  micMuted = false,
+  speaking = false,
+  fit = "cover",
   size = "lg",
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // Separate audio element so sound keeps playing even when video track is off
-  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const hasLiveVideo = !!stream && stream.getVideoTracks().some((t) => t.readyState === "live");
+  const showVideo = hasLiveVideo && !cameraOff;
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = stream ?? null;
-  }, [stream]);
-
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.srcObject = stream ?? null;
-  }, [stream]);
-
-  const hasVideo = !!stream && stream.getVideoTracks().some((t) => t.enabled) && !noVideo;
+    const el = videoRef.current;
+    if (el) el.srcObject = showVideo ? stream : null;
+  }, [stream, showVideo]);
 
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden rounded-2xl bg-gray-900 ${
-        size === "sm" ? "h-28 w-44" : "h-full w-full"
-      }`}
+      className={`relative flex items-center justify-center overflow-hidden rounded-2xl bg-gray-900 transition-shadow ${
+        size === "sm" ? "h-28 w-44" : "h-full min-h-0 w-full"
+      } ${speaking ? "ring-2 ring-green-400" : "ring-1 ring-white/5"}`}
     >
-      {/* Always-on audio output for remote participants — prevents audio loss when camera turns off */}
-      {!isLocal && !muted && (
-        <audio ref={audioRef} autoPlay playsInline className="hidden" />
-      )}
-
-      {hasVideo ? (
-        // Video element is always muted; audio comes from the <audio> element above
+      {showVideo ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`h-full w-full object-cover ${isLocal ? "scale-x-[-1]" : ""}`}
+          className={`h-full w-full ${fit === "contain" ? "object-contain" : "object-cover"} ${
+            isLocal && fit === "cover" ? "scale-x-[-1]" : ""
+          }`}
         />
       ) : (
         <div className="flex flex-col items-center gap-2">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-700 text-xl font-semibold text-white">
+          <div
+            className={`flex items-center justify-center rounded-full bg-gray-700 font-semibold text-white ${
+              size === "sm" ? "h-12 w-12 text-base" : "h-16 w-16 text-xl"
+            }`}
+          >
             {getInitials(name)}
           </div>
-          <p className="text-sm text-gray-300">{name}</p>
+          {size === "lg" && <p className="text-sm text-gray-300">{name}</p>}
         </div>
       )}
 
-      {/* Name / mute overlay */}
       <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/50 px-2 py-0.5 text-xs text-white">
-        {muted && <MicOff className="h-3 w-3" />}
-        <span>{isLocal ? "You" : name}</span>
+        {micMuted && <MicOff className="h-3 w-3 text-red-400" aria-label="Muted" />}
+        <span className="max-w-[10rem] truncate">{isLocal ? "You" : name}</span>
       </div>
 
-      {(noVideo || !hasVideo) && !isLocal && (
-        <div className="absolute right-2 top-2 rounded-md bg-black/50 p-1">
+      {cameraOff && (
+        <div className="absolute right-2 top-2 rounded-md bg-black/50 p-1" title="Camera off">
           <VideoOff className="h-3.5 w-3.5 text-white/60" />
         </div>
       )}

@@ -13,3 +13,9 @@ Broadcast::channel('chat.{conversationId}', function ($user, $conversationId) {
 Broadcast::channel('call.{userId}', function ($user, $userId) {
     return (int) $user->id === (int) $userId;
 });
+
+// Private per-user channel for chat inbox pings (unread badges, list refresh,
+// desktop notifications) and conversation membership changes.
+Broadcast::channel('chat.user.{userId}', function ($user, $userId) {
+    return (int) $user->id === (int) $userId;
+});

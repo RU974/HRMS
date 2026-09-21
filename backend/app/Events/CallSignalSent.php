@@ -33,4 +33,9 @@ class CallSignalSent implements ShouldBroadcastNow
             ],
         ];
     }
+
+    public function broadcastAs(): string
+    {
+        return 'call.signal';
+    }
 }

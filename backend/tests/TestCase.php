@@ -2,6 +2,8 @@
 
 namespace Tests;
 
+use App\Models\Company;
+use App\Models\License;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -41,5 +43,23 @@ abstract class TestCase extends BaseTestCase
 
         return $user->refresh();
     }
-}
 
+    /**
+     * Give a company an active license so license-gated routes are reachable.
+     */
+    protected function grantLicense(Company $company, array $features = ['communication']): void
+    {
+        License::create([
+            'company_id' => $company->id,
+            'license_key' => License::generateKey(),
+            'product' => 'HRMS',
+            'edition' => 'professional',
+            'licensee_name' => $company->name,
+            'licensee_email' => 'license@example.test',
+            'status' => 'active',
+            'activated_at' => now(),
+            'is_active' => true,
+            'features' => $features,
+        ]);
+    }
+}

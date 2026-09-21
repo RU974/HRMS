@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Broadcasting\ResilientPusherBroadcaster;
 use App\Events\LeaveRequested;
 use App\Events\LeaveStatusChanged;
 use App\Listeners\NotifyLeaveRequested;
@@ -16,8 +17,10 @@ use App\Policies\ChatConversationPolicy;
 use App\Policies\ChatMessagePolicy;
 use App\Policies\TicketPolicy;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Contracts\Broadcasting\Factory as BroadcastFactory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -39,6 +42,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Replace the built-in Reverb driver with one that never lets a websocket
+        // outage turn a successful request into a 500 (see the class for details).
+        Broadcast::extend('reverb', function ($app, array $config) {
+            return new ResilientPusherBroadcaster($app->make(BroadcastFactory::class)->pusher($config), $config['jsonp'] ?? false);
+        });
+
         RateLimiter::for('auth', function (Request $request): Limit {
             return Limit::perMinute(10)->by(sprintf('%s|%s', (string) $request->ip(), (string) $request->input('email')));
         });
@@ -59,6 +68,26 @@ class AppServiceProvider extends ServiceProvider
             $userId = $request->user()?->id ?? 'guest';
 
             return Limit::perMinute(60)->by(sprintf('%s|%s', (string) $request->ip(), (string) $userId));
+        });
+
+        // Every ICE candidate is its own request, so signalling needs far more
+        // headroom than ordinary API calls or a call setup would be throttled.
+        RateLimiter::for('call-signal', function (Request $request): Limit {
+            $userId = $request->user()?->id ?? 'guest';
+
+            return Limit::perMinute(600)->by(sprintf('call-signal|%s', (string) $userId));
+        });
+
+        RateLimiter::for('call-action', function (Request $request): Limit {
+            $userId = $request->user()?->id ?? 'guest';
+
+            return Limit::perMinute(30)->by(sprintf('call-action|%s', (string) $userId));
+        });
+
+        RateLimiter::for('chat-send', function (Request $request): Limit {
+            $userId = $request->user()?->id ?? 'guest';
+
+            return Limit::perMinute(60)->by(sprintf('chat-send|%s', (string) $userId));
         });
 
         RateLimiter::for('biometric-agent', function (Request $request): Limit {

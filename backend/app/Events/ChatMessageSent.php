@@ -5,11 +5,15 @@ namespace App\Events;
 use App\Models\ChatMessage;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ChatMessageSent implements ShouldBroadcast
+/**
+ * Broadcast synchronously (not queued) so chat stays real-time even when no
+ * queue worker is running or the queue is backed up.
+ */
+class ChatMessageSent implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -22,10 +26,15 @@ class ChatMessageSent implements ShouldBroadcast
         return new PrivateChannel('chat.' . $this->message->conversation_id);
     }
 
+    public function broadcastAs(): string
+    {
+        return 'chat.message.sent';
+    }
+
     public function broadcastWith(): array
     {
         return [
-            'message' => $this->message->load(['sender:id,name,email,company_id', 'receiver:id,name,email,company_id']),
+            'message' => $this->message->loadMissing(['sender:id,name,email,company_id', 'receiver:id,name,email,company_id']),
         ];
     }
 }

@@ -14,7 +14,8 @@ class ChatMessagePolicy
 
     public function view(User $user, ChatMessage $message): bool
     {
-        return $this->canView($user) && $this->sameCompany($user, $message)
+        // Only participants, or chat administrators moderating their own company.
+        return ($this->canManage($user) && $this->sameCompany($user, $message))
             || $this->isParticipant($user, $message);
     }
 
@@ -33,11 +34,6 @@ class ChatMessagePolicy
     {
         return ($this->canManage($user) && $this->sameCompany($user, $message))
             || $this->isSender($user, $message);
-    }
-
-    private function canView(User $user): bool
-    {
-        return $user->can('chat:manage_settings') || $user->can('chat:view');
     }
 
     private function canManage(User $user): bool

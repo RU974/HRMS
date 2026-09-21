@@ -18,7 +18,7 @@ class CallNotificationService
 
         $callerName = $call->initiator->name ?? 'Someone';
         $title      = "Missed {$call->type} call from {$callerName}";
-        $link       = $call->conversation_id ? "/chat/{$call->conversation_id}" : '/calls/history';
+        $link       = $call->conversation_id ? "/chat/{$call->conversation_id}" : '/call-history';
 
         $this->createNotifications(
             recipientIds: $missedUserIds,

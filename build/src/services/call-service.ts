@@ -1,4 +1,5 @@
-import { apiClient } from "@/services/api-client";
+import { apiClient, API_BASE_URL } from "@/services/api-client";
+import { useAuthStore } from "@/store/auth-store";
 
 export interface UserPresence {
   online: boolean;
@@ -30,15 +31,45 @@ export interface Call {
   id: number;
   conversation_id: number | null;
   initiated_by: number;
+  /** Current host — the initiator until they leave a group call. */
+  host_id: number;
   initiator: CallUser;
   type: "audio" | "video";
   call_type: "direct" | "group";
-  status: "ringing" | "active" | "ended" | "missed";
+  status: "ringing" | "active" | "ended" | "missed" | "declined";
   participants: CallParticipant[];
   started_at: string | null;
   ended_at: string | null;
   duration: number | null;
   created_at: string;
+}
+
+export interface CallConfig {
+  ice_servers: RTCIceServer[];
+  heartbeat_interval_seconds: number;
+  max_participants: number;
+  video_enabled: boolean;
+  screen_share_enabled: boolean;
+}
+
+export const DEFAULT_CALL_CONFIG: CallConfig = {
+  ice_servers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+  heartbeat_interval_seconds: 15,
+  max_participants: 4,
+  video_enabled: true,
+  screen_share_enabled: true,
+};
+
+export interface CallMediaState {
+  muted: boolean;
+  camera_off: boolean;
+  screen_sharing: boolean;
+}
+
+export interface CallHeartbeat {
+  call_status: Call["status"];
+  participant_status: CallParticipant["status"];
+  host_id: number;
 }
 
 export interface CallSignal {
@@ -64,7 +95,7 @@ export interface CallHistoryPage {
 }
 
 export function getCallHistory(filters?: {
-  status?: "all" | "ended" | "missed";
+  status?: "all" | "ended" | "missed" | "declined";
   type?: "all" | "audio" | "video";
   page?: number;
 }) {
@@ -74,6 +105,46 @@ export function getCallHistory(filters?: {
   if (filters?.page) params.set("page", String(filters.page));
   const qs = params.toString();
   return apiClient<CallHistoryPage>(`/calls/history${qs ? `?${qs}` : ""}`);
+}
+
+export function getCallConfig() {
+  return apiClient<CallConfig>("/calls/config");
+}
+
+/** The user's own ringing/active call, or null. */
+export function getCurrentCall() {
+  return apiClient<Call | null>("/calls/current");
+}
+
+export function pingPresence() {
+  return apiClient<null>("/presence/ping", { method: "POST" });
+}
+
+export function sendHeartbeat(callId: number) {
+  return apiClient<CallHeartbeat>(`/calls/${callId}/heartbeat`, { method: "POST" });
+}
+
+export function sendMediaState(callId: number, state: CallMediaState) {
+  return apiClient<null>(`/calls/${callId}/media-state`, { method: "POST", body: JSON.stringify(state) });
+}
+
+/**
+ * Leave a call while the page is unloading. A normal fetch is cancelled by the
+ * browser on unload; `keepalive` lets the request finish. Best effort: if it
+ * is lost the server heartbeat timeout cleans the call up.
+ */
+export function leaveCallOnUnload(callId: number) {
+  const token = useAuthStore.getState().token;
+  if (!token) return;
+  try {
+    void fetch(`${API_BASE_URL}/calls/${callId}/end`, {
+      method: "POST",
+      keepalive: true,
+      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    /* nothing more we can do while unloading */
+  }
 }
 
 export function getCall(id: number) {

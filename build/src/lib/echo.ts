@@ -23,7 +23,10 @@ export const echo = new Echo({
         },
         body: JSON.stringify({ socket_id: socketId, channel_name: channel.name }),
       })
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error(`Channel authorization failed (${res.status})`);
+          return res.json();
+        })
         .then((data) => callback(null, data))
         .catch((err: Error) => callback(err, null));
     },

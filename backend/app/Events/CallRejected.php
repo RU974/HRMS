@@ -31,4 +31,9 @@ class CallRejected implements ShouldBroadcastNow
             'rejected_by' => $this->rejectedByUserId,
         ];
     }
+
+    public function broadcastAs(): string
+    {
+        return 'call.rejected';
+    }
 }

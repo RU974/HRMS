@@ -106,6 +106,7 @@ export const appRouter = createBrowserRouter([
       { path: "announcements",             element: withPermission(<AnnouncementsPage />,         ["announcement:view", "announcement:edit"]) },
       { path: "notifications",             element: withPermission(<NotificationsPage />,         ["notification:view", "notification:edit"]) },
       { path: "chat",                      element: withPermission(<ChatPage />,        ["chat:view", "chat:create"]) },
+      { path: "chat/:conversationId",      element: withPermission(<ChatPage />,        ["chat:view", "chat:create"]) },
       { path: "call-history",              element: withPermission(<CallHistoryPage />, ["chat:view", "chat:create"]) },
       { path: "reports",                   element: withPermission(<ReportsPage />,               ["reports:view", "reports:manage_settings", "reports:view_own"]) },
       { path: "reports/attendance",        element: withPermission(<AttendanceReportsPage />,     ["reports:view", "reports:manage_settings", "reports:view_own"]) },

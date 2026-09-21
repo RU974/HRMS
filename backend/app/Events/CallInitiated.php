@@ -30,4 +30,9 @@ class CallInitiated implements ShouldBroadcastNow
     {
         return ['call' => $this->call];
     }
+
+    public function broadcastAs(): string
+    {
+        return 'call.initiated';
+    }
 }

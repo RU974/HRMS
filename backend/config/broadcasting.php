@@ -17,7 +17,11 @@ return [
                 'scheme' => env('REVERB_SCHEME', 'https'),
                 'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
             ],
-            'client_options' => [],
+            // Fail fast when Reverb is unreachable instead of hanging the request.
+            'client_options' => [
+                'connect_timeout' => 1,
+                'timeout' => 3,
+            ],
         ],
 
         'pusher' => [

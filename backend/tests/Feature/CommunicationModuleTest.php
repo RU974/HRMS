@@ -15,6 +15,7 @@ class CommunicationModuleTest extends TestCase
     public function test_company_admin_can_create_announcements(): void
     {
         $company = Company::create(['name' => 'Acme HR']);
+        $this->grantLicense($company);
         $admin = $this->createUserWithRole(User::ROLE_COMPANY_ADMIN, [
             'company_id' => $company->id,
             'email' => 'admin@acme.test',
@@ -35,7 +36,9 @@ class CommunicationModuleTest extends TestCase
     public function test_super_admin_broadcasts_notifications_to_all_users(): void
     {
         $companyA = Company::create(['name' => 'Acme HR']);
+        $this->grantLicense($companyA);
         $companyB = Company::create(['name' => 'Globex HR']);
+        $this->grantLicense($companyB);
         $superAdmin = $this->createUserWithRole(User::ROLE_SUPER_ADMIN, [
             'email' => 'superadmin@hrms.test',
         ]);
@@ -87,7 +90,9 @@ class CommunicationModuleTest extends TestCase
     public function test_super_admin_announcement_creates_bell_notifications_for_all_users(): void
     {
         $companyA = Company::create(['name' => 'Acme HR']);
+        $this->grantLicense($companyA);
         $companyB = Company::create(['name' => 'Globex HR']);
+        $this->grantLicense($companyB);
         $superAdmin = $this->createUserWithRole(User::ROLE_SUPER_ADMIN, [
             'email' => 'superadmin@hrms.test',
         ]);
@@ -149,6 +154,7 @@ class CommunicationModuleTest extends TestCase
     public function test_user_can_create_own_notification_without_explicit_recipient(): void
     {
         $company = Company::create(['name' => 'Acme HR']);
+        $this->grantLicense($company);
         $user = $this->createUserWithRole(User::ROLE_EMPLOYEE, [
             'company_id' => $company->id,
             'email' => 'employee@acme.test',
@@ -173,6 +179,7 @@ class CommunicationModuleTest extends TestCase
     public function test_user_can_send_chat_message_within_same_company(): void
     {
         $company = Company::create(['name' => 'Acme HR']);
+        $this->grantLicense($company);
         $sender = $this->createUserWithRole(User::ROLE_EMPLOYEE, [
             'company_id' => $company->id,
             'email' => 'sender@acme.test',

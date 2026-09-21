@@ -24,7 +24,26 @@ class ChatConversationPolicy
 
     public function update(User $user, ChatConversation $conversation): bool
     {
-        return $this->canManage($user, $conversation) || $this->isParticipant($user, $conversation);
+        return $this->manage($user, $conversation);
+    }
+
+    /**
+     * Rename a group and add/remove its members. Limited to the person who
+     * created the group and company chat administrators. Legacy groups with no
+     * recorded creator stay manageable by any member so they are not orphaned.
+     */
+    public function manage(User $user, ChatConversation $conversation): bool
+    {
+        if ($this->canManage($user, $conversation)) {
+            return true;
+        }
+
+        if ($conversation->created_by !== null) {
+            return (int) $conversation->created_by === (int) $user->id
+                && $this->isParticipant($user, $conversation);
+        }
+
+        return $this->isParticipant($user, $conversation);
     }
 
     private function canManage(User $user, ChatConversation $conversation): bool

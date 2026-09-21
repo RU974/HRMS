@@ -55,5 +55,9 @@ Schedule::command('biometric:sync-scheduled')->everyFiveMinutes();
 
 // ─── Calls ────────────────────────────────────────────────────────────────
 
-// Mark calls left ringing for too long (client disconnected, never answered) as missed.
-Schedule::command('calls:expire-stale')->everyMinute();
+// Mark unanswered calls as missed and drop participants whose client stopped
+// heartbeating (closed tab, crashed browser, lost network).
+Schedule::command('calls:expire-stale')->everyMinute()->withoutOverlapping();
+
+// WebRTC signalling rows are only useful during call setup.
+Schedule::command('calls:prune-signals')->daily();

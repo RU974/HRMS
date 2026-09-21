@@ -12,6 +12,7 @@ class Call extends Model
     protected $fillable = [
         'conversation_id',
         'initiated_by',
+        'host_id',
         'type',
         'call_type',
         'status',
@@ -55,6 +56,17 @@ class Call extends Model
     public function signals(): HasMany
     {
         return $this->hasMany(CallSignal::class);
+    }
+
+    /** The participant currently allowed to manage the call (initiator until they leave). */
+    public function currentHostId(): int
+    {
+        return (int) ($this->host_id ?? $this->initiated_by);
+    }
+
+    public function isHost(int $userId): bool
+    {
+        return $this->currentHostId() === $userId;
     }
 
     public function isActive(): bool

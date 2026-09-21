@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'audit.log'       => \App\Http\Middleware\AuditLogMiddleware::class,
             'permission'      => \App\Http\Middleware\PermissionMiddleware::class,
             'license.feature' => \App\Http\Middleware\RequireLicenseFeature::class,
+            'presence'        => \App\Http\Middleware\TrackLastSeen::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -42,7 +42,10 @@ export function ChatDropdown() {
   const conversationsQuery = useQuery({
     queryKey: ["chat-conversations", user?.id],
     queryFn: () => listConversations(),
-    enabled: Boolean(user?.id)
+    enabled: Boolean(user?.id),
+    // ChatInboxListener pushes updates; this only backstops a missed event.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true
   });
 
   const markReadMutation = useMutation({
@@ -161,17 +164,26 @@ export function ChatDropdown() {
                           <span className="text-[11px] text-[var(--muted)]">
                             {conversation.last_message ? formatRelativeTime(conversation.last_message.created_at) : ""}
                           </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 px-3 text-xs"
-                            onClick={async () => {
-                              await markReadMutation.mutateAsync(conversation.id);
-                            }}
-                            disabled={markReadMutation.isPending}
-                          >
-                            Mark read
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Link
+                              to={`/chat/${conversation.id}`}
+                              onClick={() => setOpen(false)}
+                              className="inline-flex h-8 items-center px-2 text-xs font-semibold text-[var(--primary)] hover:opacity-80"
+                            >
+                              Open
+                            </Link>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 px-3 text-xs"
+                              onClick={async () => {
+                                await markReadMutation.mutateAsync(conversation.id);
+                              }}
+                              disabled={markReadMutation.isPending}
+                            >
+                              Mark read
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

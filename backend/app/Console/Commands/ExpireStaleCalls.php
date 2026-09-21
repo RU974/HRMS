@@ -2,50 +2,24 @@
 
 namespace App\Console\Commands;
 
-use App\Events\CallEnded;
-use App\Models\Call;
-use App\Models\CallParticipant;
-use App\Services\CallNotificationService;
+use App\Services\CallService;
 use Illuminate\Console\Command;
 
 class ExpireStaleCalls extends Command
 {
     protected $signature   = 'calls:expire-stale';
-    protected $description = 'Mark calls left ringing for too long (never answered/rejected) as missed';
+    protected $description = 'Mark unanswered calls as missed and drop participants whose client stopped heartbeating';
 
-    public function handle(CallNotificationService $callNotifications): int
+    public function handle(CallService $calls): int
     {
-        $timeoutSeconds = (int) config('calls.ringing_timeout_seconds', 60);
+        $result = $calls->expireStale();
 
-        $calls = Call::withoutGlobalScopes()
-            ->where('status', 'ringing')
-            ->where('created_at', '<', now()->subSeconds($timeoutSeconds))
-            ->get();
-
-        $count = 0;
-
-        foreach ($calls as $call) {
-            $call->update(['status' => 'missed', 'ended_at' => now()]);
-
-            $allParticipantIds = CallParticipant::query()
-                ->where('call_id', $call->id)
-                ->pluck('user_id')
-                ->toArray();
-
-            CallParticipant::query()
-                ->where('call_id', $call->id)
-                ->whereIn('status', ['invited', 'joined'])
-                ->update(['status' => 'left', 'left_at' => now()]);
-
-            $missedUserIds = array_values(array_diff($allParticipantIds, [$call->initiated_by]));
-            $callNotifications->notifyMissedCall($call, $missedUserIds);
-
-            event(new CallEnded($call->id, $allParticipantIds));
-
-            $count++;
-        }
-
-        $this->info("Expired {$count} stale ringing call(s)");
+        $this->info(sprintf(
+            'Expired %d stale ringing call(s), removed %d disconnected participant(s), lapsed %d late invitation(s)',
+            $result['missed_calls'],
+            $result['stale_participants'],
+            $result['lapsed_invitations']
+        ));
 
         return self::SUCCESS;
     }

@@ -90,7 +90,7 @@ $registerRoutes = function (): void {
     });
 
     // Protected routes - require authentication
-    Route::middleware(['auth:sanctum', 'audit.log'])->group(function () {
+    Route::middleware(['auth:sanctum', 'presence', 'audit.log'])->group(function () {
         // Authentication routes
         Route::prefix('auth')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout']);
@@ -372,27 +372,42 @@ $registerRoutes = function (): void {
             Route::middleware('throttle:communication')->group(function () {
                 Route::get('chat-messages/users', [ChatMessageController::class, 'users']);
                 Route::get('chat-messages/{id}/attachment', [ChatMessageController::class, 'downloadAttachment']);
-                Route::apiResource('chat-messages', ChatMessageController::class);
-                Route::apiResource('chat-conversations', ChatConversationController::class)->only(['index', 'store', 'show']);
+                Route::post('chat-messages', [ChatMessageController::class, 'store'])->middleware('throttle:chat-send');
+                Route::apiResource('chat-messages', ChatMessageController::class)->except(['store']);
+                Route::apiResource('chat-conversations', ChatConversationController::class)->only(['index', 'store', 'show', 'update']);
                 Route::post('chat-conversations/{id}/read', [ChatConversationController::class, 'markRead']);
+                Route::post('chat-conversations/{id}/leave', [ChatConversationController::class, 'leave']);
                 Route::post('chat-conversations/{id}/participants', [ChatConversationController::class, 'addParticipant']);
                 Route::delete('chat-conversations/{id}/participants/{userId}', [ChatConversationController::class, 'removeParticipant']);
 
                 // Presence
                 Route::post('users/online-status', [CallController::class, 'onlineStatus']);
+                Route::post('presence/ping', [CallController::class, 'ping']);
 
-                // Calling
+                // Calling — read-only lookups
+                Route::get('calls/config', [CallController::class, 'config']);
+                Route::get('calls/current', [CallController::class, 'current']);
                 Route::get('calls/history', [CallController::class, 'history']);
-                Route::post('calls', [CallController::class, 'initiate']);
                 Route::get('calls/{id}', [CallController::class, 'show']);
+            });
+
+            // Calling — state changes. Kept out of the shared 60/min bucket:
+            // signalling fires one request per ICE candidate.
+            Route::middleware('throttle:call-action')->group(function () {
+                Route::post('calls', [CallController::class, 'initiate']);
                 Route::post('calls/{id}/answer', [CallController::class, 'answer']);
                 Route::post('calls/{id}/reject', [CallController::class, 'reject']);
                 Route::post('calls/{id}/end', [CallController::class, 'end']);
                 Route::post('calls/{id}/participants', [CallController::class, 'addParticipant']);
                 Route::delete('calls/{id}/participants/{userId}', [CallController::class, 'removeParticipant']);
                 Route::post('calls/{id}/participants/{userId}/mute', [CallController::class, 'muteParticipant']);
+            });
+
+            Route::middleware('throttle:call-signal')->group(function () {
                 Route::post('calls/{id}/signals', [CallController::class, 'sendSignal']);
                 Route::get('calls/{id}/signals', [CallController::class, 'getSignals']);
+                Route::post('calls/{id}/heartbeat', [CallController::class, 'heartbeat']);
+                Route::post('calls/{id}/media-state', [CallController::class, 'mediaState']);
             });
         });
 

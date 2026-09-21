@@ -27,4 +27,9 @@ class CallMuteRequested implements ShouldBroadcastNow
     {
         return ['call_id' => $this->callId];
     }
+
+    public function broadcastAs(): string
+    {
+        return 'call.mute_requested';
+    }
 }

@@ -36,7 +36,9 @@ return [
             'options' => [
                 'tls' => [],
             ],
-            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 10_000),
+            // Largest event this app may publish (HTTP body). The 10 KB library default silently
+            // drops long chat messages (non-ASCII text is ~6 bytes/char in JSON) and big SDP offers.
+            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 1_000_000),
             'scaling' => [
                 'enabled' => env('REVERB_SCALING_ENABLED', false),
                 'channel' => env('REVERB_SCALING_CHANNEL', 'reverb'),
@@ -82,11 +84,13 @@ return [
                     'scheme' => env('REVERB_SCHEME', 'https'),
                     'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
                 ],
-                'allowed_origins' => ['*'],
+                // Comma-separated list of browser origins allowed to open a websocket, e.g.
+                // https://hrms.example.com. Defaults to any origin for local development only.
+                'allowed_origins' => array_values(array_filter(array_map('trim', explode(',', (string) env('REVERB_ALLOWED_ORIGINS', '*'))))),
                 'ping_interval' => env('REVERB_APP_PING_INTERVAL', 60),
                 'activity_timeout' => env('REVERB_APP_ACTIVITY_TIMEOUT', 30),
                 'max_connections' => env('REVERB_APP_MAX_CONNECTIONS'),
-                'max_message_size' => env('REVERB_APP_MAX_MESSAGE_SIZE', 10_000),
+                'max_message_size' => env('REVERB_APP_MAX_MESSAGE_SIZE', 1_000_000),
                 'accept_client_events_from' => env('REVERB_APP_ACCEPT_CLIENT_EVENTS_FROM', 'members'),
                 'rate_limiting' => [
                     'enabled' => env('REVERB_APP_RATE_LIMITING_ENABLED', false),

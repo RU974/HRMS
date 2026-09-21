@@ -92,6 +92,8 @@ class PermissionSeeder extends Seeder
             // employees:view_all grants company-wide visibility, bypassing the
             // manager/department/branch narrowing applied to plain employees:view holders
             ['module' => 'employees', 'action' => 'view_all', 'name' => 'employees:view_all'],
+            // call:use lets a user start, answer and join audio/video calls
+            ['module' => 'call', 'action' => 'use', 'name' => 'call:use'],
             ['module' => '*', 'action' => '*', 'name' => '*.*'],
         ];
 

@@ -13,11 +13,13 @@ class CallParticipant extends Model
         'status',
         'joined_at',
         'left_at',
+        'last_heartbeat_at',
     ];
 
     protected $casts = [
         'joined_at' => 'datetime',
         'left_at' => 'datetime',
+        'last_heartbeat_at' => 'datetime',
     ];
 
     public function call(): BelongsTo

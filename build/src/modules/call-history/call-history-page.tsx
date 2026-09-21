@@ -5,7 +5,7 @@ import { getCallHistory, Call } from "@/services/call-service";
 import { useAuthStore } from "@/store/auth-store";
 import { PageHeader } from "@/components/page-header/page-header";
 
-type StatusFilter = "all" | "ended" | "missed";
+type StatusFilter = "all" | "ended" | "missed" | "declined";
 type TypeFilter = "all" | "audio" | "video";
 
 function formatDuration(seconds: number | null) {
@@ -34,7 +34,7 @@ function CallIcon({ call, currentUserId }: { call: Call; currentUserId: number }
   const isMissed = call.status === "missed";
   const cls = "h-4 w-4";
 
-  if (isMissed) return <PhoneMissed className={`${cls} text-red-500`} />;
+  if (isMissed || call.status === "declined") return <PhoneMissed className={`${cls} text-red-500`} />;
   if (call.type === "video") return <Video className={`${cls} text-blue-500`} />;
   if (isInitiator) return <PhoneOutgoing className={`${cls} text-emerald-500`} />;
   return <PhoneIncoming className={`${cls} text-emerald-500`} />;
@@ -43,6 +43,7 @@ function CallIcon({ call, currentUserId }: { call: Call; currentUserId: number }
 function CallRow({ call, currentUserId }: { call: Call; currentUserId: number }) {
   const isInitiator = call.initiated_by === currentUserId;
   const isMissed = call.status === "missed";
+  const isDeclined = call.status === "declined";
 
   const otherParticipants = call.participants.filter((p) => p.user_id !== currentUserId);
   const label =
@@ -50,7 +51,17 @@ function CallRow({ call, currentUserId }: { call: Call; currentUserId: number })
       ? `Group call (${call.participants.length} people)`
       : otherParticipants[0]?.user.name ?? "Unknown";
 
-  const direction = isInitiator ? "Outgoing" : isMissed ? "Missed" : "Incoming";
+  const direction = isDeclined
+    ? isInitiator
+      ? "Declined"
+      : "You declined"
+    : isInitiator
+    ? isMissed
+      ? "Outgoing · no answer"
+      : "Outgoing"
+    : isMissed
+    ? "Missed"
+    : "Incoming";
 
   return (
     <div className="flex items-center gap-4 border-b border-[var(--border)] px-4 py-3 transition hover:bg-[var(--hover)]">
@@ -62,7 +73,7 @@ function CallRow({ call, currentUserId }: { call: Call; currentUserId: number })
       {/* Name + direction */}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--text)]">{label}</p>
-        <p className={`text-xs ${isMissed ? "text-red-500" : "text-[var(--muted)]"}`}>{direction}</p>
+        <p className={`text-xs ${isMissed || isDeclined ? "text-red-500" : "text-[var(--muted)]"}`}>{direction}</p>
       </div>
 
       {/* Type badge */}
@@ -128,7 +139,7 @@ export function CallHistoryPage() {
     <div className="mx-auto max-w-4xl px-4 py-6">
       <PageHeader
         title="Call History"
-        subtitle="Your last 50 audio and video calls"
+        subtitle="Your audio and video calls"
       />
 
       {/* Filters */}
@@ -142,7 +153,7 @@ export function CallHistoryPage() {
         />
 
         <div className="flex gap-2">
-          {(["all", "ended", "missed"] as StatusFilter[]).map((s) => (
+          {(["all", "ended", "missed", "declined"] as StatusFilter[]).map((s) => (
             <button
               key={s}
               onClick={() => {
@@ -155,7 +166,7 @@ export function CallHistoryPage() {
                   : "bg-[var(--border)]/40 text-[var(--muted)] hover:bg-[var(--border)]"
               }`}
             >
-              {s === "all" ? "All" : s === "ended" ? "Answered" : "Missed"}
+              {s === "all" ? "All" : s === "ended" ? "Answered" : s === "missed" ? "Missed" : "Declined"}
             </button>
           ))}
         </div>

@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { getResolvedTheme, useThemeStore } from "@/store/theme-store";
 import { ToastContainer } from "@/components/notifications/toast";
 import { CallProvider } from "@/components/call/CallProvider";
+import { ChatInboxListener } from "@/components/chat/chat-inbox-listener";
 
 const queryClient = new QueryClient();
 
@@ -94,6 +95,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <CallProvider>
+        <ChatInboxListener />
         {children}
         <ToastContainer />
       </CallProvider>

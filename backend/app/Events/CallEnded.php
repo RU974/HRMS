@@ -14,7 +14,9 @@ class CallEnded implements ShouldBroadcastNow
 
     public function __construct(
         private readonly int $callId,
-        private readonly array $participantUserIds
+        private readonly array $participantUserIds,
+        /** ended | missed | declined | removed: lets the client say WHY the call closed. */
+        private readonly string $reason = 'ended'
     ) {}
 
     /** Broadcast to every participant so they all close the call window. */
@@ -28,6 +30,11 @@ class CallEnded implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
-        return ['call_id' => $this->callId];
+        return ['call_id' => $this->callId, 'reason' => $this->reason];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'call.ended';
     }
 }

@@ -22,7 +22,9 @@ class ChatSearchService
                         $participantQuery->where('user_id', $user->id);
                     });
 
-                if ($user->can('chat:view') || $user->can('chat:manage_settings')) {
+                // Reading other people's conversations is a moderation power reserved
+                // for chat administrators, not for everyone who may use chat.
+                if ($user->can('chat:manage_settings')) {
                     if ($user->company_id) {
                         if ($this->supportsCompanyScope()) {
                             $builder->orWhere('company_id', $user->company_id);
@@ -78,7 +80,7 @@ class ChatSearchService
             return true;
         }
 
-        if (!($user->can('chat:view') || $user->can('chat:manage_settings'))) {
+        if (!$user->can('chat:manage_settings')) {
             return false;
         }
 
