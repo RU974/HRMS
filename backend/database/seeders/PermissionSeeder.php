@@ -83,6 +83,9 @@ class PermissionSeeder extends Seeder
             ['module' => 'system', 'action' => 'settings.view', 'name' => 'system:settings.view'],
             // biometric — seeded here so db:seed alone is sufficient without running individual migrations
             ['module' => 'biometric', 'action' => 'view', 'name' => 'biometric:view'],
+            ['module' => 'biometric', 'action' => 'create', 'name' => 'biometric:create'],
+            ['module' => 'biometric', 'action' => 'edit', 'name' => 'biometric:edit'],
+            ['module' => 'biometric', 'action' => 'delete', 'name' => 'biometric:delete'],
             ['module' => 'biometric', 'action' => 'sync', 'name' => 'biometric:sync'],
             ['module' => 'biometric', 'action' => 'manage_mapping', 'name' => 'biometric:manage_mapping'],
             // reports:view_own used by Employee role and route guards
