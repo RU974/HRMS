@@ -385,3 +385,18 @@ export function updateLoanAdvance(id: number, payload: Partial<Omit<LoanAdvance,
 export function deleteLoanAdvance(id: number) {
   return apiClient<null>(`/loan-advances/${id}`, { method: "DELETE" });
 }
+
+export async function downloadPayrollSummaryPdf(month: number, year: number): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const response = await fetch(`${API_BASE_URL}/payroll/summary-pdf?month=${month}&year=${year}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error(`PDF download failed (${response.status})`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payroll-summary-${year}-${String(month).padStart(2, "0")}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

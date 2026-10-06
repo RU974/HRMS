@@ -408,6 +408,57 @@ class PayrollController extends Controller
     }
 
     // ──────────────────────────────────────────────────────────────
+    //  GET /api/payroll/summary-pdf?month=&year=   (payroll:manage_settings)
+    //  Printable disbursement sheet for the whole period with grand total.
+    // ──────────────────────────────────────────────────────────────
+    public function summaryPdf(Request $request)
+    {
+        $this->authorizePermission($request, 'payroll:manage_settings');
+
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year'  => 'required|integer|min:2000',
+        ]);
+
+        $month = (int) $request->query('month');
+        $year  = (int) $request->query('year');
+
+        $query = Payroll::with(['employee'])
+            ->where('month', $month)
+            ->where('year', $year);
+        $this->scopeToCompany($request, $query, 'employee');
+
+        $records = $query->get()->sortBy(fn ($p) => $p->employee?->name ?? '')->values();
+
+        $companyId = $request->user()?->company_id;
+        $company = $companyId ? \App\Models\Company::find($companyId) : null;
+
+        $sum = fn (string $f) => (float) $records->sum(fn ($p) => (float) ($p->{$f} ?? 0));
+        $totals = [
+            'base'       => $sum('base_salary'),
+            'allowances' => $sum('allowances'),
+            'bonus'      => $sum('bonus'),
+            'overtime'   => $sum('overtime_pay'),
+            'deductions' => $sum('deductions'),
+            'tax'        => $sum('tax'),
+            'net'        => $sum('net_salary'),
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('payroll.summary-pdf', [
+            'companyName' => $company->name ?? config('app.name'),
+            'period'      => date('F Y', mktime(0, 0, 0, $month, 1, $year)),
+            'records'     => $records,
+            'totals'      => $totals,
+            'generatedAt' => now()->format('Y-m-d H:i'),
+        ])->setPaper('a4', 'landscape');
+
+        return response($pdf->output(), 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"payroll-summary-{$year}-" . str_pad((string) $month, 2, '0', STR_PAD_LEFT) . ".pdf\"",
+        ]);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     //  POST /api/payroll/{id}/mark-paid    (payroll:manage_settings)
     // ──────────────────────────────────────────────────────────────
     public function markAsPaid(Request $request, int $id)

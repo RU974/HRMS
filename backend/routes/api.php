@@ -284,6 +284,7 @@ $registerRoutes = function (): void {
             Route::get('payroll/summary/monthly', [PayrollController::class, 'getMonthlySummary']);
             Route::middleware('permission:payroll:manage_settings')->group(function () {
                 Route::get('payroll/bank-export', [PayrollController::class, 'bankExport']);
+                Route::get('payroll/summary-pdf', [PayrollController::class, 'summaryPdf']);
             });
             Route::apiResource('payroll', PayrollController::class);
             Route::get('payslips/{id}/pdf', [PayslipController::class, 'downloadPdf']);

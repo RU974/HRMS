@@ -15,6 +15,7 @@ import {
   createPayroll,
   deletePayroll,
   downloadBankExport,
+  downloadPayrollSummaryPdf,
   generatePayrollAndWait,
   listPayroll,
   markPayrollPaid,
@@ -86,6 +87,15 @@ export function PayrollRecordsTab() {
     finally { setExporting(false); }
   }
 
+  // ── Payroll summary PDF ────────────────────────────────────────────────────
+  const [pdfLoading, setPdfLoading] = useState(false);
+  async function handleSummaryPdf() {
+    setPdfLoading(true);
+    try { await downloadPayrollSummaryPdf(exportMonth, exportYear); }
+    catch (e) { toast.error("PDF failed", (e as Error).message); }
+    finally { setPdfLoading(false); }
+  }
+
   // ── Payroll record form ────────────────────────────────────────────────────
   const [payrollModal,  setPayrollModal]  = useState(false);
   const [payrollEdit,   setPayrollEdit]   = useState<PayrollRecord | null>(null);
@@ -153,6 +163,7 @@ export function PayrollRecordsTab() {
             <Button variant="outline" className="text-xs" onClick={() => void handleExport()} disabled={exporting}>{exporting ? "Exporting…" : "⬇ Bank CSV Export"}</Button>
           </div>
           <Button variant="outline" className="text-xs" onClick={() => setGenModal(true)}>⚡ Generate Payroll</Button>
+          <Button variant="outline" className="text-xs" onClick={() => void handleSummaryPdf()} disabled={pdfLoading || payrolls.length === 0}>{pdfLoading ? "Generating…" : "⬇ Payroll PDF"}</Button>
           <Button className="ml-auto text-xs" onClick={() => { setPayrollEdit(null); resetPayroll(emptyPayrollForm); setPayrollModal(true); }}>+ Manual Entry</Button>
         </div>
       )}
@@ -161,6 +172,7 @@ export function PayrollRecordsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
+              <th className="p-3">Emp. ID</th>
               <th className="p-3">Employee</th>
               <th className="p-3">Period</th>
               <th className="p-3">Base</th>
@@ -173,11 +185,12 @@ export function PayrollRecordsTab() {
           <tbody>
             {payrollsQ.isLoading && [...Array(4)].map((_, i) => (
               <tr key={i} className="border-b border-[var(--border)]/50">
-                {[...Array(7)].map((__, j) => <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>)}
+                {[...Array(8)].map((__, j) => <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>)}
               </tr>
             ))}
             {payrolls.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
+                <td className="p-3" data-label="Emp. ID">{item.employee?.employee_number ?? `#${item.employee_id}`}</td>
                 <td className="p-3 font-medium" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
                 <td className="p-3" data-label="Period">{item.month}/{item.year}</td>
                 <td className="p-3" data-label="Base">{fmt(Number(item.base_salary))}</td>
@@ -207,7 +220,7 @@ export function PayrollRecordsTab() {
               </tr>
             ))}
             {!payrollsQ.isLoading && payrolls.length === 0 && (
-              <tr><td colSpan={7} className="p-8 text-center text-sm text-[var(--muted)]">No payroll records. Generate payroll or add manually.</td></tr>
+              <tr><td colSpan={8}className="p-8 text-center text-sm text-[var(--muted)]">No payroll records. Generate payroll or add manually.</td></tr>
             )}
           </tbody>
         </table>
@@ -235,6 +248,7 @@ export function PayrollRecordsTab() {
         <Modal title={`Payroll — ${payrollDetail.employee?.name ?? `#${payrollDetail.employee_id}`}`} onClose={() => setPayrollDetail(null)}>
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">
+              <SummaryCard label="Employee ID" value={payrollDetail.employee?.employee_number ?? `#${payrollDetail.employee_id}`} />
               <SummaryCard label="Period" value={`${payrollDetail.month}/${payrollDetail.year}`} />
               <SummaryCard label="Status" value={payrollDetail.status} />
               <SummaryCard label="Payment Date" value={payrollDetail.payment_date?.slice(0, 10) ?? "—"} />
