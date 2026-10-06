@@ -14,6 +14,34 @@ class AttendanceCalculator
         return Carbon::parse(sprintf('%s %s', $date, $time))->toDateTimeString();
     }
 
+    /**
+     * Build the check-out datetime for a record whose date is the shift-start date.
+     * A check-out at or before the check-in clock time belongs to the next calendar
+     * day (night shifts, e.g. in 19:30 → out 05:10).
+     */
+    public function resolveCheckOut(string $date, ?string $checkInDateTime, string $time): string
+    {
+        $out = Carbon::parse(sprintf('%s %s', $date, $time));
+
+        if ($checkInDateTime) {
+            $in = Carbon::parse($checkInDateTime);
+            while ($out->lessThanOrEqualTo($in)) {
+                $out->addDay();
+            }
+        }
+
+        return $out->toDateTimeString();
+    }
+
+    public function isOvernightShift(?Shift $shift): bool
+    {
+        if (!$shift || !$shift->start_time || !$shift->end_time) {
+            return false;
+        }
+
+        return Carbon::parse($shift->end_time)->lessThanOrEqualTo(Carbon::parse($shift->start_time));
+    }
+
     public function deriveStatusFromCheckIn(?AttendancePolicy $policy, ?Shift $shift, string $checkInDateTime, string $fallbackStatus = 'present'): string
     {
         if (!$policy) {
@@ -34,6 +62,12 @@ class AttendanceCalculator
     {
         if ($shift && $shift->start_time) {
             $threshold = Carbon::parse($checkIn->toDateString() . ' ' . $shift->start_time);
+            // Night shift: a check-in after midnight (before the shift's end time)
+            // belongs to the shift that started the previous evening.
+            if ($this->isOvernightShift($shift)
+                && $checkIn->format('H:i:s') < Carbon::parse($shift->end_time)->format('H:i:s')) {
+                $threshold->subDay();
+            }
             $grace = (int) ($shift->grace_minutes ?? 0);
             if ($grace > 0) {
                 $threshold = $threshold->addMinutes($grace);

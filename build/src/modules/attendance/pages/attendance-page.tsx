@@ -273,7 +273,7 @@ function TeamView() {
                         )}
                       </td>
                       <td data-label="Check In" className="p-3">{att?.check_in ? att.check_in.slice(11, 16) : "—"}</td>
-                      <td data-label="Check Out" className="p-3">{att?.check_out ? att.check_out.slice(11, 16) : "—"}</td>
+                      <td data-label="Check Out" className="p-3">{att?.check_out ? <>{att.check_out.slice(11, 16)}{att.check_out.slice(0, 10) > String(att.date).slice(0, 10) && <span className="ml-1 text-xs text-[var(--muted)]">+1d</span>}</> : "—"}</td>
                       <td data-label="Flags" className="p-3">
                         <div className="flex flex-wrap gap-1">
                           {att?.work_from_home && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">WFH</span>}

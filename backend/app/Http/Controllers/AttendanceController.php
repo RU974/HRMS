@@ -97,7 +97,11 @@ class AttendanceController extends Controller
         }
 
         if (!empty($validated['check_out'])) {
-            $validated['check_out'] = $this->attendanceCalculator()->normalizeCheckTime($validated['date'], $validated['check_out']);
+            $validated['check_out'] = $this->attendanceCalculator()->resolveCheckOut(
+                $validated['date'],
+                $validated['check_in'] ?? null,
+                $validated['check_out']
+            );
         }
 
         $validated['status'] = $status;
@@ -125,7 +129,12 @@ class AttendanceController extends Controller
             $validated['check_in'] = $this->attendanceCalculator()->normalizeCheckTime($date, $validated['check_in']);
         }
         if (!empty($validated['check_out'])) {
-            $validated['check_out'] = $this->attendanceCalculator()->normalizeCheckTime($date, $validated['check_out']);
+            // Night shifts: a check-out earlier than the check-in clock time is the next day.
+            $validated['check_out'] = $this->attendanceCalculator()->resolveCheckOut(
+                $date,
+                $validated['check_in'] ?? ($attendance->check_in ? Carbon::parse($attendance->check_in)->toDateTimeString() : null),
+                $validated['check_out']
+            );
         }
 
         $policy = AttendancePolicy::query()->first();
@@ -208,6 +217,13 @@ class AttendanceController extends Controller
         $shift = Employee::find($validated['employee_id'])?->shift;
         $now = Carbon::now();
 
+        if (!$attendance && $this->attendanceCalculator()->isOvernightShift($shift)) {
+            $open = $this->findOpenPreviousDayRecord((int) $validated['employee_id'], $now);
+            if ($open) {
+                return $this->ok($open, 'Already checked in (night shift in progress)');
+            }
+        }
+
         if (!$attendance) {
             $checkIn = $now->toDateTimeString();
             $attendance = Attendance::create([
@@ -253,6 +269,13 @@ class AttendanceController extends Controller
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', Carbon::today())->first();
+        if (!$attendance || $attendance->check_out) {
+            // Night shift: the open record belongs to the previous calendar day.
+            $open = $this->findOpenPreviousDayRecord((int) $validated['employee_id'], Carbon::now());
+            if ($open) {
+                $attendance = $open;
+            }
+        }
         if (!$attendance) {
             return $this->fail('No check-in record found for today.', 404);
         }
@@ -268,6 +291,20 @@ class AttendanceController extends Controller
 
         $attendance->update($update);
         return $this->ok($attendance, 'Check-out successful');
+    }
+
+    /**
+     * Yesterday's record that is still open (checked in, not out) and whose check-in
+     * is recent enough to be the same night shift.
+     */
+    private function findOpenPreviousDayRecord(int $employeeId, Carbon $now): ?Attendance
+    {
+        return Attendance::where('employee_id', $employeeId)
+            ->whereDate('date', $now->copy()->subDay()->toDateString())
+            ->whereNotNull('check_in')
+            ->whereNull('check_out')
+            ->where('check_in', '>=', $now->copy()->subHours(20)->toDateTimeString())
+            ->first();
     }
 
     public function listCorrections(Request $request)

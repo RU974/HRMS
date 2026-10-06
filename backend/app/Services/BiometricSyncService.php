@@ -278,6 +278,30 @@ class BiometricSyncService
         $timestamp = $punch['timestamp'];
         $date = $timestamp->copy()->setTimezone($device->timezone)->toDateString();
 
+        $type  = $punch['type'] ?? 'in';
+        $shift = Employee::find($employeeId)?->shift;
+        $calculator = new AttendanceCalculator();
+
+        // Night shifts: the record's date is the shift-start date, so a punch after
+        // midnight must be attached to the still-open record from the previous evening.
+        $open = Attendance::where('employee_id', $employeeId)
+            ->whereNotNull('check_in')
+            ->whereNull('check_out')
+            ->where('check_in', '>=', $timestamp->copy()->subHours(20)->toDateTimeString())
+            ->where('check_in', '<', $timestamp->toDateTimeString())
+            ->whereDate('date', '<', $date)
+            ->orderByDesc('check_in')
+            ->first();
+
+        if ($open && ($type === 'out' || ($calculator->isOvernightShift($shift)
+            && $timestamp->getTimestamp() - Carbon::parse($open->check_in)->getTimestamp() >= 3600))) {
+            $open->check_out = $timestamp;
+            $open->source = 'biometric';
+            $open->biometric_device_id = $device->id;
+            $open->save();
+            return;
+        }
+
         $attendance = Attendance::firstOrNew([
             'employee_id' => $employeeId,
             'date' => $date,
@@ -286,7 +310,7 @@ class BiometricSyncService
         $attendance->source = 'biometric';
         $attendance->biometric_device_id = $device->id;
 
-        if (($punch['type'] ?? 'in') === 'out') {
+        if ($type === 'out') {
             $attendance->check_out = $timestamp;
         } else {
             if (!$attendance->check_in) {
