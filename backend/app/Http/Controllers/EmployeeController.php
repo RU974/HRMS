@@ -123,6 +123,11 @@ class EmployeeController extends Controller
             if (!$linkedUserId && $createUser) {
                 $existingUser = User::where('email', $validated['email'])->first();
                 if ($existingUser) {
+                    if ((string) ($existingUser->company_id ?? '') !== (string) $companyId) {
+                        throw ValidationException::withMessages([
+                            'email' => ['A user account with this email already exists in another company. Use a different email.'],
+                        ]);
+                    }
                     $this->assertUserCompanyMatch($request, $existingUser);
                     $linkedUserId = $existingUser->id;
                 } else {

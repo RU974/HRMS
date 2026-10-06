@@ -155,10 +155,13 @@ export interface SalaryIncrement {
   employee?: PayrollEmployee | null;
 }
 
+export type LoanAdvanceType = "loan" | "advance";
+
 export interface LoanAdvance {
   id: number;
   employee_id: number;
   company_id?: number | null;
+  type: LoanAdvanceType;
   title: string;
   amount: number;
   outstanding_balance: number;
@@ -370,7 +373,7 @@ export function deleteSalaryIncrement(id: number) {
   return apiClient<null>(`/salary-increments/${id}`, { method: "DELETE" });
 }
 
-export function listLoanAdvances(filters: { employee_id?: number; status?: string } = {}) {
+export function listLoanAdvances(filters: { employee_id?: number; status?: string; type?: LoanAdvanceType } = {}) {
   return apiClient<PaginationMeta<LoanAdvance>>(`/loan-advances${qs(filters)}`);
 }
 export function createLoanAdvance(payload: Omit<LoanAdvance, "id" | "company_id" | "employee">) {

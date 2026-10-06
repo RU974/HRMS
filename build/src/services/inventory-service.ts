@@ -105,7 +105,19 @@ export const updateInventoryItem = (
     body: JSON.stringify(payload),
   });
 
-export const deleteInventoryItem = (id: number) =>
+export interface InventoryImportResult {
+  created: number;
+  failed: number;
+  errors: { row: number; message: string }[];
+}
+
+export const importInventoryItems = (rows: Record<string, string>[]) =>
+  apiClient<InventoryImportResult>("/inventory/items/import", {
+    method: "POST",
+    body: JSON.stringify({ rows }),
+  });
+
+export const deleteInventoryItem =(id: number) =>
   apiClient<null>(`/inventory/items/${id}`, { method: "DELETE" });
 
 export const restoreInventoryItem = (id: number) =>

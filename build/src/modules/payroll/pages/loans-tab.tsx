@@ -11,6 +11,7 @@ import { toast } from "@/components/notifications/toast";
 import { getEmployees } from "@/services/employee-service";
 import {
   type LoanAdvance,
+  type LoanAdvanceType,
   createLoanAdvance,
   deleteLoanAdvance,
   listLoanAdvances,
@@ -35,12 +36,18 @@ type LoanFormValues = z.output<typeof loanSchema>;
 
 const emptyLoanForm: LoanFormInput = { employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "", start_date: "", end_date: "", notes: "" };
 
-export function LoansTab() {
+const COPY: Record<LoanAdvanceType, { singular: string; plural: string }> = {
+  loan:    { singular: "Loan",    plural: "Loans" },
+  advance: { singular: "Advance", plural: "Advances" },
+};
+
+export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
+  const { singular, plural } = COPY[type];
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
   const canView   = useAuthStore(s => s.hasPermission("payroll:view"));
 
-  const loansQ     = useQuery({ queryKey: ["payroll", "loans"],     queryFn: () => listLoanAdvances(), enabled: canView || canManage });
+  const loansQ     = useQuery({ queryKey: ["payroll", "loans", type], queryFn: () => listLoanAdvances({ type }), enabled: canView || canManage });
   const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployees()).data ?? [] });
 
   const employees = employeesQ.data ?? [];
@@ -60,20 +67,20 @@ export function LoansTab() {
   });
 
   const loanCreate = useMutation({
-    mutationFn: (values: LoanFormValues) => createLoanAdvance({ ...values, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null, status: "active" }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans"] }); toast.success("Loan added", "Loan / advance record saved."); setLoanModal(false); },
+    mutationFn: (values: LoanFormValues) => createLoanAdvance({ ...values, type, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null, status: "active" }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans", type] }); toast.success(`${singular} added`, `${singular} record saved.`); setLoanModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const loanUpdate = useMutation({
     mutationFn: (values: LoanFormValues) => updateLoanAdvance(loanEdit!.id, { title: values.title, outstanding_balance: values.outstanding_balance, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans"] }); toast.success("Loan updated", "Loan / advance record updated."); setLoanModal(false); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans", type] }); toast.success(`${singular} updated`, `${singular} record updated.`); setLoanModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const loanDelete = useMutation({
     mutationFn: deleteLoanAdvance,
-    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "loans"] }); toast.success("Deleted", "Loan / advance removed."); },
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "loans", type] }); toast.success("Deleted", `${singular} removed.`); },
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
@@ -86,7 +93,7 @@ export function LoansTab() {
       <div className="flex justify-end">
         {canManage && (
           <Button className="text-xs" onClick={() => { setLoanEdit(null); reset(emptyLoanForm); setLoanModal(true); }}>
-            + New Loan / Advance
+            + New {singular}
           </Button>
         )}
       </div>
@@ -130,14 +137,14 @@ export function LoansTab() {
               </tr>
             ))}
             {(loansQ.data?.data ?? []).length === 0 && (
-              <tr><td colSpan={7} className="p-6 text-center text-sm text-[var(--muted)]">No loans or advances.</td></tr>
+              <tr><td colSpan={7} className="p-6 text-center text-sm text-[var(--muted)]">No {plural.toLowerCase()}.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {loanModal && (
-        <Modal title={`${loanEdit ? "Edit" : "New"} Loan / Advance`} onClose={() => setLoanModal(false)}>
+        <Modal title={`${loanEdit ? "Edit" : "New"} ${singular}`} onClose={() => setLoanModal(false)}>
           <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
             <FormField label="Employee">
               <select disabled={!!loanEdit} className={sel} {...register("employee_id")}>
@@ -148,7 +155,7 @@ export function LoansTab() {
             </FormField>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Title">
-                <FormInput {...register("title")} placeholder="e.g. Medical Emergency Advance" />
+                <FormInput {...register("title")} placeholder={type === "advance" ? "e.g. Medical Emergency Advance" : "e.g. Vehicle Loan"} />
                 {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
               </FormField>
               <FormField label="Principal Amount">

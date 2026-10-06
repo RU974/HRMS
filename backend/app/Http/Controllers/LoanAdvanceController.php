@@ -22,6 +22,9 @@ class LoanAdvanceController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
         }
+        if ($request->filled('type')) {
+            $query->where('type', $request->query('type'));
+        }
 
         return $this->ok($query->paginate(20));
     }
@@ -32,7 +35,8 @@ class LoanAdvanceController extends Controller
 
         $validated = $request->validate([
             'employee_id'         => 'required|exists:employees,id',
-            'title'               => 'required|string|max:200',
+            'type'                => 'sometimes|in:loan,advance',
+            'title'              => 'required|string|max:200',
             'amount'              => 'required|numeric|min:0',
             'outstanding_balance' => 'nullable|numeric|min:0',
             'emi_amount'          => 'nullable|numeric|min:0',
@@ -45,6 +49,7 @@ class LoanAdvanceController extends Controller
 
         $loan = LoanAdvance::create([
             ...$validated,
+            'type'                => $validated['type'] ?? 'loan',
             'outstanding_balance' => $validated['outstanding_balance'] ?? $validated['amount'],
             'company_id'          => $request->user()?->company_id,
             'status'              => 'active',

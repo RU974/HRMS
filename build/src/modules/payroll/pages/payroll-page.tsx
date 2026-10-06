@@ -13,7 +13,7 @@ import { SalaryIncrementsTab } from "./salary-increments-tab";
 import { SalarySlipTab } from "./salary-slip-tab";
 import { TaxBracketsTab } from "./tax-brackets-tab";
 
-type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "deductions" | "tax-brackets" | "salary-grades" | "salary-increments" | "loans";
+type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "deductions" | "tax-brackets" | "salary-grades" | "salary-increments" | "loans" | "advances";
 
 const TAB_PARAM_MAP: Record<string, Tab> = {
   "payroll-records":    "payroll-records",
@@ -27,6 +27,7 @@ const TAB_PARAM_MAP: Record<string, Tab> = {
   "salary-grades":      "salary-grades",
   "salary-increments":  "salary-increments",
   loans:                "loans",
+  advances:             "advances",
 };
 
 const TABS: { key: Tab; label: string }[] = [
@@ -37,7 +38,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "bonuses",            label: "Bonuses" },
   { key: "deductions",         label: "Deductions" },
   { key: "salary-increments",  label: "Increment History" },
-  { key: "loans",              label: "Loans / Advances" },
+  { key: "loans",              label: "Loans" },
+  { key: "advances",           label: "Advances" },
   { key: "tax-brackets",       label: "Tax Brackets" },
   { key: "salary-grades",      label: "Salary Grades" },
 ];
@@ -78,7 +80,8 @@ export function PayrollPage() {
         {tab === "bonuses"            && <BonusesTab />}
         {tab === "deductions"         && <DeductionsTab />}
         {tab === "salary-increments"  && <SalaryIncrementsTab />}
-        {tab === "loans"              && <LoansTab />}
+        {tab === "loans"              && <LoansTab type="loan" />}
+        {tab === "advances"           && <LoansTab type="advance" />}
         {tab === "tax-brackets"       && <TaxBracketsTab />}
         {tab === "salary-grades"      && <SalaryGradesTab />}
       </section>

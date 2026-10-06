@@ -67,7 +67,7 @@ SCAN_TIMEOUT     = int(os.environ.get("SCAN_TIMEOUT", "2"))
 SCAN_WORKERS     = int(os.environ.get("SCAN_WORKERS", "50"))
 
 STATE_FILE       = Path(os.environ.get("STATE_FILE", "last_sync.json"))
-CLEAR_AFTER_SYNC = os.environ.get("CLEAR_AFTER_SYNC", "true").lower() == "true"
+CLEAR_AFTER_SYNC = os.environ.get("CLEAR_AFTER_SYNC", "false").lower() == "true"
 SSL_VERIFY       = os.environ.get("SSL_VERIFY", "true").lower() != "false"
 
 # ── Logging ───────────────────────────────────────────────────────────────────

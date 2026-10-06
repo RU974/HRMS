@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
 import { useAuthStore } from "@/store/auth-store";
-import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, QrCode, Printer, Search } from "lucide-react";
+import { Package, Tag, ClipboardList, Plus, Edit2, Trash2, RotateCcw, CornerDownLeft, Eye, QrCode, Printer, Search, Download, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ import {
   updateInventoryItem,
   deleteInventoryItem,
   restoreInventoryItem,
+  importInventoryItems,
+  type InventoryImportResult,
   listInventoryAssignments,
   createInventoryAssignment,
   returnInventoryAssignment,
@@ -29,6 +31,8 @@ import {
   type InventoryAssignment,
 } from "@/services/inventory-service";
 import { getEmployeesPage } from "@/services/employee-service";
+import { downloadCsv } from "@/modules/reports/report-utils";
+import { INVENTORY_CSV_HEADERS, csvToInventoryRows, safeCsvCell } from "./inventory-csv";
 
 type Tab = "items" | "categories" | "assignments";
 
@@ -454,6 +458,8 @@ function ItemsTab() {
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [importResult, setImportResult] = useState<InventoryImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<ItemForm>({
     name: "", category_id: "", sku: "", quantity: "0",
     unit_cost: "0", location: "", condition: "good", description: "",
@@ -509,6 +515,42 @@ function ItemsTab() {
     },
     onError: (e: Error) => toast.error("Error", e.message),
   });
+
+  const importMutation = useMutation({
+    mutationFn: importInventoryItems,
+    onSuccess: async (result) => {
+      await qc.invalidateQueries({ queryKey: ["inventory", "items"] });
+      setImportResult(result);
+      if (result.created > 0 && result.failed === 0) toast.success("Imported", `${result.created} item(s) imported.`);
+    },
+    onError: (e: Error) => toast.error("Import failed", e.message),
+  });
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const rows = csvToInventoryRows(await file.text());
+      if (rows.length === 0) { toast.error("Import failed", "The file has no data rows."); return; }
+      if (rows.length > 1000) { toast.error("Import failed", "A maximum of 1000 rows can be imported at once."); return; }
+      importMutation.mutate(rows);
+    } catch (err) {
+      toast.error("Import failed", err instanceof Error ? err.message : "Could not read the file.");
+    }
+  }
+
+  function handleExport() {
+    const rows = filteredItems.map((i) => [
+      safeCsvCell(i.name), safeCsvCell(i.sku), safeCsvCell(i.category?.name), i.quantity, i.unit_cost,
+      safeCsvCell(i.location), i.condition, safeCsvCell(i.description),
+    ]);
+    downloadCsv(`inventory-items-${new Date().toISOString().slice(0, 10)}.csv`, [...INVENTORY_CSV_HEADERS], rows);
+  }
+
+  function handleTemplate() {
+    downloadCsv("inventory-import-template.csv", [...INVENTORY_CSV_HEADERS], [["Dell Laptop", "LAP-001", "Electronics", 5, 1200, "Head Office", "new", "14 inch"]]);
+  }
 
   function openNew() {
     setEditId(null);
@@ -599,6 +641,16 @@ function ItemsTab() {
           )}
           <Button variant="outline" onClick={() => setShowBulkQR(true)} disabled={items.length === 0}>
             <QrCode className="mr-1.5 h-4 w-4" />Print All QR
+          </Button>
+          <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void handleImportFile(e)} />
+          <Button variant="outline" onClick={handleTemplate} title="Download a sample CSV with the expected columns">
+            <Download className="mr-1.5 h-4 w-4" />Template
+          </Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importMutation.isPending}>
+            <Upload className="mr-1.5 h-4 w-4" />{importMutation.isPending ? "Importing…" : "Import"}
+          </Button>
+          <Button variant="outline" onClick={handleExport} disabled={filteredItems.length === 0}>
+            <Download className="mr-1.5 h-4 w-4" />Export
           </Button>
           <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Item</Button>
         </div>
@@ -758,6 +810,23 @@ function ItemsTab() {
       {/* QR Code Modal */}
       {qrItem && (
         <QRModal item={qrItem} companyId={companyId} onClose={() => setQrItem(null)} />
+      )}
+
+      {/* Import result modal */}
+      {importResult && (
+        <Modal title="Import Results" onClose={() => setImportResult(null)}>
+          <div className="space-y-3 text-sm">
+            <p><span className="font-semibold text-emerald-600">{importResult.created}</span> imported, <span className="font-semibold text-red-600">{importResult.failed}</span> failed.</p>
+            {importResult.errors.length > 0 && (
+              <ul className="max-h-60 space-y-1 overflow-y-auto rounded-xl border border-[var(--border)] p-3">
+                {importResult.errors.map((er, idx) => (
+                  <li key={idx} className="text-[var(--muted)]">Row {er.row}: {er.message}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex justify-end"><Button onClick={() => setImportResult(null)}>Close</Button></div>
+          </div>
+        </Modal>
       )}
 
       {/* Bulk QR Sheet Modal */}

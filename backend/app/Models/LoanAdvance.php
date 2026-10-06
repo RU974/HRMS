@@ -10,6 +10,7 @@ class LoanAdvance extends Model
     protected $fillable = [
         'employee_id',
         'company_id',
+        'type',
         'title',
         'amount',
         'outstanding_balance',

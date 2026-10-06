@@ -414,6 +414,7 @@ $registerRoutes = function (): void {
         // Inventory routes
         Route::middleware('permission:inventory:view|inventory:create|inventory:edit|inventory:delete|inventory:manage_settings')->group(function () {
             Route::apiResource('inventory/categories', InventoryCategoryController::class)->except(['show', 'create', 'edit']);
+            Route::post('inventory/items/import', [InventoryItemController::class, 'import']);
             Route::post('inventory/items/{id}/restore', [InventoryItemController::class, 'restore']);
             Route::apiResource('inventory/items', InventoryItemController::class)->except(['create', 'edit']);
             Route::post('inventory/assignments/{id}/return', [InventoryAssignmentController::class, 'return']);
