@@ -108,7 +108,7 @@ class AttendanceController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->authorizePermission($request, 'attendance:approve');
+        $this->authorizePermission($request, 'attendance:manage_settings|attendance:approve');
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
         $validated = $request->validate([
