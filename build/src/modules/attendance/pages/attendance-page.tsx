@@ -1,3 +1,4 @@
+import { TimeInput24 } from "@/components/forms/time-input-24";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -370,10 +371,10 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
             </select>
           </FormField>
           <FormField label="Check in">
-            <FormInput type="time" value={form.check_in} onChange={e => setForm(p => ({ ...p, check_in: e.target.value }))} />
+            <TimeInput24 clearable value={form.check_in} onChange={v => setForm(p => ({ ...p, check_in: v }))} />
           </FormField>
           <FormField label="Check out">
-            <FormInput type="time" value={form.check_out} onChange={e => setForm(p => ({ ...p, check_out: e.target.value }))} />
+            <TimeInput24 clearable value={form.check_out} onChange={v => setForm(p => ({ ...p, check_out: v }))} />
           </FormField>
         </div>
 
@@ -438,7 +439,16 @@ export function AttendancePage() {
     queryKey: ["attendance", "today", employeeId],
     queryFn:  () => getEmployeeAttendance(employeeId),
     enabled: !!employeeId,
-    select: d => (d as { data: AttendanceItem[] }).data?.find(a => a.date?.startsWith(today)) ?? null,
+    select: d => {
+      const rows = (d as { data: AttendanceItem[] }).data ?? [];
+      const todays = rows.find(a => a.date?.startsWith(today)) ?? null;
+      if (todays && !todays.check_out && todays.check_in) return todays;
+      // Night shift: an open record from the previous evening is still "today's" shift.
+      const open = rows.find(a =>
+        a.check_in && !a.check_out && !a.date?.startsWith(today) &&
+        Date.now() - new Date(a.check_in.replace(" ", "T")).getTime() < 20 * 3600 * 1000);
+      return open ?? todays;
+    },
   });
 
   // Monthly stats

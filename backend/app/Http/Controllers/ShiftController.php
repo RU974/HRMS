@@ -21,8 +21,8 @@ class ShiftController extends Controller
         $companyId = $request->user()->company_id;
         $validated = $request->validate([
             'name'          => ['required', 'string', 'max:120', Rule::unique('shifts', 'name')->where('company_id', $companyId)],
-            'start_time'    => 'required|date_format:H:i',
-            'end_time'      => 'required|date_format:H:i',
+            'start_time'    => 'required|date_format:H:i,H:i:s',
+            'end_time'      => 'required|date_format:H:i,H:i:s',
             'grace_minutes' => 'nullable|integer|min:0|max:180',
             'is_active'     => 'nullable|boolean',
         ]);
@@ -52,8 +52,8 @@ class ShiftController extends Controller
         $shift     = $query->findOrFail($id);
         $validated = $request->validate([
             'name'          => ['sometimes', 'string', 'max:120', Rule::unique('shifts', 'name')->ignore($id)->where('company_id', $companyId)],
-            'start_time'    => 'sometimes|date_format:H:i',
-            'end_time'      => 'sometimes|date_format:H:i',
+            'start_time'    => 'sometimes|date_format:H:i,H:i:s',
+            'end_time'      => 'sometimes|date_format:H:i,H:i:s',
             'grace_minutes' => 'sometimes|integer|min:0|max:180',
             'is_active'     => 'sometimes|boolean',
         ]);
