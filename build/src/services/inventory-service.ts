@@ -117,6 +117,12 @@ export const importInventoryItems = (rows: Record<string, string>[]) =>
     body: JSON.stringify({ rows }),
   });
 
+export const importInventoryCategories = (rows: Record<string, string>[]) =>
+  apiClient<InventoryImportResult>("/inventory/categories/import", {
+    method: "POST",
+    body: JSON.stringify({ rows }),
+  });
+
 export const deleteInventoryItem =(id: number) =>
   apiClient<null>(`/inventory/items/${id}`, { method: "DELETE" });
 

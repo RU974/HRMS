@@ -22,6 +22,7 @@ import {
   deleteInventoryItem,
   restoreInventoryItem,
   importInventoryItems,
+  importInventoryCategories,
   type InventoryImportResult,
   listInventoryAssignments,
   createInventoryAssignment,
@@ -32,7 +33,7 @@ import {
 } from "@/services/inventory-service";
 import { getEmployeesPage } from "@/services/employee-service";
 import { downloadCsv } from "@/modules/reports/report-utils";
-import { INVENTORY_CSV_HEADERS, csvToInventoryRows, safeCsvCell } from "./inventory-csv";
+import { INVENTORY_CSV_HEADERS, CATEGORY_CSV_HEADERS, csvToInventoryRows, csvToCategoryRows, safeCsvCell } from "./inventory-csv";
 
 type Tab = "items" | "categories" | "assignments";
 
@@ -339,6 +340,8 @@ function CategoriesTab() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ name: "", description: "" });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importResult, setImportResult] = useState<InventoryImportResult | null>(null);
 
   const query = useQuery({ queryKey: ["inventory", "categories"], queryFn: listInventoryCategories });
   const categories = query.data ?? [];
@@ -366,6 +369,39 @@ function CategoriesTab() {
     onError: (e: Error) => toast.error("Cannot delete", e.message),
   });
 
+  const importMutation = useMutation({
+    mutationFn: importInventoryCategories,
+    onSuccess: async (result) => {
+      await qc.invalidateQueries({ queryKey: ["inventory", "categories"] });
+      setImportResult(result);
+      if (result.created > 0 && result.failed === 0) toast.success("Imported", `${result.created} category(ies) imported.`);
+    },
+    onError: (e: Error) => toast.error("Import failed", e.message),
+  });
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const rows = csvToCategoryRows(await file.text());
+      if (rows.length === 0) { toast.error("Import failed", "The file has no data rows."); return; }
+      if (rows.length > 1000) { toast.error("Import failed", "A maximum of 1000 rows can be imported at once."); return; }
+      importMutation.mutate(rows);
+    } catch (err) {
+      toast.error("Import failed", err instanceof Error ? err.message : "Could not read the file.");
+    }
+  }
+
+  function handleExport() {
+    const rows = categories.map((c) => [safeCsvCell(c.name), safeCsvCell(c.description)]);
+    downloadCsv(`inventory-categories-${new Date().toISOString().slice(0, 10)}.csv`, [...CATEGORY_CSV_HEADERS], rows);
+  }
+
+  function handleTemplate() {
+    downloadCsv("inventory-categories-template.csv", [...CATEGORY_CSV_HEADERS], [["Electronics", "Laptops, phones and accessories"]]);
+  }
+
   function openNew() { setEditId(null); setForm({ name: "", description: "" }); setOpen(true); }
   function openEdit(c: InventoryCategoryItem) { setEditId(c.id); setForm({ name: c.name, description: c.description ?? "" }); setOpen(true); }
 
@@ -374,7 +410,19 @@ function CategoriesTab() {
       <SectionCard>
         <div className="mb-3 flex items-center justify-between">
           <p className="text-sm text-[var(--muted)]">{total} categories</p>
-          <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Category</Button>
+          <div className="flex flex-wrap gap-2">
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void handleImportFile(e)} />
+            <Button variant="outline" onClick={handleTemplate} title="Download a sample CSV with the expected columns">
+              <Download className="mr-1.5 h-4 w-4" />Template
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importMutation.isPending}>
+              <Upload className="mr-1.5 h-4 w-4" />{importMutation.isPending ? "Importing…" : "Import"}
+            </Button>
+            <Button variant="outline" onClick={handleExport} disabled={categories.length === 0}>
+              <Download className="mr-1.5 h-4 w-4" />Export
+            </Button>
+            <Button onClick={openNew}><Plus className="mr-1.5 h-4 w-4" />New Category</Button>
+          </div>
         </div>
         <table className="rtable w-full text-sm">
           <TableHead cols={["Name", "Description", "Items", "Actions"]} />
@@ -398,6 +446,22 @@ function CategoriesTab() {
         </table>
         <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} totalPages={totalPages} total={total} />
       </SectionCard>
+
+      {importResult && (
+        <Modal title="Import Results" onClose={() => setImportResult(null)}>
+          <div className="space-y-3 text-sm">
+            <p><span className="font-semibold text-emerald-600">{importResult.created}</span> imported, <span className="font-semibold text-red-600">{importResult.failed}</span> failed.</p>
+            {importResult.errors.length > 0 && (
+              <ul className="max-h-60 space-y-1 overflow-y-auto rounded-xl border border-[var(--border)] p-3">
+                {importResult.errors.map((er, idx) => (
+                  <li key={idx} className="text-[var(--muted)]">Row {er.row}: {er.message}</li>
+                ))}
+              </ul>
+            )}
+            <div className="flex justify-end"><Button onClick={() => setImportResult(null)}>Close</Button></div>
+          </div>
+        </Modal>
+      )}
 
       {open && (
         <Modal title={editId ? "Edit Category" : "New Category"} onClose={() => setOpen(false)}>

@@ -1,5 +1,7 @@
 export const INVENTORY_CSV_HEADERS = ["name", "sku", "category", "quantity", "unit_cost", "location", "condition", "description"] as const;
 
+export const CATEGORY_CSV_HEADERS = ["name", "description"] as const;
+
 /** Prefix cells that spreadsheets would execute as formulas (CSV injection). */
 export function safeCsvCell(value: string | number | null | undefined): string {
   const text = value == null ? "" : String(value);
@@ -36,7 +38,7 @@ export function parseCsv(input: string): string[][] {
 }
 
 /** Converts parsed CSV into objects keyed by the header row (case-insensitive). */
-export function csvToInventoryRows(input: string): Record<string, string>[] {
+function csvToRows(input: string, allowed: readonly string[]): Record<string, string>[] {
   const [header, ...body] = parseCsv(input);
   if (!header) return [];
   const keys = header.map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
@@ -44,8 +46,11 @@ export function csvToInventoryRows(input: string): Record<string, string>[] {
   return body.map((cells) => {
     const obj: Record<string, string> = {};
     keys.forEach((k, idx) => {
-      if ((INVENTORY_CSV_HEADERS as readonly string[]).includes(k)) obj[k] = (cells[idx] ?? "").trim();
+      if (allowed.includes(k)) obj[k] = (cells[idx] ?? "").trim();
     });
     return obj;
   });
 }
+
+export const csvToInventoryRows = (input: string) => csvToRows(input, INVENTORY_CSV_HEADERS);
+export const csvToCategoryRows = (input: string) => csvToRows(input, CATEGORY_CSV_HEADERS);

@@ -38,6 +38,65 @@ class InventoryCategoryController extends Controller
         return $this->ok(InventoryCategory::create($validated), 'Category created successfully', 201);
     }
 
+    /**
+     * Bulk-create categories from parsed CSV rows. Valid rows are created; invalid or
+     * duplicate rows are reported back with their row number.
+     */
+    public function import(Request $request)
+    {
+        $this->authorizePermission($request, 'inventory:manage_settings');
+
+        $companyId = $request->user()->company_id;
+
+        $request->validate([
+            'rows'   => ['required', 'array', 'min:1', 'max:1000'],
+            'rows.*' => ['array'],
+        ]);
+
+        $existing = InventoryCategory::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->pluck('name')
+            ->mapWithKeys(fn ($n) => [mb_strtolower(trim($n)) => true])
+            ->all();
+
+        $created = 0;
+        $errors  = [];
+
+        foreach ($request->input('rows') as $index => $row) {
+            $line = $index + 2; // +1 for header row, +1 for 1-based numbering
+
+            $data = [
+                'name'        => trim((string) ($row['name'] ?? '')),
+                'description' => ($row['description'] ?? '') === '' ? null : trim((string) $row['description']),
+            ];
+
+            $validator = validator($data, [
+                'name'        => ['required', 'string', 'max:255'],
+                'description' => ['nullable', 'string', 'max:500'],
+            ]);
+
+            if ($validator->fails()) {
+                $errors[] = ['row' => $line, 'message' => $validator->errors()->first()];
+                continue;
+            }
+
+            $key = mb_strtolower($data['name']);
+            if (isset($existing[$key])) {
+                $errors[] = ['row' => $line, 'message' => "Category \"{$data['name']}\" already exists."];
+                continue;
+            }
+            $existing[$key] = true;
+
+            InventoryCategory::create($validator->validated() + ['company_id' => $companyId]);
+            $created++;
+        }
+
+        return $this->ok(
+            ['created' => $created, 'failed' => count($errors), 'errors' => $errors],
+            "Imported {$created} category(ies)."
+        );
+    }
+
     public function update(Request $request, $id)
     {
         $this->authorizePermission($request, 'inventory:manage_settings');
