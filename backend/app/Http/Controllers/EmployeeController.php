@@ -24,7 +24,7 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:view');
 
-        $query = Employee::with(['department', 'designationRef', 'user']);
+        $query = Employee::with(['department', 'designationRef', 'user', 'shift', 'manager']);
         $this->scopeToCompany($request, $query);
         $this->applyManagedEmployeeScope($request, $query);
         if ($request->filled('status')) {
@@ -57,7 +57,7 @@ class EmployeeController extends Controller
 
     public function show(Request $request, $id)
     {
-        $employee = Employee::with(['department', 'designationRef', 'user'])->findOrFail($id);
+        $employee = Employee::with(['department', 'designationRef', 'user', 'shift', 'manager'])->findOrFail($id);
         $this->authorizeEmployeeRead($request, $employee);
         $this->assertThisEmployeeInCompany($request, $employee);
 
@@ -190,7 +190,7 @@ class EmployeeController extends Controller
             ]);
         });
 
-        return $this->ok($employee->load(['department', 'designationRef', 'user']), 'Employee created successfully', 201);
+        return $this->ok($employee->load(['department', 'designationRef', 'user', 'shift', 'manager']), 'Employee created successfully', 201);
     }
 
     public function update(Request $request, $id)
@@ -259,7 +259,7 @@ class EmployeeController extends Controller
 
         $employee->update($updatePayload);
 
-        return $this->ok($employee->load(['department', 'designationRef', 'user']), 'Employee updated successfully');
+        return $this->ok($employee->load(['department', 'designationRef', 'user', 'shift', 'manager']), 'Employee updated successfully');
     }
 
     public function destroy(Request $request, $id)
@@ -276,7 +276,7 @@ class EmployeeController extends Controller
     {
         $this->authorizePermission($request, 'employees:view');
 
-        $query = Employee::with(['department', 'designationRef', 'user'])
+        $query = Employee::with(['department', 'designationRef', 'user', 'shift', 'manager'])
             ->where('department_id', $departmentId);
         $this->scopeToCompany($request, $query);
         $this->applyManagedEmployeeScope($request, $query);
@@ -294,7 +294,7 @@ class EmployeeController extends Controller
                 ->orWhere('email', 'like', "%$term%")
                 ->orWhere('designation', 'like', "%$term%");
         })
-            ->with(['department', 'designationRef', 'user']);
+            ->with(['department', 'designationRef', 'user', 'shift', 'manager']);
         $this->scopeToCompany($request, $query);
         $this->applyManagedEmployeeScope($request, $query);
 

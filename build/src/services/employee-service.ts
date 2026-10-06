@@ -22,6 +22,8 @@ export interface Employee {
   joining_date?: string | null;
   employment_type?: string | null;
   shift?: { id: number; name: string } | null;
+  shift_id?: number | null;
+  manager_id?: number | null;
   manager?: { id: number; name: string } | null;
   basic_salary?: number | null;
   allowances?: number | null;
