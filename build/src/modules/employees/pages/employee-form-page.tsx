@@ -15,6 +15,7 @@ import { listCompanies } from "@/services/settings-service";
 import {
   createEmployee,
   getEmployees,
+  type EmergencyContact,
 } from "@/services/employee-service";
 import {
   listDepartments,
@@ -46,6 +47,9 @@ const roleOptions = [
 ];
 
 const inputClass = "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm";
+
+const MAX_EMERGENCY_CONTACTS = 10;
+const emptyContact = (): EmergencyContact => ({ name: "", relationship: "", phone: "", email: "" });
 
 const employeeSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
@@ -83,6 +87,8 @@ export function EmployeeFormPage() {
   const navigate = useNavigate();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [contacts, setContacts] = useState<EmergencyContact[]>([emptyContact()]);
+  const [contactError, setContactError] = useState<string | null>(null);
   const user = useAuthStore((s) => s.user);
   const isSuperAdmin = isSuperAdminRole(user);
 
@@ -147,7 +153,27 @@ export function EmployeeFormPage() {
     }
   }
 
+  function updateContact(index: number, field: keyof EmergencyContact, value: string) {
+    setContacts((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
+  }
+
   function onSubmit(values: EmployeeFormValues) {
+    // Fully blank rows are ignored; partially filled rows must have name, relationship and phone.
+    const filled = contacts
+      .map((c) => ({
+        name: c.name.trim(),
+        relationship: c.relationship.trim(),
+        phone: c.phone.trim(),
+        email: (c.email ?? "").trim(),
+      }))
+      .filter((c) => c.name || c.relationship || c.phone || c.email);
+
+    if (filled.some((c) => !c.name || !c.relationship || !c.phone)) {
+      setContactError("Each emergency contact needs a name, relationship, and phone number.");
+      return;
+    }
+    setContactError(null);
+
     const payload = new FormData();
     const name = [values.first_name.trim(), values.last_name.trim()].filter(Boolean).join(" ");
     const basicSalary = Number.parseFloat(values.basic_salary);
@@ -167,6 +193,13 @@ export function EmployeeFormPage() {
       "salary",
       String((Number.isFinite(basicSalary) ? basicSalary : 0) + (Number.isFinite(allowances) ? allowances : 0)),
     );
+
+    if (filled.length > 0) {
+      payload.append(
+        "emergency_contacts",
+        JSON.stringify(filled.map(({ email, ...rest }) => (email ? { ...rest, email } : rest))),
+      );
+    }
 
     if (profileImage) {
       payload.append("profile_image", profileImage);
@@ -235,6 +268,68 @@ export function EmployeeFormPage() {
                 {...register("address")}
               />
             </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Emergency Contacts</h2>
+              <p className="text-sm text-[var(--muted)]">People to reach in case of an emergency. Optional.</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={contacts.length >= MAX_EMERGENCY_CONTACTS}
+              onClick={() => setContacts((prev) => [...prev, emptyContact()])}
+            >
+              + Add Contact
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {contacts.map((contact, index) => (
+              <div key={index} className="rounded-xl border border-[var(--border)] p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-sm font-medium">Contact {index + 1}</span>
+                  {contacts.length > 1 && (
+                    <button
+                      type="button"
+                      className="text-xs text-red-500 hover:underline"
+                      onClick={() => setContacts((prev) => prev.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Name</label>
+                    <FormInput value={contact.name} onChange={(e) => updateContact(index, "name", e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Relationship</label>
+                    <FormInput
+                      placeholder="e.g. Spouse, Father, Sibling"
+                      value={contact.relationship}
+                      onChange={(e) => updateContact(index, "relationship", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Phone</label>
+                    <FormInput value={contact.phone} onChange={(e) => updateContact(index, "phone", e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Email (optional)</label>
+                    <FormInput
+                      type="email"
+                      value={contact.email ?? ""}
+                      onChange={(e) => updateContact(index, "email", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+            {contactError && <p className="text-xs text-red-500">{contactError}</p>}
           </div>
         </Card>
 

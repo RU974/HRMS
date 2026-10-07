@@ -70,7 +70,10 @@ class EmployeeController extends Controller
 
         $isSuperAdmin = (bool) $request->user()?->hasAnyRole([User::ROLE_SUPER_ADMIN]);
 
+        $this->decodeEmergencyContacts($request);
+
         $validated = $request->validate([
+            ...$this->emergencyContactRules(),
             'user_id' => ['nullable', 'exists:users,id', Rule::unique('employees', 'user_id')],
             'company_id' => [$isSuperAdmin ? 'required' : 'nullable', 'uuid', 'exists:companies,id'],
             'name' => 'nullable|string|max:255',
@@ -174,6 +177,7 @@ class EmployeeController extends Controller
                 'date_of_birth' => $validated['date_of_birth'] ?? null,
                 'gender' => $validated['gender'] ?? null,
                 'address' => $validated['address'] ?? null,
+                'emergency_contacts' => $validated['emergency_contacts'] ?? [],
                 'employee_number' => $validated['employee_number'] ?? null,
                 'joining_date' => $validated['joining_date'] ?? null,
                 'employment_type' => $validated['employment_type'] ?? null,
@@ -199,7 +203,9 @@ class EmployeeController extends Controller
         $employee = Employee::findOrFail($id);
         $this->assertThisEmployeeInCompany($request, $employee);
         $this->authorizeManagedEmployeeAccess($request, $employee->id, 'employee');
+        $this->decodeEmergencyContacts($request);
         $validated = $request->validate([
+            ...$this->emergencyContactRules(),
             'user_id' => ['sometimes', 'exists:users,id', Rule::unique('employees', 'user_id')->ignore($id)],
             'name' => 'sometimes|string|max:255',
             'first_name' => 'sometimes|string|max:255',
@@ -260,6 +266,27 @@ class EmployeeController extends Controller
         $employee->update($updatePayload);
 
         return $this->ok($employee->load(['department', 'designationRef', 'user', 'shift', 'manager']), 'Employee updated successfully');
+    }
+
+    /** Multipart requests send emergency_contacts as a JSON string; turn it into an array. */
+    private function decodeEmergencyContacts(Request $request): void
+    {
+        $raw = $request->input('emergency_contacts');
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $request->merge(['emergency_contacts' => is_array($decoded) ? $decoded : null]);
+        }
+    }
+
+    private function emergencyContactRules(): array
+    {
+        return [
+            'emergency_contacts' => 'sometimes|nullable|array|max:10',
+            'emergency_contacts.*.name' => 'required|string|max:255',
+            'emergency_contacts.*.relationship' => 'required|string|max:100',
+            'emergency_contacts.*.phone' => 'required|string|max:20',
+            'emergency_contacts.*.email' => 'nullable|email|max:255',
+        ];
     }
 
     public function destroy(Request $request, $id)
