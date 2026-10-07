@@ -9,7 +9,7 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { listDepartments, listDesignations, listShifts, listLeaves, listEmployeeDocuments, getEmployeeAttendance } from "@/services/hr-management-service";
 import {
-  getEmployees,
+  getEmployeeOptions,
   getEmployee,
   updateEmployee,
   getEmployeePayslips,
@@ -548,7 +548,7 @@ export function EmployeeDetailPage() {
   const depsQuery    = useQuery({ queryKey: ["departments"],    queryFn: listDepartments });
   const desigQuery   = useQuery({ queryKey: ["designations"],   queryFn: listDesignations });
   const shiftsQuery  = useQuery({ queryKey: ["shifts"],         queryFn: listShifts });
-  const managersQuery = useQuery({ queryKey: ["employees-list"], queryFn: () => getEmployees() });
+  const managersQuery = useQuery({ queryKey: ["employees-list"], queryFn: getEmployeeOptions });
 
   const attendanceQuery = useQuery({
     queryKey: ["attendance", "employee", employeeId],

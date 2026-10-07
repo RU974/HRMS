@@ -56,6 +56,11 @@ export function getEmployees() {
   return apiClient<PaginatedResponse<Employee>>("/employees?per_page=10");
 }
 
+/** Full employee list for pickers (e.g. manager select); not limited to the first page. */
+export function getEmployeeOptions() {
+  return apiClient<PaginatedResponse<Employee>>("/employees?per_page=1000&sort_by=name&sort_dir=asc");
+}
+
 export function getEmployeesPage(params: { per_page?: number; status?: string } = {}) {
   const query = new URLSearchParams({ per_page: String(params.per_page ?? 10) });
   if (params.status) query.set("status", params.status);

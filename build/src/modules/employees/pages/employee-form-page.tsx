@@ -14,7 +14,7 @@ import { isSuperAdminRole } from "@/config/rbac";
 import { listCompanies } from "@/services/settings-service";
 import {
   createEmployee,
-  getEmployees,
+  getEmployeeOptions,
   type EmergencyContact,
 } from "@/services/employee-service";
 import {
@@ -135,7 +135,7 @@ export function EmployeeFormPage() {
   const departmentsQuery = useQuery({ queryKey: ["departments"], queryFn: listDepartments, retry: false });
   const designationsQuery = useQuery({ queryKey: ["designations"], queryFn: listDesignations, retry: false });
   const shiftsQuery = useQuery({ queryKey: ["shifts"], queryFn: listShifts, retry: false });
-  const managersQuery = useQuery({ queryKey: ["employees", "managers"], queryFn: () => getEmployees(), retry: false });
+  const managersQuery = useQuery({ queryKey: ["employees", "managers"], queryFn: getEmployeeOptions, retry: false });
 
   const mutation = useMutation({
     mutationFn: (payload: FormData) => createEmployee(payload),
