@@ -24,7 +24,7 @@ function getStorageUrl(filePath: string) {
   return `${base}/storage/${filePath}`;
 }
 
-const documentCategories = ["CNIC", "Contract", "Certificate", "ID", "Other"] as const;
+const documentCategories = ["CNIC", "Contract", "Certificate", "ID", "Other", "Complete Document Pack"] as const;
 const visibilityOptions = [
   { value: "hr_only", label: "HR only" },
   { value: "manager_only", label: "Managers" },
@@ -441,6 +441,11 @@ export function EmployeeDocumentsPage() {
                   </option>
                 ))}
               </select>
+              {form.type === "Complete Document Pack" && (
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Use this to upload one combined PDF that contains all of the employee's documents instead of separate files.
+                </p>
+              )}
             </FormField>
 
             {canManageDocuments && (

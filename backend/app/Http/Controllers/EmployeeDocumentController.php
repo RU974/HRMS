@@ -43,7 +43,7 @@ class EmployeeDocumentController extends Controller
             'type' => 'nullable|string|max:100',
             'file_path' => 'nullable|string|max:1000',
             'visibility' => 'nullable|in:hr_only,manager_only,employee_self',
-            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:20480',
             'expiry_date' => 'nullable|date',
             'notes' => 'nullable|string',
         ]);
@@ -68,7 +68,7 @@ class EmployeeDocumentController extends Controller
             'type' => 'nullable|string|max:100',
             'file_path' => 'nullable|string|max:1000',
             'visibility' => 'sometimes|in:hr_only,manager_only,employee_self',
-            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'file' => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:20480',
             'expiry_date' => 'nullable|date',
             'notes' => 'nullable|string',
         ]);
