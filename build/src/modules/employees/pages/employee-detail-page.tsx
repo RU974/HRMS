@@ -701,6 +701,8 @@ export function EmployeeDetailPage() {
     if (file) setPreviewUrl(URL.createObjectURL(file));
   }
 
+  const cardContacts = (employee as (Employee & { emergency_contacts?: EmergencyContact[] | null }) | undefined)?.emergency_contacts ?? [];
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -750,6 +752,17 @@ export function EmployeeDetailPage() {
           </div>
           <StatusBadge status={employee.status} />
           {employee.joining_date && <p className="text-xs text-[var(--muted)]">Joined {employee.joining_date}</p>}
+          {cardContacts.length > 0 && (
+            <div className="mt-2 w-full space-y-2 border-t border-[var(--border)] pt-3 text-left">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Emergency contact{cardContacts.length > 1 ? "s" : ""}</p>
+              {cardContacts.map((c, i) => (
+                <div key={i} className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--text)]">{c.name} <span className="text-xs font-normal capitalize text-[var(--muted)]">· {c.relationship}</span></p>
+                  <a href={`tel:${c.phone}`} className="text-xs text-[var(--primary)]">{c.phone}</a>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card className="lg:col-span-2">
