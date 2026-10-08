@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -117,8 +117,10 @@ export function EmployeesPage() {
   const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [searchInput, setSearchInput] = useState("");
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get("search")?.trim() ?? "";
+  const [search, setSearch] = useState(initialSearch);
+  const [searchInput, setSearchInput] = useState(initialSearch);
   const [companyId, setCompanyId] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);

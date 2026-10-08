@@ -53,8 +53,8 @@ class SearchController extends Controller
         $categories = [];
 
         $this->appendCategory($categories, 'employees', 'Employees', $this->searchEmployees($request, $query, $employee?->id));
-        $this->appendCategory($categories, 'departments', 'Departments', $this->searchDepartments($query), $request->user()?->can('settings:manage_settings'));
-        $this->appendCategory($categories, 'designations', 'Designations', $this->searchDesignations($query), $request->user()?->can('settings:manage_settings'));
+        $this->appendCategory($categories, 'departments', 'Departments', $this->searchDepartments($query), $request->user()?->can('employees:view') || $request->user()?->can('settings:manage_settings'));
+        $this->appendCategory($categories, 'designations', 'Designations', $this->searchDesignations($query), $request->user()?->can('employees:view') || $request->user()?->can('settings:manage_settings'));
         $this->appendCategory($categories, 'shifts', 'Shifts', $this->searchShifts($query), $request->user()?->can('attendance:edit') || $request->user()?->can('settings:manage_settings'));
         $this->appendCategory($categories, 'holidays', 'Holidays', $this->searchHolidays($query), $request->user()?->can('attendance:edit') || $request->user()?->can('settings:manage_settings'));
         $this->appendCategory($categories, 'attendance', 'Attendance', $this->searchAttendance($request, $query, $employee?->id));
@@ -144,8 +144,8 @@ class SearchController extends Controller
                     'id' => $employee->id,
                     'title' => $employee->name,
                     'subtitle' => $employee->email,
-                    'detail' => trim($employee->employee_number ? "Employee #{$employee->employee_number} • " : '') . "{$department} • {$designation}",
-                    'path' => '/employees',
+                    'detail' => ($employee->employee_number ? "Employee #{$employee->employee_number} • " : '') . "{$department} • {$designation}",
+                    'path' => '/employees?search=' . rawurlencode((string) $employee->name),
                 ];
             })
             ->all();
@@ -209,8 +209,10 @@ class SearchController extends Controller
     {
         $like = '%' . $query . '%';
         return Holiday::query()
-            ->where('name', 'like', $like)
-            ->orWhere('holiday_date', 'like', $like)
+            ->where(function ($builder) use ($like): void {
+                $builder->where('name', 'like', $like)
+                    ->orWhere('holiday_date', 'like', $like);
+            })
             ->orderBy('holiday_date', 'desc')
             ->limit(5)
             ->get()

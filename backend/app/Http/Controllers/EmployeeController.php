@@ -27,6 +27,18 @@ class EmployeeController extends Controller
         $query = Employee::with(['department', 'designationRef', 'user', 'shift', 'manager']);
         $this->scopeToCompany($request, $query);
         $this->applyManagedEmployeeScope($request, $query);
+        if ($request->filled('search')) {
+            $term = '%' . trim((string) $request->input('search')) . '%';
+            $query->where(function ($search) use ($term): void {
+                $search->where('name', 'like', $term)
+                    ->orWhere('email', 'like', $term)
+                    ->orWhere('employee_number', 'like', $term)
+                    ->orWhere('designation', 'like', $term)
+                    ->orWhere('phone', 'like', $term)
+                    ->orWhereHas('department', fn ($q) => $q->where('name', 'like', $term))
+                    ->orWhereHas('designationRef', fn ($q) => $q->where('name', 'like', $term));
+            });
+        }
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -322,6 +334,7 @@ class EmployeeController extends Controller
         $query = Employee::where(function ($search) use ($term): void {
             $search->where('name', 'like', "%$term%")
                 ->orWhere('email', 'like', "%$term%")
+                ->orWhere('employee_number', 'like', "%$term%")
                 ->orWhere('designation', 'like', "%$term%");
         })
             ->with(['department', 'designationRef', 'user', 'shift', 'manager']);
