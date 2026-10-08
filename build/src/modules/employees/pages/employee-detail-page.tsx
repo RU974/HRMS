@@ -361,23 +361,65 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
   const [contactForm, setContactForm] = useState<EmergencyContact>({ name: "", relationship: "", phone: "", email: "" });
   const [contactSaving, setContactSaving] = useState(false);
 
-  async function saveContacts(updated: EmergencyContact[]) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const emptyContactForm: EmergencyContact = { name: "", relationship: "", phone: "", email: "" };
+
+  async function saveContacts(updated: EmergencyContact[]): Promise<boolean> {
     setContactSaving(true);
-    await saveEmployeeEmergencyContacts(employeeId, updated);
-    await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
-    setContactSaving(false);
+    try {
+      await saveEmployeeEmergencyContacts(employeeId, updated);
+      await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
+      return true;
+    } catch (err) {
+      toast.error("Save failed", err instanceof Error ? err.message : "Could not save emergency contacts.");
+      return false;
+    } finally {
+      setContactSaving(false);
+    }
   }
 
-  async function addContact(e: FormEvent) {
-    e.preventDefault();
-    await saveContacts([...contacts, contactForm]);
+  function openAddContact() {
+    setEditingIndex(null);
+    setContactForm(emptyContactForm);
+    setContactModal(true);
+  }
+
+  function openEditContact(idx: number) {
+    const c = contacts[idx];
+    setEditingIndex(idx);
+    setContactForm({ name: c.name, relationship: c.relationship, phone: c.phone, email: c.email ?? "" });
+    setContactModal(true);
+  }
+
+  function closeContactModal() {
     setContactModal(false);
-    setContactForm({ name: "", relationship: "", phone: "", email: "" });
+    setEditingIndex(null);
+    setContactForm(emptyContactForm);
+  }
+
+  async function submitContact(e: FormEvent) {
+    e.preventDefault();
+    const email = (contactForm.email ?? "").trim();
+    const entry: EmergencyContact = {
+      name: contactForm.name.trim(),
+      relationship: contactForm.relationship.trim(),
+      phone: contactForm.phone.trim(),
+      ...(email ? { email } : {}),
+    };
+    const updated = editingIndex === null
+      ? [...contacts, entry]
+      : contacts.map((c, i) => (i === editingIndex ? entry : c));
+    if (await saveContacts(updated)) {
+      toast.success("Saved", editingIndex === null ? "Emergency contact added." : "Emergency contact updated.");
+      closeContactModal();
+    }
   }
 
   async function removeContact(idx: number) {
     if (!window.confirm("Remove this emergency contact?")) return;
-    await saveContacts(contacts.filter((_, i) => i !== idx));
+    if (await saveContacts(contacts.filter((_, i) => i !== idx))) {
+      toast.success("Deleted", "Emergency contact removed.");
+    }
   }
 
   // Promotions / transfer history
@@ -411,7 +453,7 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold">Emergency Contacts</h3>
-          {canManage && <Button onClick={() => setContactModal(true)}>+ Add Contact</Button>}
+          {canManage && <Button onClick={openAddContact}>+ Add Contact</Button>}
         </div>
 
         {contacts.length === 0 && <p className="py-4 text-center text-sm text-[var(--muted)]">No emergency contacts on file.</p>}
@@ -427,7 +469,10 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
                 {c.email && <p className="text-xs text-[var(--muted)]">{c.email}</p>}
               </div>
               {canManage && (
-                <Button variant="outline" onClick={() => void removeContact(idx)} disabled={contactSaving} className="shrink-0 text-xs">Remove</Button>
+                <div className="flex shrink-0 gap-2">
+                  <Button variant="outline" onClick={() => openEditContact(idx)} disabled={contactSaving} className="text-xs">Edit</Button>
+                  <Button variant="outline" onClick={() => void removeContact(idx)} disabled={contactSaving} className="text-xs">Remove</Button>
+                </div>
               )}
             </div>
           ))}
@@ -474,8 +519,8 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
 
       {/* Add Contact Modal */}
       {contactModal && (
-        <Modal title="Add Emergency Contact" onClose={() => setContactModal(false)}>
-          <form className="space-y-4" onSubmit={(e) => void addContact(e)}>
+        <Modal title={editingIndex === null ? "Add Emergency Contact" : "Edit Emergency Contact"} onClose={closeContactModal}>
+          <form className="space-y-4" onSubmit={(e) => void submitContact(e)}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Name"><FormInput required value={contactForm.name} onChange={e => setContactForm(p => ({ ...p, name: e.target.value }))} /></FormField>
               <FormField label="Relationship"><FormInput required value={contactForm.relationship} onChange={e => setContactForm(p => ({ ...p, relationship: e.target.value }))} placeholder="Spouse, Parent, Sibling…" /></FormField>
@@ -483,8 +528,8 @@ function HistoryTab({ employee, employeeId, canManage }: { employee: Employee; e
               <FormField label="Email (optional)"><FormInput type="email" value={contactForm.email ?? ""} onChange={e => setContactForm(p => ({ ...p, email: e.target.value }))} /></FormField>
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setContactModal(false)}>Cancel</Button>
-              <Button type="submit" disabled={contactSaving}>{contactSaving ? "Saving…" : "Add Contact"}</Button>
+              <Button type="button" variant="outline" onClick={closeContactModal}>Cancel</Button>
+              <Button type="submit" disabled={contactSaving}>{contactSaving ? "Saving…" : editingIndex === null ? "Add Contact" : "Save Changes"}</Button>
             </div>
           </form>
         </Modal>
@@ -576,8 +621,16 @@ export function EmployeeDetailPage() {
     basic_salary: "", allowances: "", commission_percentage: "", status: "",
   });
 
+  const [editContacts, setEditContacts] = useState<EmergencyContact[]>([]);
+
+  function updateEditContact(index: number, field: keyof EmergencyContact, value: string) {
+    setEditContacts((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
+  }
+
   function openEdit() {
     if (!employee) return;
+    const existing = (employee as Employee & { emergency_contacts?: EmergencyContact[] | null }).emergency_contacts ?? [];
+    setEditContacts(existing.map((c) => ({ name: c.name, relationship: c.relationship, phone: c.phone, email: c.email ?? "" })));
     const nameParts = (employee.name ?? "").split(" ");
     setForm({
       first_name: employee.first_name ?? nameParts[0] ?? "",
@@ -627,6 +680,16 @@ export function EmployeeDetailPage() {
     if (name) fd.append("name", name);
     // Blank is sent explicitly so an existing commission can be cleared.
     if (!form.commission_percentage) fd.append("commission_percentage", "");
+    // Fully blank rows are ignored; partially filled rows must have name, relationship and phone.
+    const filled = editContacts
+      .map((c) => ({ name: c.name.trim(), relationship: c.relationship.trim(), phone: c.phone.trim(), email: (c.email ?? "").trim() }))
+      .filter((c) => c.name || c.relationship || c.phone || c.email);
+    if (filled.some((c) => !c.name || !c.relationship || !c.phone)) {
+      setSaveError("Each emergency contact needs a name, relationship, and phone number.");
+      return;
+    }
+    // Always sent (even empty) so contacts can be removed from this form.
+    fd.append("emergency_contacts", JSON.stringify(filled.map(({ email, ...rest }) => (email ? { ...rest, email } : rest))));
     if (profileImage) fd.append("profile_image", profileImage);
     fd.append("_method", "PUT");
     await updateMutation.mutateAsync(fd);
@@ -891,6 +954,35 @@ export function EmployeeDetailPage() {
             <FormField label="Address">
               <textarea className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
             </FormField>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Emergency contacts</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-xs"
+                  disabled={editContacts.length >= 10}
+                  onClick={() => setEditContacts((prev) => [...prev, { name: "", relationship: "", phone: "", email: "" }])}
+                >
+                  + Add Contact
+                </Button>
+              </div>
+              {editContacts.length === 0 && <p className="text-xs text-[var(--muted)]">No emergency contacts yet.</p>}
+              {editContacts.map((c, i) => (
+                <div key={i} className="space-y-3 rounded-xl border border-[var(--border)] p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-[var(--muted)]">Contact {i + 1}</span>
+                    <button type="button" className="text-xs text-rose-600" onClick={() => setEditContacts((prev) => prev.filter((_, idx) => idx !== i))}>Remove</button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField label="Name"><FormInput value={c.name} onChange={(e) => updateEditContact(i, "name", e.target.value)} /></FormField>
+                    <FormField label="Relationship"><FormInput value={c.relationship} onChange={(e) => updateEditContact(i, "relationship", e.target.value)} placeholder="Spouse, Parent, Sibling…" /></FormField>
+                    <FormField label="Phone"><FormInput value={c.phone} onChange={(e) => updateEditContact(i, "phone", e.target.value)} /></FormField>
+                    <FormField label="Email (optional)"><FormInput type="email" value={c.email ?? ""} onChange={(e) => updateEditContact(i, "email", e.target.value)} /></FormField>
+                  </div>
+                </div>
+              ))}
+            </div>
             <FormField label="Profile photo">
               <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
               {previewUrl && <img src={previewUrl} alt="Preview" className="mt-2 h-16 w-16 rounded-full object-cover" />}
