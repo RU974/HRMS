@@ -15,6 +15,7 @@ import { listCompanies } from "@/services/settings-service";
 import {
   createEmployee,
   getEmployeeOptions,
+  BLOOD_GROUPS,
   type EmergencyContact,
 } from "@/services/employee-service";
 import {
@@ -59,6 +60,7 @@ const employeeSchema = z.object({
   cnic: z.string().optional(),
   date_of_birth: z.string().optional(),
   gender: z.string().optional(),
+  blood_group: z.string().optional(),
   address: z.string().optional(),
   employee_number: z.string().optional(),
   department_id: z.string().min(1, "Department is required"),
@@ -114,6 +116,7 @@ export function EmployeeFormPage() {
       cnic: "",
       date_of_birth: "",
       gender: "",
+      blood_group: "",
       address: "",
       employee_number: "",
       department_id: "",
@@ -266,6 +269,15 @@ export function EmployeeFormPage() {
                 <option value="">Select gender</option>
                 {genderOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Blood Group</label>
+              <select className={inputClass} {...register("blood_group")}>
+                <option value="">Select blood group</option>
+                {BLOOD_GROUPS.map((group) => (
+                  <option key={group} value={group}>{group}</option>
                 ))}
               </select>
             </div>

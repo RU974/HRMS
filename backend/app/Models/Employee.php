@@ -22,6 +22,7 @@ class Employee extends Model
         'cnic',
         'date_of_birth',
         'gender',
+        'blood_group',
         'address',
         'emergency_contacts',
         'employee_number',

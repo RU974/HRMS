@@ -19,6 +19,7 @@ export interface Employee {
   cnic?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
+  blood_group?: string | null;
   address?: string | null;
   joining_date?: string | null;
   employment_type?: string | null;
@@ -143,6 +144,8 @@ export interface EmployeePromotion {
   effective_date: string;
   notes?: string | null;
 }
+
+export const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] as const;
 
 export interface EmergencyContact { name: string; relationship: string; phone: string; email?: string }
 

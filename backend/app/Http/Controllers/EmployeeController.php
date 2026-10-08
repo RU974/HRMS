@@ -20,6 +20,8 @@ use Illuminate\Validation\ValidationException;
 
 class EmployeeController extends Controller
 {
+    private const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'employees:view');
@@ -97,6 +99,7 @@ class EmployeeController extends Controller
             'cnic' => 'nullable|string|max:25',
             'date_of_birth' => 'nullable|date',
             'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
+            'blood_group' => ['nullable', Rule::in(self::BLOOD_GROUPS)],
             'address' => 'nullable|string|max:1000',
             'designation' => 'nullable|string|max:255',
             'designation_id' => 'nullable|exists:designations,id',
@@ -189,6 +192,7 @@ class EmployeeController extends Controller
                 'cnic' => $validated['cnic'] ?? null,
                 'date_of_birth' => $validated['date_of_birth'] ?? null,
                 'gender' => $validated['gender'] ?? null,
+                'blood_group' => $validated['blood_group'] ?? null,
                 'address' => $validated['address'] ?? null,
                 'emergency_contacts' => $validated['emergency_contacts'] ?? [],
                 'employee_number' => $validated['employee_number'] ?? null,
@@ -230,6 +234,7 @@ class EmployeeController extends Controller
             'cnic' => 'nullable|string|max:25',
             'date_of_birth' => 'nullable|date',
             'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
+            'blood_group' => ['nullable', Rule::in(self::BLOOD_GROUPS)],
             'address' => 'nullable|string|max:1000',
             'designation' => 'sometimes|string|max:255',
             'designation_id' => 'sometimes|nullable|exists:designations,id',

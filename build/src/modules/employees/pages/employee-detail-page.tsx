@@ -10,6 +10,7 @@ import { FormInput } from "@/components/forms/form-input";
 import { listDepartments, listDesignations, listShifts, listLeaves, listEmployeeDocuments, getEmployeeAttendance } from "@/services/hr-management-service";
 import {
   getEmployeeOptions,
+  BLOOD_GROUPS,
   getEmployee,
   updateEmployee,
   getEmployeePayslips,
@@ -570,7 +571,7 @@ export function EmployeeDetailPage() {
 
   const [form, setForm] = useState({
     first_name: "", last_name: "", phone: "", cnic: "", date_of_birth: "",
-    gender: "", address: "", department_id: "", designation_id: "",
+    gender: "", blood_group: "", address: "", department_id: "", designation_id: "",
     joining_date: "", employment_type: "", shift_id: "", manager_id: "",
     basic_salary: "", allowances: "", commission_percentage: "", status: "",
   });
@@ -585,6 +586,7 @@ export function EmployeeDetailPage() {
       cnic: employee.cnic ?? "",
       date_of_birth: employee.date_of_birth ?? "",
       gender: employee.gender ?? "",
+      blood_group: employee.blood_group ?? "",
       address: employee.address ?? "",
       department_id: "",
       designation_id: "",
@@ -695,6 +697,7 @@ export function EmployeeDetailPage() {
             <InfoRow label="Phone"           value={employee.phone} />
             <InfoRow label="CNIC"            value={employee.cnic} />
             <InfoRow label="Gender"          value={employee.gender} />
+            <InfoRow label="Blood group"     value={employee.blood_group} />
             <InfoRow label="Date of birth"   value={employee.date_of_birth} />
             <InfoRow label="Shift"           value={employee.shift?.name} />
             <InfoRow label="Manager"         value={employee.manager?.name} />
@@ -838,6 +841,12 @@ export function EmployeeDetailPage() {
               <FormField label="Gender">
                 <select className={inputClass} value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))}>
                   <option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                </select>
+              </FormField>
+              <FormField label="Blood group">
+                <select className={inputClass} value={form.blood_group} onChange={(e) => setForm((p) => ({ ...p, blood_group: e.target.value }))}>
+                  <option value="">Select</option>
+                  {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
               </FormField>
               <FormField label="Department">
