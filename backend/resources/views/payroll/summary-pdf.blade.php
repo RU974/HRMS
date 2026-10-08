@@ -36,6 +36,7 @@
                 <th class="r">Base Salary</th>
                 <th class="r">Allowances</th>
                 <th class="r">Bonus</th>
+                <th class="r">Commission</th>
                 <th class="r">Overtime</th>
                 <th class="r">Deductions</th>
                 <th class="r">Tax</th>
@@ -52,6 +53,7 @@
                     <td class="r">{{ number_format((float) $p->base_salary, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->allowances, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->bonus, 2) }}</td>
+                    <td class="r">{{ number_format((float) $p->commission, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->overtime_pay, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->deductions, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->tax, 2) }}</td>
@@ -64,6 +66,7 @@
                 <td class="r">{{ number_format($totals['base'], 2) }}</td>
                 <td class="r">{{ number_format($totals['allowances'], 2) }}</td>
                 <td class="r">{{ number_format($totals['bonus'], 2) }}</td>
+                <td class="r">{{ number_format($totals['commission'], 2) }}</td>
                 <td class="r">{{ number_format($totals['overtime'], 2) }}</td>
                 <td class="r">{{ number_format($totals['deductions'], 2) }}</td>
                 <td class="r">{{ number_format($totals['tax'], 2) }}</td>

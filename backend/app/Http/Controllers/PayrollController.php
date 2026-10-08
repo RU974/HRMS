@@ -63,6 +63,7 @@ class PayrollController extends Controller
             'base_salary'    => 'required|numeric|min:0',
             'allowances'     => 'nullable|numeric|min:0',
             'bonus'          => 'nullable|numeric|min:0',
+            'commission'     => 'nullable|numeric|min:0',
             'overtime_hours' => 'nullable|numeric|min:0',
             'overtime_pay'   => 'nullable|numeric|min:0',
             'deductions'     => 'nullable|numeric|min:0',
@@ -76,6 +77,7 @@ class PayrollController extends Controller
         $validated['status'] = $validated['status'] ?? Payroll::STATUS_DRAFT;
         $validated['allowances'] = $validated['allowances'] ?? 0;
         $validated['bonus'] = $validated['bonus'] ?? 0;
+        $validated['commission'] = $validated['commission'] ?? 0;
         $validated['overtime_hours'] = $validated['overtime_hours'] ?? 0;
         $validated['overtime_pay'] = $validated['overtime_pay'] ?? 0;
         $validated['deductions'] = $validated['deductions'] ?? 0;
@@ -140,6 +142,7 @@ class PayrollController extends Controller
             'base_salary'    => 'sometimes|numeric|min:0',
             'allowances'     => 'nullable|numeric|min:0',
             'bonus'          => 'nullable|numeric|min:0',
+            'commission'     => 'nullable|numeric|min:0',
             'overtime_hours' => 'nullable|numeric|min:0',
             'overtime_pay'   => 'nullable|numeric|min:0',
             'deductions'     => 'nullable|numeric|min:0',
@@ -148,7 +151,7 @@ class PayrollController extends Controller
         ]);
 
         $merged = array_merge($payroll->only([
-            'base_salary', 'allowances', 'bonus', 'overtime_pay', 'deductions', 'tax',
+            'base_salary', 'allowances', 'bonus', 'commission', 'overtime_pay', 'deductions', 'tax',
         ]), $validated);
         $validated['net_salary'] = $this->computeNetSalary($merged);
 
@@ -226,6 +229,7 @@ class PayrollController extends Controller
                 SUM(base_salary)       AS total_base_salary,
                 SUM(allowances)        AS total_allowances,
                 SUM(bonus)             AS total_bonus,
+                SUM(commission)        AS total_commission,
                 SUM(overtime_pay)      AS total_overtime,
                 SUM(deductions)        AS total_deductions,
                 SUM(tax)               AS total_tax,
@@ -438,6 +442,7 @@ class PayrollController extends Controller
             'base'       => $sum('base_salary'),
             'allowances' => $sum('allowances'),
             'bonus'      => $sum('bonus'),
+            'commission' => $sum('commission'),
             'overtime'   => $sum('overtime_pay'),
             'deductions' => $sum('deductions'),
             'tax'        => $sum('tax'),
@@ -510,6 +515,7 @@ class PayrollController extends Controller
         $gross = (float) ($components['base_salary'] ?? 0)
             + (float) ($components['allowances'] ?? 0)
             + (float) ($components['bonus'] ?? 0)
+            + (float) ($components['commission'] ?? 0)
             + (float) ($components['overtime_pay'] ?? 0);
 
         $net = $gross - (float) ($components['deductions'] ?? 0) - (float) ($components['tax'] ?? 0);

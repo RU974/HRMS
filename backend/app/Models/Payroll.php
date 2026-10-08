@@ -14,6 +14,7 @@ class Payroll extends Model
         'base_salary',
         'allowances',   // ← added: was missing, causing PayrollCalculator output to be silently dropped
         'bonus',
+        'commission',
         'overtime_hours',
         'overtime_pay',
         'deductions',

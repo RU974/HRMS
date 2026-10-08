@@ -1,6 +1,7 @@
 import { apiClient, API_BASE_URL } from "./api-client";
 import { pollBackgroundRun } from "./background-run-service";
 import { useAuthStore } from "@/store/auth-store";
+import type { Payslip } from "./payroll-service";
 
 export interface Employee {
   id: number;
@@ -27,6 +28,7 @@ export interface Employee {
   manager?: { id: number; name: string } | null;
   basic_salary?: number | null;
   allowances?: number | null;
+  commission_percentage?: number | string | null;
   profile_image?: string | null;
 }
 
@@ -127,15 +129,6 @@ export async function importEmployeesCsv(file: File): Promise<EmployeeImportResu
   const run = await pollBackgroundRun<EmployeeImportResult>(background_run_id);
   if (run.status === "failed") throw new Error(run.error ?? "Import failed");
   return run.summary ?? { imported: 0, skipped: 0, errors: [] };
-}
-
-export interface Payslip {
-  id: number;
-  slip_number: string;
-  status: string;
-  issue_date: string;
-  file_url?: string | null;
-  payroll?: { month: number; year: number; net_salary: number | string; base_salary?: number | string | null; bonus?: number | string | null; deductions?: number | string | null; tax?: number | string | null } | null;
 }
 
 export interface EmployeePromotion {

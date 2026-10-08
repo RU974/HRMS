@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { useCurrencyStore } from "@/store/currency-store";
 import { BonusesTab } from "./bonuses-tab";
+import { CommissionsTab } from "./commissions-tab";
 import { DeductionsTab } from "./deductions-tab";
 import { LoansTab } from "./loans-tab";
 import { PayrollProcessingTab } from "./payroll-processing-tab";
@@ -13,7 +14,7 @@ import { SalaryIncrementsTab } from "./salary-increments-tab";
 import { SalarySlipTab } from "./salary-slip-tab";
 import { TaxBracketsTab } from "./tax-brackets-tab";
 
-type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "deductions" | "tax-brackets" | "salary-grades" | "salary-increments" | "loans" | "advances";
+type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "commissions" | "deductions" | "tax-brackets" | "salary-grades" | "salary-increments" | "loans" | "advances";
 
 const TAB_PARAM_MAP: Record<string, Tab> = {
   "payroll-records":    "payroll-records",
@@ -22,6 +23,7 @@ const TAB_PARAM_MAP: Record<string, Tab> = {
   "payroll-processing": "payroll-processing",
   payslips:             "payslips",
   bonuses:              "bonuses",
+  commissions:          "commissions",
   deductions:           "deductions",
   "tax-brackets":       "tax-brackets",
   "salary-grades":      "salary-grades",
@@ -36,6 +38,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "payroll-processing", label: "Processing" },
   { key: "payslips",           label: "Payslips" },
   { key: "bonuses",            label: "Bonuses" },
+  { key: "commissions",        label: "Commissions" },
   { key: "deductions",         label: "Deductions" },
   { key: "salary-increments",  label: "Increment History" },
   { key: "loans",              label: "Loans" },
@@ -78,6 +81,7 @@ export function PayrollPage() {
         {tab === "payroll-processing" && <PayrollProcessingTab />}
         {tab === "payslips"           && <PayslipsTab />}
         {tab === "bonuses"            && <BonusesTab />}
+        {tab === "commissions"        && <CommissionsTab />}
         {tab === "deductions"         && <DeductionsTab />}
         {tab === "salary-increments"  && <SalaryIncrementsTab />}
         {tab === "loans"              && <LoansTab type="loan" />}

@@ -97,6 +97,7 @@ class EmployeeController extends Controller
             'salary' => 'required|numeric|min:0',
             'basic_salary' => 'nullable|numeric|min:0',
             'allowances' => 'nullable|numeric|min:0',
+            'commission_percentage' => 'nullable|numeric|min:0|max:100',
             'department_id' => 'required|exists:departments,id',
             'status' => 'nullable|in:active,inactive',
             'create_user' => 'nullable|boolean',
@@ -188,6 +189,7 @@ class EmployeeController extends Controller
                 'designation' => $designationLabel,
                 'basic_salary' => $validated['basic_salary'] ?? $validated['salary'],
                 'allowances' => $validated['allowances'] ?? 0,
+                'commission_percentage' => $validated['commission_percentage'] ?? null,
                 'salary' => ($validated['basic_salary'] ?? $validated['salary']) + ($validated['allowances'] ?? 0),
                 'profile_image' => $request->hasFile('profile_image') ? Storage::disk('public')->putFile('employee-profiles', $request->file('profile_image')) : null,
                 'status' => $validated['status'] ?? 'active',
@@ -228,6 +230,7 @@ class EmployeeController extends Controller
             'salary' => 'sometimes|numeric|min:0',
             'basic_salary' => 'sometimes|numeric|min:0',
             'allowances' => 'sometimes|numeric|min:0',
+            'commission_percentage' => 'sometimes|nullable|numeric|min:0|max:100',
             'department_id' => 'sometimes|exists:departments,id',
             'status' => 'sometimes|in:active,inactive',
         ]);

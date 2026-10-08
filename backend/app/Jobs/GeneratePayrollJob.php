@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Attendance;
 use App\Models\BackgroundRun;
 use App\Models\Bonus;
+use App\Models\Commission;
 use App\Models\Deduction;
 use App\Models\Employee;
 use App\Models\LoanAdvance;
@@ -70,6 +71,12 @@ class GeneratePayrollJob implements ShouldQueue
                     ->get()
                     ->groupBy('employee_id');
 
+                $allCommissions = Commission::whereIn('employee_id', $this->employeeIds)
+                    ->whereYear('effective_date', $this->year)
+                    ->whereMonth('effective_date', $this->month)
+                    ->get()
+                    ->groupBy('employee_id');
+
                 $allDeductions = Deduction::whereIn('employee_id', $this->employeeIds)
                     ->whereYear('effective_date', $this->year)
                     ->whereMonth('effective_date', $this->month)
@@ -92,12 +99,14 @@ class GeneratePayrollJob implements ShouldQueue
                     try {
                         $employeeBonuses = $allBonuses->get($employee->id, collect());
                         $employeeDeductions = $allDeductions->get($employee->id, collect());
+                        $employeeCommissions = $allCommissions->get($employee->id, collect());
 
                         $components = $calculator->calculateForEmployee(
                             $employee, $this->month, $this->year,
                             $employeeBonuses,
                             $employeeDeductions,
                             $allAttendances->get($employee->id, collect()),
+                            $employeeCommissions,
                         );
 
                         $payroll = Payroll::create([
@@ -107,6 +116,7 @@ class GeneratePayrollJob implements ShouldQueue
                             'base_salary' => $components['base_salary'],
                             'allowances' => $components['allowances'],
                             'bonus' => $components['bonuses'],
+                            'commission' => $components['commission'],
                             'overtime_hours' => $components['overtime_hours'],
                             'overtime_pay' => $components['overtime_pay'],
                             'deductions' => $components['deductions'],
@@ -121,6 +131,7 @@ class GeneratePayrollJob implements ShouldQueue
                         // can later be flagged stale if one of them changes.
                         Bonus::whereIn('id', $employeeBonuses->pluck('id'))->whereNull('payroll_id')->update(['payroll_id' => $payroll->id]);
                         Deduction::whereIn('id', $employeeDeductions->pluck('id'))->whereNull('payroll_id')->update(['payroll_id' => $payroll->id]);
+                        Commission::whereIn('id', $employeeCommissions->pluck('id'))->whereNull('payroll_id')->update(['payroll_id' => $payroll->id]);
 
                         $created++;
                     } catch (\Throwable $e) {

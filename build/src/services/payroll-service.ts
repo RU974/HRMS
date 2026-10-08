@@ -20,6 +20,7 @@ export interface PayrollRecord {
   base_salary: number | string;
   allowances: number | string;
   bonus: number | string;
+  commission?: number | string;
   overtime_hours: number | string;
   overtime_pay: number | string;
   deductions: number | string;
@@ -50,6 +51,7 @@ export interface PayrollPayload {
   base_salary: number;
   allowances?: number;
   bonus?: number;
+  commission?: number;
   overtime_hours?: number;
   overtime_pay?: number;
   deductions?: number;
@@ -78,6 +80,7 @@ export interface PayrollSummaryItem {
   total_employees: number;
   total_base_salary: number | string | null;
   total_bonus: number | string | null;
+  total_commission?: number | string | null;
   total_deductions: number | string | null;
   total_tax: number | string | null;
   total_net_salary: number | string | null;
@@ -100,6 +103,18 @@ export interface Bonus {
   title: string;
   amount: number | string;
   taxable: boolean;
+  effective_date: string;
+  notes?: string | null;
+  employee?: PayrollEmployee | null;
+}
+
+export interface Commission {
+  id: number;
+  employee_id: number;
+  payroll_id?: number | null;
+  business_amount: number | string;
+  commission_percentage: number | string;
+  commission_amount: number | string;
   effective_date: string;
   notes?: string | null;
   employee?: PayrollEmployee | null;
@@ -265,6 +280,16 @@ export function updateBonus(id: number, payload: Partial<Omit<Bonus, "id" | "emp
 }
 export function deleteBonus(id: number) {
   return apiClient<null>(`/bonuses/${id}`, { method: "DELETE" });
+}
+
+export function listCommissions() {
+  return apiClient<PaginationMeta<Commission>>("/commissions");
+}
+export function createCommission(payload: { employee_id: number; business_amount: number; effective_date: string; notes?: string | null }) {
+  return apiClient<Commission>("/commissions", { method: "POST", body: JSON.stringify(payload) });
+}
+export function deleteCommission(id: number) {
+  return apiClient<null>(`/commissions/${id}`, { method: "DELETE" });
 }
 
 export function listDeductions() {

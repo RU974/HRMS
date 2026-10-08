@@ -72,7 +72,7 @@ class ReportAnalyticsService
             ->whereMonth('payment_date', $month)
             ->whereYear('payment_date', $year)
             ->selectRaw(
-                'status, COUNT(*) as total_records, SUM(net_salary) as total_net_salary, SUM(base_salary) as total_base_salary, SUM(bonus) as total_bonus, SUM(deductions) as total_deductions, SUM(tax) as total_tax'
+                'status, COUNT(*) as total_records, SUM(net_salary) as total_net_salary, SUM(base_salary) as total_base_salary, SUM(bonus) as total_bonus, SUM(commission) as total_commission, SUM(deductions) as total_deductions, SUM(tax) as total_tax'
             );
 
         $this->scopeByCompany($request, $query, 'employee.user');

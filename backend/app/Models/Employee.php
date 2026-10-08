@@ -31,6 +31,7 @@ class Employee extends Model
         'manager_id',
         'basic_salary',
         'allowances',
+        'commission_percentage',
         'salary_grade_id',
         'profile_image',
         'department_id',

@@ -75,6 +75,13 @@ const employeeSchema = z.object({
     .string()
     .optional()
     .refine((v) => !v || Number.isFinite(Number.parseFloat(v)), "Enter a valid amount"),
+  commission_percentage: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || (Number.isFinite(Number.parseFloat(v)) && Number.parseFloat(v) >= 0 && Number.parseFloat(v) <= 100),
+      "Enter a percentage between 0 and 100",
+    ),
   username: z.string().optional(),
   password: z.string().optional(),
   role: z.string().min(1, "Role is required"),
@@ -117,6 +124,7 @@ export function EmployeeFormPage() {
       manager_id: "",
       basic_salary: "",
       allowances: "",
+      commission_percentage: "",
       username: "",
       password: "",
       role: "Employee",
@@ -427,6 +435,11 @@ export function EmployeeFormPage() {
               <label className="text-sm font-medium">Allowances</label>
               <FormInput type="number" step="0.01" {...register("allowances")} />
               {errors.allowances && <p className="text-xs text-red-500">{errors.allowances.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Commission (%)</label>
+              <FormInput type="number" step="0.01" min="0" max="100" placeholder="e.g. 5" {...register("commission_percentage")} />
+              {errors.commission_percentage && <p className="text-xs text-red-500">{errors.commission_percentage.message}</p>}
             </div>
           </div>
         </Card>

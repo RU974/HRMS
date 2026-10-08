@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Bonus;
+use App\Models\Commission;
 use App\Models\Deduction;
 use App\Models\Attendance;
 use App\Services\AttendanceCalculator;
@@ -28,7 +29,8 @@ class PayrollCalculator
         int $year,
         ?\Illuminate\Support\Collection $preloadedBonuses = null,
         ?\Illuminate\Support\Collection $preloadedDeductions = null,
-        ?\Illuminate\Support\Collection $preloadedAttendances = null
+        ?\Illuminate\Support\Collection $preloadedAttendances = null,
+        ?\Illuminate\Support\Collection $preloadedCommissions = null
     ): array {
         // basic_salary defaults to 0 (not null) for employees created before that
         // column existed, so "?? $employee->salary" never actually falls back —
@@ -43,6 +45,13 @@ class PayrollCalculator
 
         $bonusesTotal = (float) $bonuses->sum('amount');
         $taxableBonuses = (float) $bonuses->where('taxable', true)->sum('amount');
+
+        $commissions = $preloadedCommissions ?? Commission::where('employee_id', $employee->id)
+            ->whereYear('effective_date', $year)
+            ->whereMonth('effective_date', $month)
+            ->get();
+
+        $commissionTotal = (float) $commissions->sum('commission_amount');
 
         $deductions = $preloadedDeductions ?? Deduction::where('employee_id', $employee->id)
             ->whereYear('effective_date', $year)
@@ -92,10 +101,10 @@ class PayrollCalculator
         $overtimeMultiplier = config('payroll.overtime_multiplier', 1.5);
         $overtimePay = round($overtimeHours * $hourlyRate * $overtimeMultiplier, 2);
 
-        $gross = $baseSalary + $allowances + $bonusesTotal + $overtimePay;
+        $gross = $baseSalary + $allowances + $bonusesTotal + $commissionTotal + $overtimePay;
 
-        // taxable components: base, taxable bonuses, overtime
-        $taxableAmount = $baseSalary + $taxableBonuses + $overtimePay;
+        // taxable components: base, taxable bonuses, commission, overtime
+        $taxableAmount = $baseSalary + $taxableBonuses + $commissionTotal + $overtimePay;
         $tax = $this->taxCalculator->calculate($taxableAmount, $employee->company_id ?? null);
 
         $net = round(max(0, $gross - $deductionsTotal - $tax), 2);
@@ -104,6 +113,7 @@ class PayrollCalculator
             'base_salary' => round($baseSalary, 2),
             'allowances' => round($allowances, 2),
             'bonuses' => round($bonusesTotal, 2),
+            'commission' => round($commissionTotal, 2),
             'overtime_hours' => round($overtimeHours, 2),
             'overtime_pay' => $overtimePay,
             'deductions' => round($deductionsTotal, 2),

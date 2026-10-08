@@ -273,13 +273,14 @@ class ReportController extends Controller
         if ($format) {
             return (new ReportExportService())->export(
                 'payroll-report-' . $validated['year'] . '-' . $validated['month'],
-                ['Status', 'Total Records', 'Total Net Salary', 'Total Base Salary', 'Total Bonus', 'Total Deductions', 'Total Tax'],
+                ['Status', 'Total Records', 'Total Net Salary', 'Total Base Salary', 'Total Bonus', 'Total Commission', 'Total Deductions', 'Total Tax'],
                 $data->map(fn ($row) => [
                     'status' => $row->status,
                     'total_records' => $row->total_records,
                     'total_net_salary' => $row->total_net_salary,
                     'total_base_salary' => $row->total_base_salary,
                     'total_bonus' => $row->total_bonus,
+                    'total_commission' => $row->total_commission,
                     'total_deductions' => $row->total_deductions,
                     'total_tax' => $row->total_tax,
                 ])->toArray(),

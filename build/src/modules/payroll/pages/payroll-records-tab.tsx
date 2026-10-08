@@ -32,6 +32,7 @@ const payrollRecordSchema = z.object({
   base_salary: z.coerce.number().min(0, "Base salary is required"),
   allowances: z.coerce.number().min(0),
   bonus: z.coerce.number().min(0),
+  commission: z.coerce.number().min(0),
   deductions: z.coerce.number().min(0),
   tax: z.coerce.number().min(0),
   payment_date: z.string(),
@@ -47,6 +48,7 @@ const emptyPayrollForm: PayrollRecordFormInput = {
   base_salary: 0,
   allowances: 0,
   bonus: 0,
+  commission: 0,
   deductions: 0,
   tax: 0,
   payment_date: "",
@@ -112,8 +114,8 @@ export function PayrollRecordsTab() {
     defaultValues: emptyPayrollForm,
   });
 
-  const [watchedBase, watchedAllowances, watchedBonus, watchedDeductions, watchedTax] = watchPayroll(["base_salary", "allowances", "bonus", "deductions", "tax"]);
-  const previewNet = Math.max(0, Number(watchedBase) + Number(watchedAllowances) + Number(watchedBonus) - Number(watchedDeductions) - Number(watchedTax));
+  const [watchedBase, watchedAllowances, watchedBonus, watchedCommission, watchedDeductions, watchedTax] = watchPayroll(["base_salary", "allowances", "bonus", "commission", "deductions", "tax"]);
+  const previewNet = Math.max(0, Number(watchedBase) + Number(watchedAllowances) + Number(watchedBonus) + Number(watchedCommission) - Number(watchedDeductions) - Number(watchedTax));
 
   // net_salary is always computed server-side now, so the payload only ever
   // carries the components that feed it — never a manually-entered total.
@@ -124,7 +126,7 @@ export function PayrollRecordsTab() {
   });
 
   const payrollUpdate = useMutation({
-    mutationFn: (values: PayrollRecordFormValues) => updatePayroll(payrollEdit!.id, { base_salary: values.base_salary, allowances: values.allowances, bonus: values.bonus, deductions: values.deductions, tax: values.tax, payment_date: values.payment_date }),
+    mutationFn: (values: PayrollRecordFormValues) => updatePayroll(payrollEdit!.id, { base_salary: values.base_salary, allowances: values.allowances, bonus: values.bonus, commission: values.commission, deductions: values.deductions, tax: values.tax, payment_date: values.payment_date }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll updated", "Payroll record updated successfully."); setPayrollModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -210,7 +212,7 @@ export function PayrollRecordsTab() {
                       <Button variant="outline" className="text-xs px-2 py-1 border-emerald-200 text-emerald-700" onClick={() => void payrollPaid.mutateAsync(item.id)}>✓ Mark Paid</Button>
                     )}
                     {canManage && item.status === "draft" && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayrollEdit(item); resetPayroll({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), allowances: Number(item.allowances ?? 0), bonus: Number(item.bonus), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date?.slice(0, 10) ?? "" }); setPayrollModal(true); }}>Edit</Button>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setPayrollEdit(item); resetPayroll({ employee_id: item.employee_id, month: item.month, year: item.year, base_salary: Number(item.base_salary), allowances: Number(item.allowances ?? 0), bonus: Number(item.bonus), commission: Number(item.commission ?? 0), deductions: Number(item.deductions), tax: Number(item.tax), payment_date: item.payment_date?.slice(0, 10) ?? "" }); setPayrollModal(true); }}>Edit</Button>
                     )}
                     {canManage && item.status !== "paid" && (
                       <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200" onClick={() => { if (window.confirm("Delete payroll?")) void payrollDelete.mutateAsync(item.id); }}>Delete</Button>
@@ -257,6 +259,9 @@ export function PayrollRecordsTab() {
               <SummaryCard label="Base Salary" value={fmt(Number(payrollDetail.base_salary))} />
               <SummaryCard label="Allowances" value={fmt(Number(payrollDetail.allowances ?? 0))} />
               <SummaryCard label="Bonus" value={fmt(Number(payrollDetail.bonus))} />
+              {Number(payrollDetail.commission ?? 0) > 0 && (
+                <SummaryCard label="Commission" value={fmt(Number(payrollDetail.commission))} />
+              )}
               {Number(payrollDetail.overtime_pay ?? 0) > 0 && (
                 <SummaryCard label={`Overtime (${fmt(Number(payrollDetail.overtime_hours ?? 0))} hrs)`} value={fmt(Number(payrollDetail.overtime_pay))} />
               )}
@@ -305,6 +310,9 @@ export function PayrollRecordsTab() {
               </FormField>
               <FormField label="Bonus">
                 <FormInput type="number" min={0} step="0.01" {...registerPayroll("bonus")} />
+              </FormField>
+              <FormField label="Commission">
+                <FormInput type="number" min={0} step="0.01" {...registerPayroll("commission")} />
               </FormField>
               <FormField label="Deductions">
                 <FormInput type="number" min={0} step="0.01" {...registerPayroll("deductions")} />

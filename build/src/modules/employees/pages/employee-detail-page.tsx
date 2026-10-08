@@ -19,10 +19,10 @@ import {
   createEmployeePromotion,
   deleteEmployeePromotion,
   type Employee,
-  type Payslip,
   type EmployeePromotion,
   type EmergencyContact,
 } from "@/services/employee-service";
+import type { Payslip } from "@/services/payroll-service";
 import {
   getEmployeeAppraisals,
   getEmployeeReviews,
@@ -572,7 +572,7 @@ export function EmployeeDetailPage() {
     first_name: "", last_name: "", phone: "", cnic: "", date_of_birth: "",
     gender: "", address: "", department_id: "", designation_id: "",
     joining_date: "", employment_type: "", shift_id: "", manager_id: "",
-    basic_salary: "", allowances: "", status: "",
+    basic_salary: "", allowances: "", commission_percentage: "", status: "",
   });
 
   function openEdit() {
@@ -594,6 +594,7 @@ export function EmployeeDetailPage() {
       manager_id: employee.manager?.id ? String(employee.manager.id) : employee.manager_id ? String(employee.manager_id) : "",
       basic_salary: employee.basic_salary ? String(employee.basic_salary) : "",
       allowances: employee.allowances ? String(employee.allowances) : "",
+      commission_percentage: employee.commission_percentage != null ? String(employee.commission_percentage) : "",
       status: employee.status ?? "active",
     });
     setSaveError(null);
@@ -622,6 +623,8 @@ export function EmployeeDetailPage() {
     Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
     const name = [form.first_name.trim(), form.last_name.trim()].filter(Boolean).join(" ");
     if (name) fd.append("name", name);
+    // Blank is sent explicitly so an existing commission can be cleared.
+    if (!form.commission_percentage) fd.append("commission_percentage", "");
     if (profileImage) fd.append("profile_image", profileImage);
     fd.append("_method", "PUT");
     await updateMutation.mutateAsync(fd);
@@ -697,6 +700,7 @@ export function EmployeeDetailPage() {
             <InfoRow label="Manager"         value={employee.manager?.name} />
             <InfoRow label="Basic salary"    value={employee.basic_salary ? formatAmount(Number(employee.basic_salary)) : undefined} />
             <InfoRow label="Allowances"      value={employee.allowances ? formatAmount(Number(employee.allowances)) : undefined} />
+            <InfoRow label="Commission"      value={employee.commission_percentage != null && employee.commission_percentage !== "" ? `${Number(employee.commission_percentage)}%` : undefined} />
             <InfoRow label="Address"         value={employee.address} />
           </div>
         </Card>
@@ -872,6 +876,7 @@ export function EmployeeDetailPage() {
               </FormField>
               <FormField label="Basic salary"><FormInput type="number" step="0.01" value={form.basic_salary} onChange={(e) => setForm((p) => ({ ...p, basic_salary: e.target.value }))} /></FormField>
               <FormField label="Allowances"><FormInput type="number" step="0.01" value={form.allowances} onChange={(e) => setForm((p) => ({ ...p, allowances: e.target.value }))} /></FormField>
+              <FormField label="Commission (%)"><FormInput type="number" step="0.01" min="0" max="100" value={form.commission_percentage} onChange={(e) => setForm((p) => ({ ...p, commission_percentage: e.target.value }))} /></FormField>
               <FormField label="Joining date"><FormInput type="date" value={form.joining_date} onChange={(e) => setForm((p) => ({ ...p, joining_date: e.target.value }))} /></FormField>
             </div>
             <FormField label="Address">

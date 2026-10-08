@@ -19,6 +19,7 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollProcessingController;
 use App\Http\Controllers\PayslipController;
 use App\Http\Controllers\BonusController;
+use App\Http\Controllers\CommissionController;
 use App\Http\Controllers\DeductionController;
 use App\Http\Controllers\PerformanceAppraisalController;
 use App\Http\Controllers\PerformanceGoalController;
@@ -290,6 +291,7 @@ $registerRoutes = function (): void {
             Route::get('payslips/{id}/pdf', [PayslipController::class, 'downloadPdf']);
             Route::apiResource('payslips', PayslipController::class);
             Route::apiResource('bonuses', BonusController::class);
+            Route::apiResource('commissions', CommissionController::class)->only(['index', 'store', 'destroy']);
             Route::apiResource('deductions', DeductionController::class);
             Route::middleware('permission:payroll:manage_settings')->group(function () {
                 Route::post('payroll/generate', [PayrollController::class, 'generatePayroll']);
