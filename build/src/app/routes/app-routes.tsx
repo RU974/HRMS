@@ -4,6 +4,7 @@ import { AppLayout } from "@/app/layouts/app-layout";
 import { AuthGuard } from "@/app/guards/auth-guard";
 import { PermissionGuard } from "@/app/guards/permission-guard";
 import { NotFoundPage } from "@/app/error/not-found-page";
+import { RouteErrorElement } from "@/app/error/route-error-element";
 import { AuthLayout } from "@/modules/auth/auth-layout";
 
 const DashboardPage = lazy(() => import("@/modules/dashboard/dashboard-page").then((m) => ({ default: m.DashboardPage })));
@@ -67,6 +68,7 @@ function withPermission(element: ReactNode, permissions: string[]) {
 export const appRouter = createBrowserRouter([
   {
     path: "/",
+    errorElement: <RouteErrorElement />,
     element: <AuthGuard><AppLayout /></AuthGuard>,
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
@@ -128,6 +130,7 @@ export const appRouter = createBrowserRouter([
   },
   {
     path: "/auth",
+    errorElement: <RouteErrorElement />,
     element: <AuthLayout />,
     children: [
       { path: "login",           element: <LoginPage /> },

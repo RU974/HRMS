@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { isChunkLoadError, reloadOnceForNewDeploy } from "@/utils/chunk-reload";
 
 interface Props {
   children: ReactNode;
@@ -25,6 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ errorInfo });
     // In production you'd send this to Sentry/LogRocket etc.
     console.error("[ErrorBoundary]", error, errorInfo);
+    if (isChunkLoadError(error)) reloadOnceForNewDeploy();
   }
 
   handleReset() {
