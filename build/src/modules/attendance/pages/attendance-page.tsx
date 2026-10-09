@@ -139,10 +139,11 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
 
   return (
     <Card>
-      <div className="mb-4 flex items-center justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Attendance Calendar</h3>
         {canPickEmployee && (
           <select
+            aria-label="Select employee"
             className={`${inputClass} max-w-[240px]`}
             value={employeeId || ""}
             onChange={e => setEmployeeId(Number(e.target.value))}
@@ -191,7 +192,7 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
 
             return (
               <div key={day}
-                className={`relative flex flex-col items-center justify-start rounded-xl border p-1.5 min-h-[52px] transition
+                className={`relative flex flex-col items-center justify-start rounded-xl border p-1.5 min-h-[72px] transition
                   ${kind ? `${statusStyle[kind] ?? "bg-gray-50 border-gray-200"} cursor-pointer hover:opacity-80` : isWeekend ? "border-[var(--border)] bg-[var(--border)]/40 text-[var(--muted)]" : "border-[var(--border)] bg-[var(--background)]"}
                   ${isToday ? "ring-2 ring-[var(--primary)] ring-offset-1" : ""}
                 `}
@@ -201,7 +202,13 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
                 {kind === "halfday" && <span className="text-[9px] leading-tight font-semibold">½ day</span>}
                 {rec && (
                   <div className="mt-0.5 flex flex-col items-center gap-0.5">
-                    {rec.check_in  && <span className="text-[9px] leading-tight opacity-70">{rec.check_in.slice(11,16)}</span>}
+                    {rec.check_in  && <span className="text-[10px] leading-tight font-medium">In {rec.check_in.slice(11,16)}</span>}
+                    {rec.check_out && (
+                      <span className="text-[10px] leading-tight font-medium">
+                        Out {rec.check_out.slice(11,16)}
+                        {rec.check_out.slice(0, 10) > String(rec.date).slice(0, 10) && <sup className="ml-0.5">+1d</sup>}
+                      </span>
+                    )}
                     {rec.work_from_home && <span className="text-[9px] leading-tight font-semibold opacity-80">WFH</span>}
                     {(rec.overtime_hours ?? 0) > 0 && <span className="text-[9px] leading-tight opacity-70">+{rec.overtime_hours?.toFixed(1)}h OT</span>}
                   </div>
