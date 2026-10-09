@@ -207,6 +207,12 @@ export function EmployeeDashboard() {
                 <TrendingUp className="h-3 w-3 text-emerald-400" />
                 {dept}
               </span>
+              {data?.employee?.manager?.name && (
+                <span className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium">
+                  <User className="h-3 w-3 text-violet-400" />
+                  Reports to {data.employee.manager.name}
+                </span>
+              )}
               <span className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium">
                 <CalendarDays className="h-3 w-3 text-amber-400" />
                 {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
