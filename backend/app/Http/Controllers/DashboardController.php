@@ -223,8 +223,9 @@ class DashboardController extends Controller
         $this->applyManagedEmployeeScope($request, $leaveQuery, 'employee');
         $this->applyManagedEmployeeScope($request, $payrollQuery, 'employee');
 
-        $employees = (clone $employeeQuery)->count();
+        // Dashboard headcount only counts active employees.
         $activeEmployees = (clone $employeeQuery)->where('status', 'active')->count();
+        $employees = $activeEmployees;
         $todayAttendance = (clone $attendanceQuery)->whereDate('date', $today)->count();
         $todayPresent = (clone $attendanceQuery)->whereDate('date', $today)->whereIn('status', ['present', 'late'])->count();
         $pendingLeaves = (clone $leaveQuery)->where('status', 'pending')->count();
@@ -283,7 +284,10 @@ class DashboardController extends Controller
 
         $departmentDistribution = Department::query()
             ->select('departments.id', 'departments.name', DB::raw('COUNT(employees.id) as employee_count'))
-            ->leftJoin('employees', 'employees.department_id', '=', 'departments.id')
+            ->leftJoin('employees', function ($join): void {
+                $join->on('employees.department_id', '=', 'departments.id')
+                    ->where('employees.status', 'active');
+            })
             ->leftJoin('users', 'users.id', '=', 'employees.user_id')
             ->when($companyId, function ($query) use ($companyId): void {
                 $query->where('users.company_id', $companyId);
@@ -310,7 +314,7 @@ class DashboardController extends Controller
             ])
             ->values();
 
-        $recentEmployeesQuery = Employee::query()->with('department:id,name');
+        $recentEmployeesQuery = Employee::query()->with('department:id,name')->where('status', 'active');
         $this->scopeToCompany($request, $recentEmployeesQuery, 'user');
         $recentEmployees = $recentEmployeesQuery
             ->orderByDesc('created_at')
