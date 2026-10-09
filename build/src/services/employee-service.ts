@@ -91,8 +91,10 @@ export function listEmployeesPaginated(
   companyId?: string,
   sortBy = "name",
   sortDir: "asc" | "desc" = "asc",
+  status?: string,
 ) {
   const params = new URLSearchParams({ page: String(page), per_page: "15", sort_by: sortBy, sort_dir: sortDir });
+  if (status) params.set("status", status);
   if (search.trim()) params.set("search", search.trim());
   if (companyId) params.set("company_id", companyId);
   return apiClient<PaginatedResponse<Employee>>(`/employees?${params.toString()}`);

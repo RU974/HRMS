@@ -125,6 +125,7 @@ export function EmployeesPage() {
   const [companyId, setCompanyId] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [statusTab, setStatusTab] = useState<"active" | "inactive">("active");
 
   const companiesQuery = useQuery({
     queryKey: ["settings", "companies"],
@@ -139,8 +140,8 @@ export function EmployeesPage() {
   }, []);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["employees", page, search, companyId, sort.key, sort.dir],
-    queryFn: () => listEmployeesPaginated(page, search, companyId || undefined, sort.key, sort.dir),
+    queryKey: ["employees", page, search, companyId, sort.key, sort.dir, statusTab],
+    queryFn: () => listEmployeesPaginated(page, search, companyId || undefined, sort.key, sort.dir, statusTab),
     retry: false,
     placeholderData: (prev) => prev,
   });
@@ -176,10 +177,29 @@ export function EmployeesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Employees"
-        subtitle={`${total > 0 ? `${total} employees` : "Manage your workforce"}`}
+        subtitle={total > 0 ? `${total} ${statusTab} employees` : "Manage your workforce"}
       />
 
       <Card>
+        <div className="mb-4 flex gap-1 border-b border-[var(--border)]" role="tablist">
+          {(["active", "inactive"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={statusTab === tab}
+              onClick={() => { setStatusTab(tab); setPage(1); }}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium capitalize transition ${
+                statusTab === tab
+                  ? "border-[var(--primary)] text-[var(--primary)]"
+                  : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"
+              }`}
+            >
+              {tab} Employees
+            </button>
+          ))}
+        </div>
+
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <form onSubmit={handleSearchSubmit} className="flex flex-1 items-center gap-2">
             <FormInput
@@ -271,12 +291,12 @@ export function EmployeesPage() {
                     <div className="mx-auto max-w-xs space-y-2">
                       <p className="text-2xl">👥</p>
                       <p className="font-medium text-[var(--text)]">
-                        {search ? "No employees match your search" : "No employees yet"}
+                        {search ? "No employees match your search" : statusTab === "inactive" ? "No inactive employees" : "No employees yet"}
                       </p>
                       <p className="text-sm text-[var(--muted)]">
-                        {search ? "Try a different name or department." : "Add your first employee to get started."}
+                        {search ? "Try a different name or department." : statusTab === "inactive" ? "Deactivated employees will appear here." : "Add your first employee to get started."}
                       </p>
-                      {!search && canManage && (
+                      {!search && statusTab === "active" && canManage && (
                         <Link to="/employees/new">
                           <Button className="mt-3">Add Employee</Button>
                         </Link>
