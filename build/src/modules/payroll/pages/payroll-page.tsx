@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { useCurrencyStore } from "@/store/currency-store";
+import { BankDetailsTab } from "./bank-details-tab";
 import { BonusesTab } from "./bonuses-tab";
 import { CommissionsTab } from "./commissions-tab";
 import { DeductionsTab } from "./deductions-tab";
@@ -14,7 +15,7 @@ import { SalaryIncrementsTab } from "./salary-increments-tab";
 import { SalarySlipTab } from "./salary-slip-tab";
 import { TaxBracketsTab } from "./tax-brackets-tab";
 
-type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "commissions" | "deductions" | "tax-brackets" | "salary-grades" | "salary-increments" | "loans" | "advances";
+type Tab = "payroll-records" | "salary-slip" | "payroll-processing" | "payslips" | "bonuses" | "commissions" | "deductions" | "tax-brackets" | "salary-grades" | "salary-increments" | "loans" | "advances" | "bank-details";
 
 const TAB_PARAM_MAP: Record<string, Tab> = {
   "payroll-records":    "payroll-records",
@@ -30,6 +31,7 @@ const TAB_PARAM_MAP: Record<string, Tab> = {
   "salary-increments":  "salary-increments",
   loans:                "loans",
   advances:             "advances",
+  "bank-details":       "bank-details",
 };
 
 const TABS: { key: Tab; label: string }[] = [
@@ -43,6 +45,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "salary-increments",  label: "Increment History" },
   { key: "loans",              label: "Loans" },
   { key: "advances",           label: "Advances" },
+  { key: "bank-details",       label: "Bank Details" },
   { key: "tax-brackets",       label: "Tax Brackets" },
   { key: "salary-grades",      label: "Salary Grades" },
 ];
@@ -86,7 +89,8 @@ export function PayrollPage() {
         {tab === "salary-increments"  && <SalaryIncrementsTab />}
         {tab === "loans"              && <LoansTab type="loan" />}
         {tab === "advances"           && <LoansTab type="advance" />}
-        {tab === "tax-brackets"       && <TaxBracketsTab />}
+        {tab === "bank-details"       && <BankDetailsTab />}
+        {tab === "tax-brackets"      && <TaxBracketsTab />}
         {tab === "salary-grades"      && <SalaryGradesTab />}
       </section>
     </div>

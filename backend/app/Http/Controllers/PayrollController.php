@@ -380,7 +380,7 @@ class PayrollController extends Controller
         $month = (int) $request->query('month');
         $year  = (int) $request->query('year');
 
-        $query = Payroll::with(['employee'])
+        $query = Payroll::with(['employee.bankAccount'])
             ->where('month', $month)
             ->where('year', $year)
             ->whereIn('status', [Payroll::STATUS_APPROVED, Payroll::STATUS_PAID]);
@@ -389,14 +389,22 @@ class PayrollController extends Controller
 
         $records = $query->get();
 
-        $rows   = ["Employee Name,Employee ID,Bank Account,Net Salary,Payment Date,Status"];
+        $csvCell = fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"';
+
+        $rows   = ["Employee Name,Employee ID,Account Holder,Bank,Branch,Account Number,IBAN,SWIFT,Routing Code,Net Salary,Payment Date,Status"];
         foreach ($records as $p) {
-            $name    = $p->employee?->name ?? "Employee #{$p->employee_id}";
-            $account = $p->employee?->bank_account ?? '';
-            $rows[]  = implode(',', [
-                '"' . str_replace('"', '""', $name) . '"',
+            $name = $p->employee?->name ?? "Employee #{$p->employee_id}";
+            $bank = $p->employee?->bankAccount;
+            $rows[] = implode(',', [
+                $csvCell($name),
                 $p->employee_id,
-                '"' . $account . '"',
+                $csvCell($bank?->account_holder_name),
+                $csvCell($bank?->bank_name),
+                $csvCell($bank?->branch_name),
+                $csvCell($bank?->account_number),
+                $csvCell($bank?->iban),
+                $csvCell($bank?->swift_code),
+                $csvCell($bank?->routing_code),
                 number_format((float) $p->net_salary, 2, '.', ''),
                 $p->payment_date ?? '',
                 $p->status,

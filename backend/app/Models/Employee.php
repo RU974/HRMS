@@ -66,6 +66,11 @@ class Employee extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function bankAccount(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(EmployeeBankAccount::class);
+    }
+
     public function designationRef(): BelongsTo
     {
         return $this->belongsTo(Designation::class, 'designation_id');

@@ -189,6 +189,26 @@ export interface LoanAdvance {
   employee?: PayrollEmployee | null;
 }
 
+export type BankAccountType = "savings" | "current" | "salary";
+
+export interface EmployeeBankAccount {
+  id: number;
+  employee_id: number;
+  company_id?: string | null;
+  account_holder_name: string;
+  bank_name: string;
+  branch_name?: string | null;
+  account_number: string;
+  iban?: string | null;
+  swift_code?: string | null;
+  routing_code?: string | null;
+  account_type: BankAccountType;
+  notes?: string | null;
+  employee?: PayrollEmployee | null;
+}
+
+export type EmployeeBankAccountPayload = Omit<EmployeeBankAccount, "id" | "company_id" | "employee">;
+
 export interface Payslip {
   id: number;
   employee_id: number;
@@ -407,6 +427,18 @@ export function createLoanAdvance(payload: Omit<LoanAdvance, "id" | "company_id"
 }
 export function updateLoanAdvance(id: number, payload: Partial<Omit<LoanAdvance, "id" | "company_id" | "employee">>) {
   return apiClient<LoanAdvance>(`/loan-advances/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function listEmployeeBankAccounts() {
+  return apiClient<PaginationMeta<EmployeeBankAccount>>("/employee-bank-accounts");
+}
+export function createEmployeeBankAccount(payload: EmployeeBankAccountPayload) {
+  return apiClient<EmployeeBankAccount>("/employee-bank-accounts", { method: "POST", body: JSON.stringify(payload) });
+}
+export function updateEmployeeBankAccount(id: number, payload: Omit<EmployeeBankAccountPayload, "employee_id">) {
+  return apiClient<EmployeeBankAccount>(`/employee-bank-accounts/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+export function deleteEmployeeBankAccount(id: number) {
+  return apiClient<null>(`/employee-bank-accounts/${id}`, { method: "DELETE" });
 }
 export function deleteLoanAdvance(id: number) {
   return apiClient<null>(`/loan-advances/${id}`, { method: "DELETE" });

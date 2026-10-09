@@ -304,6 +304,7 @@ $registerRoutes = function (): void {
                 Route::apiResource('salary-grades', SalaryGradeController::class)->only(['index', 'store', 'update', 'destroy']);
                 Route::apiResource('salary-increments', SalaryIncrementController::class)->only(['index', 'store', 'update', 'destroy']);
                 Route::apiResource('loan-advances', LoanAdvanceController::class)->only(['index', 'store', 'update', 'destroy']);
+                Route::apiResource('employee-bank-accounts', \App\Http\Controllers\EmployeeBankAccountController::class)->only(['index', 'store', 'update', 'destroy']);
             });
         });
 
