@@ -57,6 +57,7 @@ class GeneratePayrollJob implements ShouldQueue
 
             DB::transaction(function () use ($calculator, &$created, &$skipped, &$failed) {
                 $this->ensureLoanEmiDeductions($this->employeeIds, $this->month, $this->year);
+                $this->ensureSalaryDeductionAdvances($this->employeeIds, $this->month, $this->year);
 
                 $employees = Employee::with(['shift'])->whereIn('id', $this->employeeIds)->get();
 
@@ -214,6 +215,57 @@ class GeneratePayrollJob implements ShouldQueue
                 $loan->status = 'completed';
             }
             $loan->save();
+        }
+    }
+
+    /**
+     * Create this month's deduction for every loan/advance flagged
+     * "deduct_from_salary". The amount is the EMI when set, otherwise the whole
+     * outstanding balance (capped at it). Unlike active-loan EMIs, the balance is
+     * NOT reduced here: it is settled and the advance closed when the payroll is
+     * marked paid (see LoanAdvance::settleForPayroll). Employees who already have
+     * a payroll for the period are skipped so a re-run cannot double-deduct.
+     *
+     * @param int[] $employeeIds
+     */
+    private function ensureSalaryDeductionAdvances(array $employeeIds, int $month, int $year): void
+    {
+        $alreadyGenerated = Payroll::where('month', $month)->where('year', $year)
+            ->whereIn('employee_id', $employeeIds)->pluck('employee_id')->all();
+
+        $loans = LoanAdvance::whereIn('employee_id', array_diff($employeeIds, $alreadyGenerated))
+            ->recoverableFromSalary()
+            ->where('outstanding_balance', '>', 0)
+            ->whereDate('start_date', '<=', Carbon::create($year, $month, 1)->endOfMonth()->toDateString())
+            ->get();
+
+        $periodStart = Carbon::create($year, $month, 1)->startOfMonth();
+
+        foreach ($loans as $loan) {
+            $exists = Deduction::where('loan_advance_id', $loan->id)
+                ->whereYear('effective_date', $year)
+                ->whereMonth('effective_date', $month)
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+
+            $balance = (float) $loan->outstanding_balance;
+            $emi = (float) $loan->emi_amount;
+            $amount = round($emi > 0 ? min($emi, $balance) : $balance, 2);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            Deduction::create([
+                'employee_id' => $loan->employee_id,
+                'loan_advance_id' => $loan->id,
+                'title' => ucfirst($loan->type ?? 'loan') . ' recovery - ' . $loan->title,
+                'amount' => $amount,
+                'type' => 'loan',
+                'effective_date' => $periodStart->toDateString(),
+                'notes' => 'Auto-generated salary deduction; advance closes when payroll is paid.',
+            ]);
         }
     }
 

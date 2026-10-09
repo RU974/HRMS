@@ -171,6 +171,7 @@ export interface SalaryIncrement {
 }
 
 export type LoanAdvanceType = "loan" | "advance";
+export type LoanAdvanceStatus = "pending" | "approved" | "active" | "deduct_from_salary" | "on_hold" | "paid" | "closed" | "completed" | "cancelled";
 
 export interface LoanAdvance {
   id: number;
@@ -183,7 +184,7 @@ export interface LoanAdvance {
   emi_amount?: number | null;
   start_date: string;
   end_date?: string | null;
-  status: "active" | "completed" | "cancelled";
+  status: LoanAdvanceStatus;
   notes?: string | null;
   employee?: PayrollEmployee | null;
 }

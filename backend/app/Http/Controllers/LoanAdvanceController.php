@@ -43,6 +43,7 @@ class LoanAdvanceController extends Controller
             'start_date'          => 'required|date',
             'end_date'            => 'nullable|date|after_or_equal:start_date',
             'notes'               => 'nullable|string|max:1000',
+            'status'              => ['sometimes', \Illuminate\Validation\Rule::in(LoanAdvance::STATUSES)],
         ]);
 
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
@@ -52,7 +53,7 @@ class LoanAdvanceController extends Controller
             'type'                => $validated['type'] ?? 'loan',
             'outstanding_balance' => $validated['outstanding_balance'] ?? $validated['amount'],
             'company_id'          => $request->user()?->company_id,
-            'status'              => 'active',
+            'status'              => $validated['status'] ?? LoanAdvance::STATUS_ACTIVE,
         ]);
 
         return $this->ok($loan->load('employee:id,name'), 'Loan/advance created.', 201);
@@ -69,7 +70,7 @@ class LoanAdvanceController extends Controller
             'outstanding_balance' => 'nullable|numeric|min:0',
             'emi_amount'          => 'nullable|numeric|min:0',
             'end_date'            => 'nullable|date',
-            'status'              => 'sometimes|in:active,completed,cancelled',
+            'status'              => ['sometimes', \Illuminate\Validation\Rule::in(LoanAdvance::STATUSES)],
             'notes'               => 'nullable|string|max:1000',
         ]);
 
@@ -77,7 +78,7 @@ class LoanAdvanceController extends Controller
 
         // Auto-complete if balance is zero
         if (isset($validated['outstanding_balance']) && (float) $validated['outstanding_balance'] === 0.0) {
-            $loan->update(['status' => 'completed']);
+            $loan->update(['status' => LoanAdvance::STATUS_CLOSED]);
         }
 
         return $this->ok($loan->load('employee:id,name'), 'Loan/advance updated.');

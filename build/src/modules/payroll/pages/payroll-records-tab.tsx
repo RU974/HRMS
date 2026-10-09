@@ -8,7 +8,7 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { toast } from "@/components/notifications/toast";
-import { getEmployees } from "@/services/employee-service";
+import { getEmployeeOptions } from "@/services/employee-service";
 import {
   type PayrollRecord,
   approvePayroll,
@@ -58,7 +58,7 @@ export function PayrollRecordsTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
 
-  const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployees()).data ?? [] });
+  const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployeeOptions()).data ?? [] });
   const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: async () => (await listPayroll()).data ?? [] });
 
   const employees = employeesQ.data ?? [];

@@ -32,9 +32,27 @@ export function payrollBadge(status: string) {
   return map[status] ?? "border-slate-200 bg-slate-100 text-slate-700";
 }
 
+export const LOAN_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending approval",
+  approved: "Approved",
+  active: "Active",
+  deduct_from_salary: "Deduct from salary",
+  on_hold: "On hold",
+  paid: "Paid out (recover from salary)",
+  closed: "Closed",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
 export function loanBadge(status: string) {
   const map: Record<string, string> = {
+    pending:   "border-yellow-200 bg-yellow-50 text-yellow-700",
+    approved:  "border-sky-200 bg-sky-50 text-sky-700",
     active:    "border-amber-200 bg-amber-50 text-amber-700",
+    deduct_from_salary: "border-blue-200 bg-blue-50 text-blue-700",
+    on_hold:   "border-orange-200 bg-orange-50 text-orange-700",
+    paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
+    closed:    "border-slate-300 bg-slate-100 text-slate-700",
     completed: "border-emerald-200 bg-emerald-50 text-emerald-700",
     cancelled: "border-red-200 bg-red-50 text-red-700",
   };

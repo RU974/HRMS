@@ -488,6 +488,8 @@ class PayrollController extends Controller
             'payment_date' => $payroll->payment_date ?: now()->toDateString(),
         ]);
 
+        \App\Models\LoanAdvance::settleForPayroll((int) $payroll->id);
+
         app(PayrollNotificationService::class)->notifyPaid($payroll);
 
         return $this->ok($payroll->fresh('employee'), 'Payroll marked as paid.');

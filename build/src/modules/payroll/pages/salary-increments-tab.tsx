@@ -8,7 +8,7 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { toast } from "@/components/notifications/toast";
-import { getEmployees } from "@/services/employee-service";
+import { getEmployeeOptions } from "@/services/employee-service";
 import {
   type SalaryIncrement,
   createSalaryIncrement,
@@ -39,7 +39,7 @@ export function SalaryIncrementsTab() {
   const canView   = useAuthStore(s => s.hasPermission("payroll:view"));
 
   const incrementsQ = useQuery({ queryKey: ["payroll", "increments"], queryFn: () => listSalaryIncrements(), enabled: canView || canManage });
-  const employeesQ  = useQuery({ queryKey: ["payroll", "employees"],  queryFn: async () => (await getEmployees()).data ?? [] });
+  const employeesQ  = useQuery({ queryKey: ["payroll", "employees"],  queryFn: async () => (await getEmployeeOptions()).data ?? [] });
 
   const employees = employeesQ.data ?? [];
 

@@ -8,9 +8,10 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { toast } from "@/components/notifications/toast";
-import { getEmployees } from "@/services/employee-service";
+import { getEmployeeOptions } from "@/services/employee-service";
 import {
   type LoanAdvance,
+  type LoanAdvanceStatus,
   type LoanAdvanceType,
   createLoanAdvance,
   deleteLoanAdvance,
@@ -18,7 +19,7 @@ import {
   updateLoanAdvance,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
-import { Badge, fmt, loanBadge, sel } from "./payroll-shared";
+import { Badge, LOAN_STATUS_LABELS, fmt, loanBadge, sel } from "./payroll-shared";
 
 const loanSchema = z.object({
   employee_id: z.coerce.number().min(1, "Employee is required"),
@@ -29,12 +30,14 @@ const loanSchema = z.object({
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().optional(),
   notes: z.string().optional(),
+  status: z.string().min(1),
 });
 
 type LoanFormInput = z.input<typeof loanSchema>;
 type LoanFormValues = z.output<typeof loanSchema>;
 
-const emptyLoanForm: LoanFormInput = { employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "", start_date: "", end_date: "", notes: "" };
+const emptyLoanForm: LoanFormInput = { employee_id: 0, title: "", amount: 0, outstanding_balance: 0, emi_amount: "", start_date: "", end_date: "", notes: "", status: "active" };
+const defaultStatus = (t: LoanAdvanceType) => (t === "advance" ? "paid" : "active");
 
 const COPY: Record<LoanAdvanceType, { singular: string; plural: string }> = {
   loan:    { singular: "Loan",    plural: "Loans" },
@@ -48,7 +51,7 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
   const canView   = useAuthStore(s => s.hasPermission("payroll:view"));
 
   const loansQ     = useQuery({ queryKey: ["payroll", "loans", type], queryFn: () => listLoanAdvances({ type }), enabled: canView || canManage });
-  const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployees()).data ?? [] });
+  const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployeeOptions()).data ?? [] });
 
   const employees = employeesQ.data ?? [];
 
@@ -67,13 +70,13 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
   });
 
   const loanCreate = useMutation({
-    mutationFn: (values: LoanFormValues) => createLoanAdvance({ ...values, type, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null, status: "active" }),
+    mutationFn: (values: LoanFormValues) => createLoanAdvance({ ...values, type, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null, status: values.status as LoanAdvanceStatus }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans", type] }); toast.success(`${singular} added`, `${singular} record saved.`); setLoanModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const loanUpdate = useMutation({
-    mutationFn: (values: LoanFormValues) => updateLoanAdvance(loanEdit!.id, { title: values.title, outstanding_balance: values.outstanding_balance, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null }),
+    mutationFn: (values: LoanFormValues) => updateLoanAdvance(loanEdit!.id, { title: values.title, outstanding_balance: values.outstanding_balance, emi_amount: values.emi_amount ? Number(values.emi_amount) : null, end_date: values.end_date || null, notes: values.notes || null, status: values.status as LoanAdvanceStatus }),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "loans", type] }); toast.success(`${singular} updated`, `${singular} record updated.`); setLoanModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
@@ -92,7 +95,7 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
     <div className="space-y-4">
       <div className="flex justify-end">
         {canManage && (
-          <Button className="text-xs" onClick={() => { setLoanEdit(null); reset(emptyLoanForm); setLoanModal(true); }}>
+          <Button className="text-xs" onClick={() => { setLoanEdit(null); reset({ ...emptyLoanForm, status: defaultStatus(type) }); setLoanModal(true); }}>
             + New {singular}
           </Button>
         )}
@@ -119,11 +122,11 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
                 <td className="p-3" data-label="Amount">{fmt(item.amount)}</td>
                 <td className="p-3 font-semibold" data-label="Outstanding">{fmt(item.outstanding_balance)}</td>
                 <td className="p-3" data-label="EMI">{item.emi_amount != null ? fmt(item.emi_amount) : "—"}</td>
-                <td className="p-3" data-label="Status"><Badge label={item.status} tone={loanBadge(item.status)} /></td>
+                <td className="p-3" data-label="Status"><Badge label={LOAN_STATUS_LABELS[item.status] ?? item.status} tone={loanBadge(item.status)} /></td>
                 <td className="p-3" data-label="Actions">
                   <div className="flex justify-end gap-1.5">
                     {canManage && (
-                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setLoanEdit(item); reset({ employee_id: item.employee_id, title: item.title, amount: item.amount, outstanding_balance: item.outstanding_balance, emi_amount: item.emi_amount != null ? String(item.emi_amount) : "", start_date: item.start_date.slice(0, 10), end_date: item.end_date?.slice(0, 10) ?? "", notes: item.notes ?? "" }); setLoanModal(true); }}>
+                      <Button variant="outline" className="text-xs px-2 py-1" onClick={() => { setLoanEdit(item); reset({ employee_id: item.employee_id, title: item.title, amount: item.amount, outstanding_balance: item.outstanding_balance, emi_amount: item.emi_amount != null ? String(item.emi_amount) : "", start_date: item.start_date.slice(0, 10), end_date: item.end_date?.slice(0, 10) ?? "", notes: item.notes ?? "", status: item.status }); setLoanModal(true); }}>
                         Edit
                       </Button>
                     )}
@@ -173,6 +176,11 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
                 <FormInput type="number" min={0} step="0.01" {...register("emi_amount")} />
                 {errors.emi_amount && <p className="mt-1 text-xs text-red-500">{errors.emi_amount.message}</p>}
               </FormField>
+              <FormField label="Status">
+                <select className={sel} {...register("status")}>
+                  {Object.entries(LOAN_STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </FormField>
               <FormField label="Start Date">
                 <FormInput type="date" {...register("start_date")} />
                 {errors.start_date && <p className="mt-1 text-xs text-red-500">{errors.start_date.message}</p>}
@@ -181,6 +189,11 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
                 <FormInput type="date" {...register("end_date")} />
               </FormField>
             </div>
+            <p className="text-xs text-[var(--muted)]">
+              {type === "advance"
+                ? "Pending/Approved advances are not deducted. Once the status is \"Paid out\", every payroll run deducts the EMI (or the whole balance if no EMI is set) automatically, and the advance is closed when the payroll is marked paid and the balance reaches zero."
+                : "\"Deduct from salary\": the next payroll run deducts the EMI (or the full balance if no EMI is set); the loan closes when that payroll is marked paid and the balance reaches zero."}
+            </p>
             <FormField label="Notes">
               <textarea className="min-h-16 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" {...register("notes")} maxLength={1000} />
             </FormField>
