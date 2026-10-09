@@ -5,10 +5,15 @@
 <style>
     @page { margin: 26px 24px; }
     body { font-family: DejaVu Sans, sans-serif; color: #111827; font-size: 9px; }
-    .titlebar { display: table; width: 100%; border-bottom: 1px solid #111827; padding-bottom: 5px; margin-bottom: 10px; }
-    .titlebar .left { display: table-cell; font-size: 13px; font-weight: bold; }
-    .titlebar .right { display: table-cell; text-align: right; font-size: 8px; color: #6b7280; vertical-align: bottom; }
-    .titlebar .logo { height: 18px; vertical-align: middle; margin-right: 6px; }
+    .titlebar { width: 100%; border-collapse: collapse; border-bottom: 1px solid #111827; margin-bottom: 10px; }
+    .titlebar td { border: 0; padding: 0 0 6px 0; background: none !important; vertical-align: middle; }
+    .titlebar .logo-cell { width: 52px; }
+    .titlebar .logo { max-height: 42px; max-width: 48px; }
+    .titlebar .company { font-size: 11px; font-weight: bold; }
+    .titlebar .details { font-size: 7.5px; color: #6b7280; line-height: 1.4; }
+    .titlebar .right { text-align: right; }
+    .titlebar .title { font-size: 12px; font-weight: bold; }
+    .titlebar .gen { font-size: 7.5px; color: #6b7280; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; background: #111827; color: #ffffff; padding: 4px 6px; font-size: 8.5px; text-transform: uppercase; }
     td { padding: 3px 6px; font-size: 8.5px; border-bottom: 0.5px solid #d1d5db; }
@@ -17,15 +22,27 @@
 </style>
 </head>
 <body>
-    <div class="titlebar">
-        <div class="left">{{ $title }}</div>
-        <div class="right">
+    <table class="titlebar">
+        <tr>
             @if(!empty($companyLogo))
-                <img class="logo" src="{{ $companyLogo }}">
+                <td class="logo-cell"><img class="logo" src="{{ $companyLogo }}"></td>
             @endif
-            {{ $companyName }} &middot; {{ $generatedAt }}
-        </div>
-    </div>
+            <td>
+                <div class="company">{{ $companyName }}</div>
+                <div class="details">
+                    @if($companyAddress){{ $companyAddress }}<br>@endif
+                    @if($companyPhone)Tel: {{ $companyPhone }}@endif
+                    @if($companyPhone && $companyEmail) &middot; @endif
+                    @if($companyEmail){{ $companyEmail }}@endif
+                    @if($companyWebsite) &middot; {{ $companyWebsite }}@endif
+                </div>
+            </td>
+            <td class="right">
+                <div class="title">{{ $title }}</div>
+                <div class="gen">{{ $generatedAt }}</div>
+            </td>
+        </tr>
+    </table>
 
     <table>
         <thead>

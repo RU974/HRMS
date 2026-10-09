@@ -391,6 +391,10 @@ class ReportController extends Controller
             'template' => $template,
             'company_name' => $company->name ?? 'HRMS',
             'company_logo' => $logoUri,
+            'company_address' => $company?->address,
+            'company_email' => $company?->email,
+            'company_phone' => $company?->phone,
+            'company_website' => $company?->website,
             'generated_by' => $request->user()?->name,
         ];
     }

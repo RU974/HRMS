@@ -6,8 +6,13 @@
     @page { margin: 0 0 40px 0; }
     body { font-family: DejaVu Sans, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
     .band { background: #4338ca; color: #ffffff; padding: 22px 40px; margin-bottom: 22px; }
-    .band .logo { height: 32px; margin-bottom: 8px; background: #ffffff; padding: 4px 8px; border-radius: 4px; }
-    .band .company { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.85; margin-bottom: 6px; }
+    .brand { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .brand td { border: 0; padding: 0; background: none !important; vertical-align: middle; }
+    .brand .logo-cell { width: 100px; }
+    .brand .logo { max-height: 70px; max-width: 85px; background: #ffffff; padding: 5px; border-radius: 4px; }
+    .band .company { font-size: 15px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+    .band .details { font-size: 9.5px; opacity: 0.9; line-height: 1.5; }
+    .band .rule { border-top: 1px solid rgba(255,255,255,0.4); margin-bottom: 12px; }
     .band h1 { font-size: 20px; margin: 0 0 6px 0; }
     .band .meta { font-size: 10px; opacity: 0.9; }
     .content { padding: 0 40px; }
@@ -20,10 +25,24 @@
 </head>
 <body>
     <div class="band">
-        @if(!empty($companyLogo))
-            <img class="logo" src="{{ $companyLogo }}">
-        @endif
-        <div class="company">{{ $companyName }}</div>
+        <table class="brand">
+            <tr>
+                @if(!empty($companyLogo))
+                    <td class="logo-cell"><img class="logo" src="{{ $companyLogo }}"></td>
+                @endif
+                <td>
+                    <div class="company">{{ $companyName }}</div>
+                    <div class="details">
+                        @if($companyAddress){{ $companyAddress }}<br>@endif
+                        @if($companyPhone)Tel: {{ $companyPhone }}@endif
+                        @if($companyPhone && $companyEmail) &middot; @endif
+                        @if($companyEmail){{ $companyEmail }}@endif
+                        @if($companyWebsite)<br>{{ $companyWebsite }}@endif
+                    </div>
+                </td>
+            </tr>
+        </table>
+        <div class="rule"></div>
         <h1>{{ $title }}</h1>
         <div class="meta">
             Generated {{ $generatedAt }}

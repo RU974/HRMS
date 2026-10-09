@@ -111,6 +111,10 @@ class ReportExportService
             'rows' => $displayRows,
             'companyName' => $context['company_name'] ?? 'HRMS',
             'companyLogo' => $context['company_logo'] ?? null,
+            'companyAddress' => $context['company_address'] ?? null,
+            'companyEmail' => $context['company_email'] ?? null,
+            'companyPhone' => $context['company_phone'] ?? null,
+            'companyWebsite' => $context['company_website'] ?? null,
             'generatedBy' => $context['generated_by'] ?? null,
             'generatedAt' => $context['generated_at'] ?? now()->format('M j, Y g:i A'),
         ])->setPaper('a4', 'portrait');
