@@ -18,7 +18,11 @@ class AttendanceController extends Controller
         $user = $request->user();
         $query = Attendance::with('employee');
         $this->scopeToCompany($request, $query, 'employee.user');
-        $this->applyManagedEmployeeScope($request, $query, 'employee');
+        if ($this->isLineManagerOnly($request)) {
+            $query->whereHas('employee', fn ($q) => $this->scopeToOwnTeam($q, $request));
+        } else {
+            $this->applyManagedEmployeeScope($request, $query, 'employee');
+        }
 
         if ($request->has('employee_id')) {
             $employeeId = (int) $request->employee_id;
@@ -392,12 +396,9 @@ class AttendanceController extends Controller
         $employeeQuery = Employee::with(['department'])->where('status', 'active');
         $this->scopeToCompany($request, $employeeQuery);
 
-        // Department managers: scope to their own department
+        // Non-admin managers: own department, direct reports and themselves only
         if (!$user?->can('attendance:manage_settings')) {
-            $mgr = Employee::where('user_id', $user->id)->first();
-            if ($mgr?->department_id) {
-                $employeeQuery->where('department_id', $mgr->department_id);
-            }
+            $employeeQuery->where(fn ($q) => $this->scopeToOwnTeam($q, $request));
         }
 
         $employees = $employeeQuery->orderBy('name')->get();
@@ -532,7 +533,12 @@ class AttendanceController extends Controller
         // Line managers (read-only) can access their own team's records
         if ($this->canViewTeamAttendance($request)) {
             $this->assertEmployeeInCompany($request, $employeeId);
-            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'attendance record');
+            $inTeam = Employee::query()->whereKey($employeeId)
+                ->where(fn ($q) => $this->scopeToOwnTeam($q, $request))
+                ->exists();
+            if (!$inTeam) {
+                abort(403, 'You are not authorized to access this attendance record.');
+            }
             return;
         }
 
@@ -541,6 +547,32 @@ class AttendanceController extends Controller
         if (!$employee || (int)$employee->id !== $employeeId) {
             abort(403, 'You are not authorized to perform this action for this employee.');
         }
+    }
+
+    private function isLineManagerOnly(Request $request): bool
+    {
+        $user = $request->user();
+
+        return $this->canViewTeamAttendance($request)
+            && !$user->can('attendance:manage_settings')
+            && !$user->can('attendance:approve');
+    }
+
+    /** Limits an Employee query to the manager, their direct reports and their department. */
+    private function scopeToOwnTeam($query, Request $request): void
+    {
+        $mgr = $request->user()?->employee;
+        if (!$mgr) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($q) use ($mgr): void {
+            $q->where('id', $mgr->id)->orWhere('manager_id', $mgr->id);
+            if ($mgr->department_id) {
+                $q->orWhere('department_id', $mgr->department_id);
+            }
+        });
     }
 
     /**
