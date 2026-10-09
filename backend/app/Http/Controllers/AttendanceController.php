@@ -138,7 +138,7 @@ class AttendanceController extends Controller
         }
 
         $policy = AttendancePolicy::query()->first();
-        $shift = $attendance->employee?->shift;
+        $shift = $attendance->employee?->effectiveShift();
         if (!empty($validated['check_in'])) {
             $currentStatus = $validated['status'] ?? $attendance->status;
             $validated['status'] = $this->attendanceCalculator()->deriveStatusFromCheckIn(
@@ -214,7 +214,7 @@ class AttendanceController extends Controller
         $today = Carbon::today();
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', $today)->first();
         $policy = AttendancePolicy::query()->first();
-        $shift = Employee::find($validated['employee_id'])?->shift;
+        $shift = Employee::find($validated['employee_id'])?->effectiveShift();
         $now = Carbon::now();
 
         if (!$attendance && $this->attendanceCalculator()->isOvernightShift($shift)) {
@@ -510,7 +510,7 @@ class AttendanceController extends Controller
 
     private function getEmployeeShift(int $employeeId)
     {
-        return Employee::find($employeeId)?->shift;
+        return Employee::find($employeeId)?->effectiveShift();
     }
 
     private function authorizeAttendanceAccess(Request $request, int $employeeId): void

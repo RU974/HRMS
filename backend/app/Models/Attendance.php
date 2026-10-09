@@ -64,6 +64,6 @@ class Attendance extends Model
 
     public function getIsLateArrivalAttribute(): bool
     {
-        return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::query()->first(), $this->employee?->shift);
+        return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::query()->first(), $this->employee?->effectiveShift());
     }
 }

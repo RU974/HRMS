@@ -71,7 +71,7 @@ class EmployeeController extends Controller
 
     public function show(Request $request, $id)
     {
-        $employee = Employee::with(['department', 'designationRef', 'user', 'shift', 'manager'])->findOrFail($id);
+        $employee = Employee::with(['department', 'designationRef', 'user.roles', 'shift', 'manager'])->findOrFail($id);
         $this->authorizeEmployeeRead($request, $employee);
         $this->assertThisEmployeeInCompany($request, $employee);
 
@@ -229,7 +229,9 @@ class EmployeeController extends Controller
             'first_name' => 'sometimes|string|max:255',
             'last_name' => 'sometimes|string|max:255',
             'email' => 'sometimes|string|email|max:255|unique:employees,email,' . $id,
-            'username' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($request->user()?->id)],
+            'username' => ['sometimes', 'nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($employee->user_id)],
+            'password' => 'sometimes|nullable|string|min:8',
+            'role' => 'sometimes|nullable|string|in:' . implode(',', User::availableRoles()),
             'phone' => 'nullable|string|max:20',
             'cnic' => 'nullable|string|max:25',
             'date_of_birth' => 'nullable|date',
@@ -252,6 +254,26 @@ class EmployeeController extends Controller
             'status' => 'sometimes|in:active,inactive',
         ]);
         $this->assertEmployeeReferenceInCompany($request, $validated['manager_id'] ?? null);
+
+        // Login account fields live on the linked user, not the employee row.
+        $accountInput = [];
+        foreach (['username', 'password', 'role'] as $field) {
+            if (empty($validated[$field])) {
+                continue;
+            }
+            // The edit form always resends the current username/role; only real changes count.
+            if ($field === 'username' && $validated[$field] === $employee->user?->username) {
+                continue;
+            }
+            if ($field === 'role' && $employee->user?->roles->pluck('name')->contains($validated[$field])) {
+                continue;
+            }
+            $accountInput[$field] = $validated[$field];
+        }
+        unset($validated['username'], $validated['password'], $validated['role']);
+        if ($accountInput !== []) {
+            $this->authorizePermission($request, 'users:edit');
+        }
 
         $updatePayload = $validated;
         if (!isset($updatePayload['name']) && (isset($updatePayload['first_name']) || isset($updatePayload['last_name']))) {
@@ -285,7 +307,23 @@ class EmployeeController extends Controller
 
         $employee->update($updatePayload);
 
-        return $this->ok($employee->load(['department', 'designationRef', 'user', 'shift', 'manager']), 'Employee updated successfully');
+        $linkedUser = $employee->user;
+        if ($accountInput !== [] && $linkedUser) {
+            $this->assertUserCompanyMatch($request, $linkedUser);
+            if (isset($accountInput['username'])) {
+                $linkedUser->username = $accountInput['username'];
+            }
+            if (isset($accountInput['password'])) {
+                $linkedUser->password = Hash::make($accountInput['password']);
+            }
+            $linkedUser->save();
+            if (isset($accountInput['role'])) {
+                $this->assignRoleToUser($linkedUser, $accountInput['role'], true);
+                app(\App\Services\PermissionService::class)->flushUserPermissionCache($linkedUser);
+            }
+        }
+
+        return $this->ok($employee->load(['department', 'designationRef', 'user.roles', 'shift', 'manager']), 'Employee updated successfully');
     }
 
     /** Multipart requests send emergency_contacts as a JSON string; turn it into an array. */
@@ -513,7 +551,7 @@ class EmployeeController extends Controller
         return $this->ok(['background_run_id' => $run->id], 'Employee import has been queued.', 202);
     }
 
-    private function assignRoleToUser(User $user, ?string $roleName): void
+    private function assignRoleToUser(User $user, ?string $roleName, bool $replace = false): void
     {
         $resolvedRoleName = $roleName ?: User::ROLE_EMPLOYEE;
 
@@ -542,6 +580,6 @@ class EmployeeController extends Controller
             ]);
         }
 
-        $user->assignRole($role);
+        $replace ? $user->syncRoles($role) : $user->assignRole($role);
     }
 }

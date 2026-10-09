@@ -318,7 +318,7 @@ class BiometricSyncService
 
                 // Derive late/present status from shift + policy
                 $policy = AttendancePolicy::query()->first();
-                $shift  = Employee::find($employeeId)?->shift;
+                $shift  = Employee::find($employeeId)?->effectiveShift();
                 $attendance->status = (new AttendanceCalculator())->deriveStatusFromCheckIn(
                     $policy,
                     $shift,

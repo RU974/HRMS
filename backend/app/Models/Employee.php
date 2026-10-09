@@ -81,6 +81,26 @@ class Employee extends Model
         return $this->belongsTo(Shift::class);
     }
 
+    /**
+     * The employee's shift with grace_minutes resolved for their department.
+     * Returns an in-memory copy; never persist it.
+     */
+    public function effectiveShift(): ?Shift
+    {
+        $shift = $this->shift;
+        if (!$shift) {
+            return null;
+        }
+
+        if (!$shift->relationLoaded('departmentGraces')) {
+            $shift->load('departmentGraces');
+        }
+        $effective = clone $shift;
+        $effective->grace_minutes = $shift->graceMinutesFor($this->department_id ? (int) $this->department_id : null);
+
+        return $effective;
+    }
+
     public function manager(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'manager_id');

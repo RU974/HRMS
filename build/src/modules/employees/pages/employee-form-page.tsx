@@ -1,6 +1,6 @@
-import { useState, type ChangeEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState, type ChangeEvent } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,7 +14,10 @@ import { isSuperAdminRole } from "@/config/rbac";
 import { listCompanies } from "@/services/settings-service";
 import {
   createEmployee,
+  getEmployee,
+  updateEmployee,
   getEmployeeOptions,
+  type Employee,
   BLOOD_GROUPS,
   type EmergencyContact,
 } from "@/services/employee-service";
@@ -88,12 +91,17 @@ const employeeSchema = z.object({
   password: z.string().optional(),
   role: z.string().min(1, "Role is required"),
   company_id: z.string().optional(),
+  status: z.string().optional(),
 });
 
 type EmployeeFormValues = z.infer<typeof employeeSchema>;
 
 export function EmployeeFormPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { id } = useParams();
+  const employeeId = id ? Number(id) : null;
+  const isEdit = employeeId !== null && !Number.isNaN(employeeId);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [contacts, setContacts] = useState<EmergencyContact[]>([emptyContact()]);
@@ -105,6 +113,7 @@ export function EmployeeFormPage() {
     register,
     handleSubmit,
     watch,
+    reset,
     formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
@@ -132,6 +141,7 @@ export function EmployeeFormPage() {
       password: "",
       role: "Employee",
       company_id: "",
+      status: "active",
     },
   });
 
@@ -148,13 +158,69 @@ export function EmployeeFormPage() {
   const shiftsQuery = useQuery({ queryKey: ["shifts"], queryFn: listShifts, retry: false });
   const managersQuery = useQuery({ queryKey: ["employees", "managers"], queryFn: getEmployeeOptions, retry: false });
 
+  const employeeQuery = useQuery({
+    queryKey: ["employee", employeeId],
+    queryFn: () => getEmployee(employeeId as number),
+    enabled: isEdit,
+  });
+
+  // Prefill the form with the saved employee data when editing.
+  useEffect(() => {
+    const employee = employeeQuery.data as
+      | (Employee & { user?: { username?: string | null; roles?: { name: string }[] } | null; department_id?: number | null; designation_id?: number | null; emergency_contacts?: EmergencyContact[] | null })
+      | undefined;
+    if (!employee) return;
+    const nameParts = (employee.name ?? "").split(" ");
+    const str = (v: unknown) => (v === null || v === undefined ? "" : String(v));
+    const date = (v?: string | null) => (v ? v.slice(0, 10) : "");
+    reset({
+      first_name: employee.first_name ?? nameParts[0] ?? "",
+      last_name: employee.last_name ?? nameParts.slice(1).join(" "),
+      email: employee.email ?? "",
+      phone: str(employee.phone),
+      cnic: str(employee.cnic),
+      date_of_birth: date(employee.date_of_birth),
+      gender: str(employee.gender),
+      blood_group: str(employee.blood_group),
+      address: str(employee.address),
+      employee_number: str(employee.employee_number),
+      department_id: str(employee.department_id),
+      designation_id: str(employee.designation_id),
+      joining_date: date(employee.joining_date),
+      employment_type: str(employee.employment_type),
+      shift_id: str(employee.shift_id ?? employee.shift?.id),
+      manager_id: str(employee.manager_id ?? employee.manager?.id),
+      basic_salary: str(employee.basic_salary),
+      allowances: str(employee.allowances),
+      commission_percentage: str(employee.commission_percentage),
+      username: str(employee.user?.username),
+      password: "",
+      role: employee.user?.roles?.[0]?.name ?? "Employee",
+      company_id: "",
+      status: employee.status === "inactive" ? "inactive" : "active",
+    });
+    const existing = employee.emergency_contacts ?? [];
+    setContacts(existing.length > 0 ? existing.map((c) => ({ ...c, email: c.email ?? "" })) : [emptyContact()]);
+    setPreviewUrl(employee.profile_image ?? null);
+  }, [employeeQuery.data, reset]);
+
   const mutation = useMutation({
-    mutationFn: (payload: FormData) => createEmployee(payload),
-    onSuccess: () => { toast.success("Employee added", "New employee has been created successfully."); navigate("/employees"); },
+    mutationFn: (payload: FormData) => (isEdit ? updateEmployee(employeeId as number, payload) : createEmployee(payload)),
+    onSuccess: async () => {
+      if (isEdit) {
+        await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
+        await queryClient.invalidateQueries({ queryKey: ["employees"] });
+        toast.success("Employee updated", "Employee details have been saved.");
+        navigate(`/employees/${employeeId}`);
+        return;
+      }
+      toast.success("Employee added", "New employee has been created successfully.");
+      navigate("/employees");
+    },
     onError: (e: Error) => toast.error("Failed to save", e.message),
   });
 
-  const missingCompany = isSuperAdmin && !selectedCompanyId;
+  const missingCompany = !isEdit && isSuperAdmin && !selectedCompanyId;
 
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -194,8 +260,15 @@ export function EmployeeFormPage() {
       payload.append("name", name);
     }
 
+    const accountFields = ["company_id"];
     Object.entries(values).forEach(([key, value]) => {
-      if (value !== "") {
+      if (value === undefined) return;
+      if (isEdit) {
+        // Company is fixed after creation; a blank password means "keep current".
+        if (accountFields.includes(key)) return;
+        if (key === "password" && value === "") return;
+        payload.append(key, value);
+      } else if (value !== "") {
         payload.append(key, value);
       }
     });
@@ -205,7 +278,8 @@ export function EmployeeFormPage() {
       String((Number.isFinite(basicSalary) ? basicSalary : 0) + (Number.isFinite(allowances) ? allowances : 0)),
     );
 
-    if (filled.length > 0) {
+    if (isEdit || filled.length > 0) {
+      // Always sent when editing so contacts can be removed.
       payload.append(
         "emergency_contacts",
         JSON.stringify(filled.map(({ email, ...rest }) => (email ? { ...rest, email } : rest))),
@@ -215,6 +289,8 @@ export function EmployeeFormPage() {
     if (profileImage) {
       payload.append("profile_image", profileImage);
     }
+
+    if (isEdit) payload.append("_method", "PUT");
 
     mutation.mutate(payload);
   }
@@ -226,7 +302,14 @@ export function EmployeeFormPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="New Employee" subtitle="Capture employee profile, company, salary, and account details." />
+      <PageHeader
+        title={isEdit ? "Edit Employee" : "New Employee"}
+        subtitle={isEdit ? "Update employee profile, company, and salary details." : "Capture employee profile, company, salary, and account details."}
+      />
+      {isEdit && employeeQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading employee...</p>}
+      {isEdit && employeeQuery.error instanceof Error && (
+        <p className="text-sm text-red-500">{employeeQuery.error.message}</p>
+      )}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -361,7 +444,7 @@ export function EmployeeFormPage() {
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            {isSuperAdmin && (
+            {isSuperAdmin && !isEdit && (
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-medium">Company</label>
                 <select className={inputClass} {...register("company_id")}>
@@ -418,6 +501,15 @@ export function EmployeeFormPage() {
                 ))}
               </select>
             </div>
+            {isEdit && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <select className={inputClass} {...register("status")}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            )}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Manager</label>
               <select className={inputClass} {...register("manager_id")}>
@@ -471,6 +563,7 @@ export function EmployeeFormPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Password</label>
               <FormInput type="password" {...register("password")} />
+              {isEdit && <p className="text-xs text-[var(--muted)]">Leave blank to keep the current password.</p>}
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Role</label>
@@ -505,9 +598,9 @@ export function EmployeeFormPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={mutation.isPending || missingCompany}>
-            {mutation.isPending ? "Saving..." : "Create Employee"}
+            {mutation.isPending ? "Saving..." : isEdit ? "Save Changes" : "Create Employee"}
           </Button>
-          <Button type="button" variant="outline" onClick={() => navigate("/employees")}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => navigate(isEdit ? `/employees/${employeeId}` : "/employees")}>Cancel</Button>
           {missingCompany && (
             <p className="text-sm text-red-500">Please select a company before creating this employee.</p>
           )}

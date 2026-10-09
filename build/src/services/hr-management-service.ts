@@ -20,6 +20,7 @@ export interface ShiftItem {
   end_time: string;
   grace_minutes: number;
   is_active: boolean;
+  department_graces?: { department_id: number; grace_minutes: number }[];
 }
 
 export interface HolidayItem {

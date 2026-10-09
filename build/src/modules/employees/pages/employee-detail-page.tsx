@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -7,12 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
-import { listDepartments, listDesignations, listShifts, listLeaves, listEmployeeDocuments, getEmployeeAttendance } from "@/services/hr-management-service";
+import { listLeaves, listEmployeeDocuments, getEmployeeAttendance } from "@/services/hr-management-service";
 import {
-  getEmployeeOptions,
-  BLOOD_GROUPS,
   getEmployee,
-  updateEmployee,
   getEmployeePayslips,
   getEmployeeDirectReports,
   saveEmployeeEmergencyContacts,
@@ -579,11 +576,6 @@ export function EmployeeDetailPage() {
   useCurrencyStore(s => s.currency);
 
   const [tab, setTab] = useState<Tab>("overview");
-  const [editOpen, setEditOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [profileImage, setProfileImage] = useState<File | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const { data: employee, isLoading, error } = useQuery({
     queryKey: ["employee", employeeId],
@@ -591,10 +583,6 @@ export function EmployeeDetailPage() {
     enabled: !isNaN(employeeId),
   });
 
-  const depsQuery    = useQuery({ queryKey: ["departments"],    queryFn: listDepartments });
-  const desigQuery   = useQuery({ queryKey: ["designations"],   queryFn: listDesignations });
-  const shiftsQuery  = useQuery({ queryKey: ["shifts"],         queryFn: listShifts });
-  const managersQuery = useQuery({ queryKey: ["employees-list"], queryFn: getEmployeeOptions });
 
   const attendanceQuery = useQuery({
     queryKey: ["attendance", "employee", employeeId],
@@ -613,93 +601,6 @@ export function EmployeeDetailPage() {
     queryFn: () => listEmployeeDocuments({ employee_id: employeeId }),
     enabled: tab === "documents",
   });
-
-  const [form, setForm] = useState({
-    first_name: "", last_name: "", phone: "", cnic: "", date_of_birth: "",
-    gender: "", blood_group: "", address: "", department_id: "", designation_id: "",
-    joining_date: "", employment_type: "", shift_id: "", manager_id: "",
-    basic_salary: "", allowances: "", commission_percentage: "", status: "",
-  });
-
-  const [editContacts, setEditContacts] = useState<EmergencyContact[]>([]);
-
-  function updateEditContact(index: number, field: keyof EmergencyContact, value: string) {
-    setEditContacts((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
-  }
-
-  function openEdit() {
-    if (!employee) return;
-    const existing = (employee as Employee & { emergency_contacts?: EmergencyContact[] | null }).emergency_contacts ?? [];
-    setEditContacts(existing.map((c) => ({ name: c.name, relationship: c.relationship, phone: c.phone, email: c.email ?? "" })));
-    const nameParts = (employee.name ?? "").split(" ");
-    setForm({
-      first_name: employee.first_name ?? nameParts[0] ?? "",
-      last_name: employee.last_name ?? nameParts.slice(1).join(" ") ?? "",
-      phone: employee.phone ?? "",
-      cnic: employee.cnic ?? "",
-      date_of_birth: employee.date_of_birth ?? "",
-      gender: employee.gender ?? "",
-      blood_group: employee.blood_group ?? "",
-      address: employee.address ?? "",
-      department_id: "",
-      designation_id: "",
-      joining_date: employee.joining_date ?? "",
-      employment_type: employee.employment_type ?? "",
-      shift_id: employee.shift?.id ? String(employee.shift.id) : employee.shift_id ? String(employee.shift_id) : "",
-      manager_id: employee.manager?.id ? String(employee.manager.id) : employee.manager_id ? String(employee.manager_id) : "",
-      basic_salary: employee.basic_salary ? String(employee.basic_salary) : "",
-      allowances: employee.allowances ? String(employee.allowances) : "",
-      commission_percentage: employee.commission_percentage != null ? String(employee.commission_percentage) : "",
-      status: employee.status ?? "active",
-    });
-    setSaveError(null);
-    setSaveSuccess(false);
-    setPreviewUrl(employee.profile_image ?? null);
-    setEditOpen(true);
-  }
-
-  const updateMutation = useMutation({
-    mutationFn: (payload: FormData) => updateEmployee(employeeId, payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
-      await queryClient.invalidateQueries({ queryKey: ["employees"] });
-      toast.success("Employee updated", "Employee details have been saved.");
-      setSaveSuccess(true);
-      setSaveError(null);
-      setTimeout(() => setEditOpen(false), 800);
-    },
-    onError: (e: Error) => { toast.error("Save failed", e.message); setSaveError(e.message); },
-  });
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaveError(null);
-    const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => { if (v) fd.append(k, v); });
-    const name = [form.first_name.trim(), form.last_name.trim()].filter(Boolean).join(" ");
-    if (name) fd.append("name", name);
-    // Blank is sent explicitly so an existing commission can be cleared.
-    if (!form.commission_percentage) fd.append("commission_percentage", "");
-    // Fully blank rows are ignored; partially filled rows must have name, relationship and phone.
-    const filled = editContacts
-      .map((c) => ({ name: c.name.trim(), relationship: c.relationship.trim(), phone: c.phone.trim(), email: (c.email ?? "").trim() }))
-      .filter((c) => c.name || c.relationship || c.phone || c.email);
-    if (filled.some((c) => !c.name || !c.relationship || !c.phone)) {
-      setSaveError("Each emergency contact needs a name, relationship, and phone number.");
-      return;
-    }
-    // Always sent (even empty) so contacts can be removed from this form.
-    fd.append("emergency_contacts", JSON.stringify(filled.map(({ email, ...rest }) => (email ? { ...rest, email } : rest))));
-    if (profileImage) fd.append("profile_image", profileImage);
-    fd.append("_method", "PUT");
-    await updateMutation.mutateAsync(fd);
-  }
-
-  function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null;
-    setProfileImage(file);
-    if (file) setPreviewUrl(URL.createObjectURL(file));
-  }
 
   const cardContacts = (employee as (Employee & { emergency_contacts?: EmergencyContact[] | null }) | undefined)?.emergency_contacts ?? [];
 
@@ -735,7 +636,7 @@ export function EmployeeDetailPage() {
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="outline" onClick={() => navigate("/employees")} className="text-xs">← Employees</Button>
         <PageHeader title={employee.name} subtitle={`${employee.designation ?? "Employee"} ${employee.department?.name ? `· ${employee.department.name}` : ""}`} />
-        {canManage && <Button onClick={openEdit} className="ml-auto">Edit Employee</Button>}
+        {canManage && <Button onClick={() => navigate(`/employees/${employeeId}/edit`)} className="ml-auto">Edit Employee</Button>}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -901,112 +802,6 @@ export function EmployeeDetailPage() {
       {tab === "performance" && <PerformanceTab employeeId={employeeId} />}
       {tab === "org"         && <OrgTab employee={employee} employeeId={employeeId} />}
       {tab === "history"     && <HistoryTab employee={employee} employeeId={employeeId} canManage={canManage} />}
-
-      {/* Edit modal */}
-      {editOpen && (
-        <Modal title="Edit Employee" onClose={() => setEditOpen(false)}>
-          <form onSubmit={(e) => void handleSave(e)} className="max-h-[70vh] overflow-y-auto space-y-4 pr-1">
-            {saveError   && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{saveError}</p>}
-            {saveSuccess && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-600">Saved successfully!</p>}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FormField label="First name"><FormInput value={form.first_name} onChange={(e) => setForm((p) => ({ ...p, first_name: e.target.value }))} /></FormField>
-              <FormField label="Last name"><FormInput value={form.last_name} onChange={(e) => setForm((p) => ({ ...p, last_name: e.target.value }))} /></FormField>
-              <FormField label="Phone"><FormInput value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></FormField>
-              <FormField label="CNIC"><FormInput value={form.cnic} onChange={(e) => setForm((p) => ({ ...p, cnic: e.target.value }))} /></FormField>
-              <FormField label="Date of birth"><FormInput type="date" value={form.date_of_birth} onChange={(e) => setForm((p) => ({ ...p, date_of_birth: e.target.value }))} /></FormField>
-              <FormField label="Gender">
-                <select className={inputClass} value={form.gender} onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))}>
-                  <option value="">Select</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
-                </select>
-              </FormField>
-              <FormField label="Blood group">
-                <select className={inputClass} value={form.blood_group} onChange={(e) => setForm((p) => ({ ...p, blood_group: e.target.value }))}>
-                  <option value="">Select</option>
-                  {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Department">
-                <select className={inputClass} value={form.department_id} onChange={(e) => setForm((p) => ({ ...p, department_id: e.target.value }))}>
-                  <option value="">Select department</option>
-                  {(depsQuery.data ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Designation">
-                <select className={inputClass} value={form.designation_id} onChange={(e) => setForm((p) => ({ ...p, designation_id: e.target.value }))}>
-                  <option value="">Select designation</option>
-                  {(desigQuery.data ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Employment type">
-                <select className={inputClass} value={form.employment_type} onChange={(e) => setForm((p) => ({ ...p, employment_type: e.target.value }))}>
-                  <option value="">Select</option><option value="full_time">Full time</option><option value="part_time">Part time</option><option value="contract">Contract</option><option value="temporary">Temporary</option><option value="intern">Intern</option>
-                </select>
-              </FormField>
-              <FormField label="Status">
-                <select className={inputClass} value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-                  <option value="active">Active</option><option value="inactive">Inactive</option><option value="on_leave">On leave</option>
-                </select>
-              </FormField>
-              <FormField label="Shift">
-                <select className={inputClass} value={form.shift_id} onChange={(e) => setForm((p) => ({ ...p, shift_id: e.target.value }))}>
-                  <option value="">Select shift</option>
-                  {(shiftsQuery.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Manager">
-                <select className={inputClass} value={form.manager_id} onChange={(e) => setForm((p) => ({ ...p, manager_id: e.target.value }))}>
-                  <option value="">Select manager</option>
-                  {(managersQuery.data?.data ?? []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              </FormField>
-              <FormField label="Basic salary"><FormInput type="number" step="0.01" value={form.basic_salary} onChange={(e) => setForm((p) => ({ ...p, basic_salary: e.target.value }))} /></FormField>
-              <FormField label="Allowances"><FormInput type="number" step="0.01" value={form.allowances} onChange={(e) => setForm((p) => ({ ...p, allowances: e.target.value }))} /></FormField>
-              <FormField label="Commission (%)"><FormInput type="number" step="0.01" min="0" max="100" value={form.commission_percentage} onChange={(e) => setForm((p) => ({ ...p, commission_percentage: e.target.value }))} /></FormField>
-              <FormField label="Joining date"><FormInput type="date" value={form.joining_date} onChange={(e) => setForm((p) => ({ ...p, joining_date: e.target.value }))} /></FormField>
-            </div>
-            <FormField label="Address">
-              <textarea className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
-            </FormField>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Emergency contacts</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="text-xs"
-                  disabled={editContacts.length >= 10}
-                  onClick={() => setEditContacts((prev) => [...prev, { name: "", relationship: "", phone: "", email: "" }])}
-                >
-                  + Add Contact
-                </Button>
-              </div>
-              {editContacts.length === 0 && <p className="text-xs text-[var(--muted)]">No emergency contacts yet.</p>}
-              {editContacts.map((c, i) => (
-                <div key={i} className="space-y-3 rounded-xl border border-[var(--border)] p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-[var(--muted)]">Contact {i + 1}</span>
-                    <button type="button" className="text-xs text-rose-600" onClick={() => setEditContacts((prev) => prev.filter((_, idx) => idx !== i))}>Remove</button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <FormField label="Name"><FormInput value={c.name} onChange={(e) => updateEditContact(i, "name", e.target.value)} /></FormField>
-                    <FormField label="Relationship"><FormInput value={c.relationship} onChange={(e) => updateEditContact(i, "relationship", e.target.value)} placeholder="Spouse, Parent, Sibling…" /></FormField>
-                    <FormField label="Phone"><FormInput value={c.phone} onChange={(e) => updateEditContact(i, "phone", e.target.value)} /></FormField>
-                    <FormField label="Email (optional)"><FormInput type="email" value={c.email ?? ""} onChange={(e) => updateEditContact(i, "email", e.target.value)} /></FormField>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <FormField label="Profile photo">
-              <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
-              {previewUrl && <img src={previewUrl} alt="Preview" className="mt-2 h-16 w-16 rounded-full object-cover" />}
-            </FormField>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={updateMutation.isPending}>{updateMutation.isPending ? "Saving..." : "Save changes"}</Button>
-            </div>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 }
