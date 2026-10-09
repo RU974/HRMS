@@ -29,6 +29,8 @@ class AttendanceController extends Controller
             $query->where('employee_id', $employeeId);
         } elseif ($user?->can('attendance:manage_settings') || $user?->can('attendance:approve')) {
             // Only managers/admins can see all company records
+        } elseif ($this->canViewTeamAttendance($request)) {
+            // Line managers: managed-employee scope above limits this to their team
         } else {
             // Regular employees: scope to own records only
             $employee = Employee::where('user_id', $request->user()?->id)->first();
@@ -379,7 +381,9 @@ class AttendanceController extends Controller
 
     public function teamDailyView(Request $request)
     {
-        $this->authorizePermission($request, 'attendance:approve');
+        if (!$this->canViewTeamAttendance($request)) {
+            $this->authorizePermission($request, 'attendance:approve');
+        }
         ['date' => $date] = $request->validate(['date' => 'required|date']);
 
         $user = $request->user();
@@ -389,7 +393,7 @@ class AttendanceController extends Controller
         $this->scopeToCompany($request, $employeeQuery);
 
         // Department managers: scope to their own department
-        if (!$user?->can('attendance:manage_settings') && $user?->can('attendance:approve')) {
+        if (!$user?->can('attendance:manage_settings')) {
             $mgr = Employee::where('user_id', $user->id)->first();
             if ($mgr?->department_id) {
                 $employeeQuery->where('department_id', $mgr->department_id);
@@ -525,6 +529,13 @@ class AttendanceController extends Controller
             return;
         }
 
+        // Line managers (read-only) can access their own team's records
+        if ($this->canViewTeamAttendance($request)) {
+            $this->assertEmployeeInCompany($request, $employeeId);
+            $this->authorizeManagedEmployeeAccess($request, $employeeId, 'attendance record');
+            return;
+        }
+
         // Regular employees can only access their own records
         $employee = Employee::where('user_id', $request->user()?->id)->first();
         if (!$employee || (int)$employee->id !== $employeeId) {
@@ -532,4 +543,18 @@ class AttendanceController extends Controller
         }
     }
 
+    /**
+     * Read-only team access for line managers (e.g. Department Manager): holds
+     * employees:view and attendance:view but not the company-wide view_all.
+     */
+    private function canViewTeamAttendance(Request $request): bool
+    {
+        $user = $request->user();
+
+        return (bool) $user
+            && $user->can('attendance:view')
+            && $user->can('employees:view')
+            && !$user->can('employees:view_all')
+            && $user->employee !== null;
+    }
 }

@@ -408,6 +408,9 @@ export function AttendancePage() {
   const user        = useAuthStore(s => s.user);
   const canManage   = useAuthStore(s => s.hasPermission("attendance:manage_settings"));
   const canApprove  = useAuthStore(s => s.hasPermission("attendance:approve"));
+  // Line managers (e.g. Department Manager): read-only access to their team
+  const isLineManager = useAuthStore(s => s.hasPermission("employees:view") && !s.hasPermission("employees:view_all"));
+  const seesTeam    = canManage || canApprove || isLineManager;
   const now         = useLiveClock();
   const today       = now.toISOString().slice(0, 10);
 
@@ -429,9 +432,9 @@ export function AttendancePage() {
 
   // Records list
   const query = useQuery({
-    queryKey: ["attendance", "list", page, canManage ? null : employeeId],
-    queryFn: () => listAttendancePaginated(page, canManage ? undefined : employeeId),
-    enabled: canManage || employeeId > 0,
+    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId],
+    queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId),
+    enabled: seesTeam || employeeId > 0,
   });
 
   // Today's record (for the check-in card)
@@ -504,7 +507,7 @@ export function AttendancePage() {
   const tabDefs: { key: Tab; label: string; show?: boolean }[] = [
     { key: "records",  label: "Records" },
     { key: "calendar", label: "Calendar", show: employeeId > 0 },
-    { key: "team",     label: "Team View", show: canApprove || canManage },
+    { key: "team",     label: "Team View", show: seesTeam },
   ];
 
   return (
@@ -697,7 +700,7 @@ export function AttendancePage() {
       {tab === "calendar" && employeeId > 0 && <CalendarView employeeId={employeeId} />}
 
       {/* Team tab */}
-      {tab === "team" && (canApprove || canManage) && <TeamView />}
+      {tab === "team" && seesTeam && <TeamView />}
 
       {/* CRUD modal */}
       {modalOpen && (
