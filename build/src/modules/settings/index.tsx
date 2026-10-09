@@ -804,8 +804,10 @@ function CompanyTab({ companies, onReload, busy }: { companies: CompanyItem[]; o
                   </button>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
-                    <Building2 className="h-5 w-5 text-emerald-600" />
+                  <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
+                    {c.logo_url
+                      ? <img src={c.logo_url} alt={`${c.name} logo`} className="h-full w-full object-contain" />
+                      : <Building2 className="h-5 w-5 text-emerald-600" />}
                   </div>
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-[var(--text)]">{c.name}</p>
