@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { createDesignation, deleteDesignation, listDesignations, updateDesignation } from "@/services/hr-management-service";
 import { toast } from "@/components/notifications/toast";
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 
 export function DesignationsPage() {
   const queryClient = useQueryClient();
@@ -14,6 +15,7 @@ export function DesignationsPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const query = useQuery({ queryKey: ["hr", "designations"], queryFn: listDesignations });
+  const { sorted: sortedDesignations, sort, toggle: toggleSort } = useTableSort(query.data ?? [], "name");
 
   const saveMutation = useMutation({
     mutationFn: async () => editingId ? updateDesignation(editingId, { name }) : createDesignation({ name }),
@@ -38,9 +40,9 @@ export function DesignationsPage() {
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
       <div className="mb-3 flex justify-end"><Button onClick={() => { setEditingId(null); setName(""); setModalOpen(true); }}>New Designation</Button></div>
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><th className="p-3">Name</th><th className="p-3 text-right">Actions</th></tr></thead>
+        <thead><tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} /><th className="p-3 text-right">Actions</th></tr></thead>
         <tbody>
-          {(query.data ?? []).map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{item.name}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setEditingId(item.id); setName(item.name); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void deleteMutation.mutateAsync(item.id)}>Delete</Button></div></td></tr>)}
+          {sortedDesignations.map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{item.name}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setEditingId(item.id); setName(item.name); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void deleteMutation.mutateAsync(item.id)}>Delete</Button></div></td></tr>)}
           {!query.isLoading && (query.data?.length ?? 0) === 0 && <tr><td colSpan={2} className="p-5 text-center text-[var(--muted)]">No designations found.</td></tr>}
         </tbody>
       </table>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/loaders/loading-spinner";
 import { createDepartment, deleteDepartment, getDepartment, listDepartments, updateDepartment, DepartmentDetailItem } from "@/services/hr-management-service";
 import { toast } from "@/components/notifications/toast";
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 
 export function DepartmentsPage() {
   const queryClient = useQueryClient();
@@ -18,6 +19,7 @@ export function DepartmentsPage() {
   const [detailsDepartment, setDetailsDepartment] = useState<DepartmentDetailItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const query = useQuery({ queryKey: ["hr", "departments"], queryFn: listDepartments });
+  const { sorted: sortedDepartments, sort, toggle: toggleSort } = useTableSort(query.data ?? [], "name");
 
   const saveMutation = useMutation({
     mutationFn: async () => editingId ? updateDepartment(editingId, { name }) : createDepartment({ name }),
@@ -50,9 +52,9 @@ export function DepartmentsPage() {
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
       <div className="mb-3 flex justify-end"><Button onClick={() => { setEditingId(null); setName(""); setModalOpen(true); }}>New Department</Button></div>
       <table className="w-full text-sm">
-        <thead><tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><th className="p-3">Name</th><th className="p-3">Employees</th><th className="p-3 text-right">Actions</th></tr></thead>
+        <thead><tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} /><SortableTh label="Employees" sortKey="employees_count" sort={sort} onSort={toggleSort} /><th className="p-3 text-right">Actions</th></tr></thead>
         <tbody>
-          {(query.data ?? []).map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{item.name}</td><td className="p-3">{item.employees_count ?? 0}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setDetailsOpen(true); setDetailsDepartment(null); setDetailsError(null); void detailsMutation.mutateAsync(item.id); }}>View</Button><Button variant="outline" onClick={() => { setEditingId(item.id); setName(item.name); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void deleteMutation.mutateAsync(item.id)}>Delete</Button></div></td></tr>)}
+          {sortedDepartments.map((item) => <tr key={item.id} className="border-b border-[var(--border)]/60"><td className="p-3">{item.name}</td><td className="p-3">{item.employees_count ?? 0}</td><td className="p-3"><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => { setDetailsOpen(true); setDetailsDepartment(null); setDetailsError(null); void detailsMutation.mutateAsync(item.id); }}>View</Button><Button variant="outline" onClick={() => { setEditingId(item.id); setName(item.name); setModalOpen(true); }}>Edit</Button><Button variant="outline" onClick={() => void deleteMutation.mutateAsync(item.id)}>Delete</Button></div></td></tr>)}
           {!query.isLoading && (query.data?.length ?? 0) === 0 && <tr><td colSpan={3} className="p-5 text-center text-[var(--muted)]">No departments found.</td></tr>}
         </tbody>
       </table>

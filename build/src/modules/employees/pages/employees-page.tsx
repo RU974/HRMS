@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/modals/modal";
 import { FormInput } from "@/components/forms/form-input";
+import { SortableTh, type SortState } from "@/components/tables/use-table-sort";
 import { useAuthStore } from "@/store/auth-store";
 import { isSuperAdminRole } from "@/config/rbac";
 import { listCompanies } from "@/services/settings-service";
@@ -131,9 +132,15 @@ export function EmployeesPage() {
     enabled: isSuperAdmin,
   });
 
+  const [sort, setSort] = useState<SortState>({ key: "name", dir: "asc" });
+  const toggleSort = useCallback((key: string) => {
+    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+    setPage(1);
+  }, []);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["employees", page, search, companyId],
-    queryFn: () => listEmployeesPaginated(page, search, companyId || undefined),
+    queryKey: ["employees", page, search, companyId, sort.key, sort.dir],
+    queryFn: () => listEmployeesPaginated(page, search, companyId || undefined, sort.key, sort.dir),
     retry: false,
     placeholderData: (prev) => prev,
   });
@@ -236,12 +243,12 @@ export function EmployeesPage() {
           <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                <th className="p-3">Employee</th>
+                <SortableTh label="Employee" sortKey="name" sort={sort} onSort={toggleSort} />
                 <th className="p-3">Department</th>
                 <th className="p-3">Designation</th>
                 <th className="p-3">Type</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Joined</th>
+                <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Joined" sortKey="created_at" sort={sort} onSort={toggleSort} />
                 {canManage && <th className="p-3 text-right">Action</th>}
               </tr>
             </thead>

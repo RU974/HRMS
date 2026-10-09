@@ -85,8 +85,14 @@ export function updateEmployee(id: number, payload: FormData) {
   return apiClient<Employee>(`/employees/${id}`, { method: "POST", body: payload });
 }
 
-export function listEmployeesPaginated(page: number, search: string, companyId?: string) {
-  const params = new URLSearchParams({ page: String(page), per_page: "15" });
+export function listEmployeesPaginated(
+  page: number,
+  search: string,
+  companyId?: string,
+  sortBy = "name",
+  sortDir: "asc" | "desc" = "asc",
+) {
+  const params = new URLSearchParams({ page: String(page), per_page: "15", sort_by: sortBy, sort_dir: sortDir });
   if (search.trim()) params.set("search", search.trim());
   if (companyId) params.set("company_id", companyId);
   return apiClient<PaginatedResponse<Employee>>(`/employees?${params.toString()}`);
