@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,12 @@ export function CommissionsTab() {
   const commissionsQ = useQuery({ queryKey: ["payroll", "commissions"], queryFn: async () => (await listCommissions()).data ?? [] });
   const employeesQ   = useQuery({ queryKey: ["payroll", "employee-options"], queryFn: async () => (await getEmployeeOptions()).data ?? [] });
 
-  const commissions = commissionsQ.data ?? [];
+  const { sorted: commissions, sort, toggle: toggleSort } = useTableSort(commissionsQ.data ?? [], "employee", {
+    employee: (c) => c.employee?.name,
+    business_amount: (c) => Number(c.business_amount),
+    commission_percentage: (c) => Number(c.commission_percentage),
+    commission_amount: (c) => Number(c.commission_amount),
+  });
   const employees   = (employeesQ.data ?? []).filter(e => e.status !== "inactive");
 
   const [employeeId, setEmployeeId] = useState("");
@@ -102,11 +108,11 @@ export function CommissionsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Business</th>
-              <th className="p-3">Rate</th>
-              <th className="p-3">Commission</th>
-              <th className="p-3">Date</th>
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Business" sortKey="business_amount" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Rate" sortKey="commission_percentage" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Commission" sortKey="commission_amount" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Date" sortKey="effective_date" sort={sort} onSort={toggleSort} />
               <th className="p-3">Payroll</th>
               <th className="p-3 text-right">Actions</th>
             </tr>

@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormInput } from "@/components/forms/form-input";
@@ -73,7 +74,9 @@ export function InterviewsPage() {
     onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
-  const interviews = interviewsQuery.data?.data ?? [];
+  const { sorted: interviews, sort, toggle: toggleSort } = useTableSort(interviewsQuery.data?.data ?? [], "candidate", {
+    candidate: (i) => i.candidate?.full_name,
+  });
   const candidates = (candidatesQuery.data?.data ?? []).filter((candidate: Candidate) => candidate.stage !== "rejected");
 
   function closeModal() {
@@ -141,11 +144,11 @@ export function InterviewsPage() {
           <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                <th className="p-3">Candidate</th>
-                <th className="p-3">Interviewer</th>
-                <th className="p-3">Type</th>
-                <th className="p-3">Schedule</th>
-                <th className="p-3">Result</th>
+                <SortableTh label="Candidate" sortKey="candidate" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Interviewer" sortKey="interviewer_name" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Type" sortKey="interview_type" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Schedule" sortKey="scheduled_at" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Result" sortKey="result" sort={sort} onSort={toggleSort} />
                 <th className="p-3">Feedback</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>

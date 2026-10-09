@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -200,7 +201,9 @@ export function DevicesListPage() {
     if (token) setRevealToken({ deviceName: deviceName ?? "device", token });
   }
 
-  const devices      = query.data ?? [];
+  const { sorted: devices, sort, toggle: toggleSort } = useTableSort(query.data ?? [], "name", {
+    connection: (d) => (d.connection_type === "tcp" ? `${d.ip_address}:${d.port}` : "Cloud API"),
+  });
   const unconfigured = unconfiguredQuery.data ?? [];
   const hasTcpDevice = devices.some((d) => d.connection_type === "tcp");
 
@@ -318,10 +321,10 @@ export function DevicesListPage() {
             <table className="rtable w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted)]">
-                  <th className="py-2 pr-4">Name</th>
-                  <th className="py-2 pr-4">Connection</th>
-                  <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 pr-4">Sync Mode</th>
+                  <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Connection" sortKey="connection" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Sync Mode" sortKey="sync_mode" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                   <th className="py-2 pr-4 text-right">Actions</th>
                 </tr>
               </thead>

@@ -42,7 +42,7 @@ export function useTableSort<T>(
     setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
   }
 
-  return { sorted, sort, toggle };
+  return { sorted, sort, setSort, toggle };
 }
 
 interface SortableThProps {

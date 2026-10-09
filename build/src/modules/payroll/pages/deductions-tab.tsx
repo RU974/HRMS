@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -57,7 +58,9 @@ export function DeductionsTab() {
   const employeesQ  = useQuery({ queryKey: ["payroll", "employees"],  queryFn: async () => (await getEmployeeOptions()).data ?? [] });
   const payrollsQ   = useQuery({ queryKey: ["payroll", "base"],       queryFn: async () => (await listPayroll()).data ?? [] });
 
-  const deductions = deductionsQ.data ?? [];
+  const { sorted: deductions, sort, toggle: toggleSort } = useTableSort(deductionsQ.data ?? [], "employee", {
+    employee: (d) => d.employee?.name, amount: (d) => Number(d.amount),
+  });
   const employees  = employeesQ.data ?? [];
   const payrolls   = payrollsQ.data ?? [];
 
@@ -113,11 +116,11 @@ export function DeductionsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Title</th>
-              <th className="p-3">Type</th>
-              <th className="p-3">Amount</th>
-              <th className="p-3">Date</th>
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Title" sortKey="title" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Type" sortKey="type" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Amount" sortKey="amount" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Date" sortKey="effective_date" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>

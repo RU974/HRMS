@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -43,6 +44,12 @@ export function SalaryIncrementsTab() {
 
   const employees = employeesQ.data ?? [];
 
+  const { sorted: sortedIncrements, sort, toggle: toggleSort } = useTableSort(incrementsQ.data?.data ?? [], "employee", {
+    employee: (i) => i.employee?.name,
+    old_salary: (i) => Number(i.old_salary),
+    new_salary: (i) => Number(i.new_salary),
+    change: (i) => (Number(i.old_salary) ? (Number(i.new_salary) - Number(i.old_salary)) / Number(i.old_salary) : 0),
+  });
   const [incModal, setIncModal] = useState(false);
   const [incEdit,  setIncEdit]  = useState<SalaryIncrement | null>(null);
 
@@ -97,17 +104,17 @@ export function SalaryIncrementsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Effective Date</th>
-              <th className="p-3">Old Salary</th>
-              <th className="p-3">New Salary</th>
-              <th className="p-3">% Change</th>
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Effective Date" sortKey="effective_date" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Old Salary" sortKey="old_salary" sort={sort} onSort={toggleSort} />
+              <SortableTh label="New Salary" sortKey="new_salary" sort={sort} onSort={toggleSort} />
+              <SortableTh label="% Change" sortKey="change" sort={sort} onSort={toggleSort} />
               <th className="p-3">Reason</th>
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(incrementsQ.data?.data ?? []).map(item => {
+            {sortedIncrements.map(item => {
               const pct = item.increment_percent_computed ?? (item.old_salary ? ((item.new_salary - item.old_salary) / item.old_salary * 100) : 0);
               return (
                 <tr key={item.id} className="border-b border-[var(--border)]/50">

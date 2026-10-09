@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { TimeInput24 } from "@/components/forms/time-input-24";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -256,7 +257,12 @@ function TeamView() {
     queryFn:  () => getTeamDailyAttendance(date),
   });
 
-  const rows: TeamDailyAttendanceRow[] = (data as TeamDailyAttendanceRow[] | undefined) ?? [];
+  const teamRows: TeamDailyAttendanceRow[] = (data as TeamDailyAttendanceRow[] | undefined) ?? [];
+  const { sorted: rows, sort, toggle: toggleSort } = useTableSort(teamRows, "name", {
+    status: (r) => r.attendance?.status ?? "no record",
+    check_in: (r) => r.attendance?.check_in,
+    check_out: (r) => r.attendance?.check_out,
+  });
   const present = rows.filter(r => r.attendance?.status === "present").length;
   const late    = rows.filter(r => r.attendance?.status === "late").length;
   const absent  = rows.filter(r => !r.attendance || r.attendance.status === "absent").length;
@@ -296,13 +302,13 @@ function TeamView() {
             <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Department</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Check In</th>
-                  <th className="p-3">Check Out</th>
+                  <SortableTh label="Employee" sortKey="name" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Department" sortKey="department" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Check In" sortKey="check_in" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Check Out" sortKey="check_out" sort={sort} onSort={toggleSort} />
                   <th className="p-3">Flags</th>
-                  <th className="p-3">Monthly Abs.</th>
+                  <SortableTh label="Monthly Abs." sortKey="monthly_absences" sort={sort} onSort={toggleSort} />
                 </tr>
               </thead>
               <tbody>
@@ -556,7 +562,11 @@ export function AttendancePage() {
   const checkedIn  = !!todayRec?.check_in;
   const checkedOut = !!todayRec?.check_out;
   const stats      = monthlyStats.data as { present?: number; absent?: number; late?: number; leave?: number } | undefined;
-  const records    = (query.data as { data?: AttendanceItem[] } | undefined)?.data ?? [];
+  const pageRecords = (query.data as { data?: AttendanceItem[] } | undefined)?.data ?? [];
+  const { sorted: records, sort: recSort, toggle: toggleRecSort } = useTableSort(pageRecords, "employee", {
+    employee: (r) => r.employee?.name,
+    overtime: (r) => r.overtime_hours ?? 0,
+  });
   const totalPages = (query.data as { last_page?: number } | undefined)?.last_page ?? 1;
   const empOptions = (employees.data?.data ?? []).map(e => ({ id: e.id, name: e.name }));
 
@@ -680,14 +690,14 @@ export function AttendancePage() {
             <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">In</th>
-                  <th className="p-3">Out</th>
-                  <th className="p-3">OT</th>
+                  <SortableTh label="Employee" sortKey="employee" sort={recSort} onSort={toggleRecSort} />
+                  <SortableTh label="Date" sortKey="date" sort={recSort} onSort={toggleRecSort} />
+                  <SortableTh label="Status" sortKey="status" sort={recSort} onSort={toggleRecSort} />
+                  <SortableTh label="In" sortKey="check_in" sort={recSort} onSort={toggleRecSort} />
+                  <SortableTh label="Out" sortKey="check_out" sort={recSort} onSort={toggleRecSort} />
+                  <SortableTh label="OT" sortKey="overtime" sort={recSort} onSort={toggleRecSort} />
                   <th className="p-3">Flags</th>
-                  <th className="p-3">Source</th>
+                  <SortableTh label="Source" sortKey="source" sort={recSort} onSort={toggleRecSort} />
                   {canManage && <th className="p-3 text-right">Actions</th>}
                 </tr>
               </thead>

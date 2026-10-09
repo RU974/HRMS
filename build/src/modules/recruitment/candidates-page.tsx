@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormInput } from "@/components/forms/form-input";
@@ -79,7 +80,10 @@ export function CandidatesPage() {
     onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
-  const candidates = candidatesQuery.data?.data ?? [];
+  const { sorted: candidates, sort, toggle: toggleSort } = useTableSort(candidatesQuery.data?.data ?? [], "full_name", {
+    job: (c) => c.jobOpening?.title,
+    employee: (c) => c.employee?.name,
+  });
   const jobs = jobsQuery.data?.data ?? [];
 
   function closeModal() {
@@ -151,14 +155,14 @@ export function CandidatesPage() {
           <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                <th className="p-3">Name</th>
-                <th className="p-3">Email</th>
-                <th className="p-3">Job</th>
-                <th className="p-3">Stage</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Rating</th>
-                <th className="p-3">Applied</th>
-                <th className="p-3">Employee</th>
+                <SortableTh label="Name" sortKey="full_name" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Email" sortKey="email" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Job" sortKey="job" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Stage" sortKey="stage" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Rating" sortKey="rating" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Applied" sortKey="applied_at" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>

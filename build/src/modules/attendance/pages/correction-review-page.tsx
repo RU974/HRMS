@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -117,7 +118,9 @@ export function CorrectionReviewPage() {
       }),
   });
 
-  const records: AttendanceItem[] = query.data?.data ?? [];
+  const { sorted: records, sort, toggle: toggleSort } = useTableSort<AttendanceItem>(query.data?.data ?? [], "employee", {
+    employee: (r) => r.employee?.name,
+  });
   const totalPages = query.data?.last_page ?? 1;
   const total = query.data?.total ?? 0;
   const pendingCount = statusFilter === "pending" ? total : undefined;
@@ -175,12 +178,12 @@ export function CorrectionReviewPage() {
         <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Date</th>
-              <th className="p-3">Check In / Out</th>
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Date" sortKey="date" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Check In / Out" sortKey="check_in" sort={sort} onSort={toggleSort} />
               <th className="p-3">Reason</th>
-              <th className="p-3">Requested</th>
-              <th className="p-3">Status</th>
+              <SortableTh label="Requested" sortKey="updated_at" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="correction_status" sort={sort} onSort={toggleSort} />
               {canApprove && <th className="p-3 text-right">Actions</th>}
             </tr>
           </thead>

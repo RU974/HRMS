@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -306,6 +307,11 @@ export function LeavesPage() {
   const typeOptions = (typesQ.data ?? []).map(t => ({ value: t.name, label: t.name }));
   const leaves = leavesQ.data?.data ?? [];
   const nameMap = new Map((leavesQ.data?.data ?? []).map(l => [l.employee?.id ?? l.employee_id, l.employee?.name ?? `#${l.employee_id}`]));
+  const { sorted: sortedLeaves, sort, toggle: toggleSort } = useTableSort(leaves, "employee", {
+    employee: (l) => nameMap.get(l.employee_id) ?? l.employee?.name,
+    days: (l) => l.requested_days ?? 0,
+  });
+  const { sorted: sortedTypes, sort: typeSort, toggle: toggleTypeSort } = useTableSort(typesQ.data ?? [], "name");
 
   const tabs: { key: LeaveTab; label: string; show: boolean }[] = [
     { key: "my-requests",       label: "My Requests",      show: canCreate || hasView || hasApprove },
@@ -422,12 +428,12 @@ export function LeavesPage() {
             <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Type</th>
-                  <th className="p-3">From</th>
-                  <th className="p-3">To</th>
-                  <th className="p-3">Days</th>
-                  <th className="p-3">Status</th>
+                  <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Type" sortKey="type" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="From" sortKey="from_date" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="To" sortKey="to_date" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Days" sortKey="days" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
                   <th className="p-3">Reason</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
@@ -441,7 +447,7 @@ export function LeavesPage() {
                 {!leavesQ.isLoading && leaves.length === 0 && (
                   <tr><td colSpan={8} className="p-10 text-center text-sm text-[var(--muted)]">No leave requests found.</td></tr>
                 )}
-                {leaves.map(item => {
+                {sortedLeaves.map(item => {
                   const isOwn     = item.employee_id === currentEmpId;
                   const canApproveThis = hasApprove && item.status === "pending";
                   const canDel    = item.status === "pending" && (hasApprove || isOwn);
@@ -504,17 +510,17 @@ export function LeavesPage() {
                 <table className="rtable w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                      <th className="p-3">Name</th>
-                      <th className="p-3">Days</th>
-                      <th className="p-3">Accrual</th>
-                      <th className="p-3">CF</th>
-                      <th className="p-3">Notice</th>
+                      <SortableTh label="Name" sortKey="name" sort={typeSort} onSort={toggleTypeSort} />
+                      <SortableTh label="Days" sortKey="default_days" sort={typeSort} onSort={toggleTypeSort} />
+                      <SortableTh label="Accrual" sortKey="accrual_frequency" sort={typeSort} onSort={toggleTypeSort} />
+                      <SortableTh label="CF" sortKey="carry_forward_days" sort={typeSort} onSort={toggleTypeSort} />
+                      <SortableTh label="Notice" sortKey="notice_period_days" sort={typeSort} onSort={toggleTypeSort} />
                       <th className="p-3">Flags</th>
                       <th className="p-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(typesQ.data ?? []).map(t => (
+                    {sortedTypes.map(t => (
                       <tr key={t.id} className="border-b border-[var(--border)]/50">
                         <td className="p-3 font-medium" data-label="Name">{t.name}</td>
                         <td className="p-3" data-label="Days">{t.default_days}</td>

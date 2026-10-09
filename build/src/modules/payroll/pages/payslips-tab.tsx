@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -86,7 +87,11 @@ export function PayslipsTab() {
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
-  const filtered = payslips.filter(i => !payslipStatF || i.status === payslipStatF);
+  const { sorted: filtered, sort, toggle: toggleSort } = useTableSort(
+    payslips.filter(i => !payslipStatF || i.status === payslipStatF), "employee", {
+      employee: (p) => p.employee?.name,
+      period: (p) => (p.payroll ? p.payroll.year * 100 + p.payroll.month : null),
+    });
 
   function onSubmit(values: PayslipFormValues) {
     (payslipEdit ? payslipUpdate : payslipCreate).mutate(values);
@@ -121,11 +126,11 @@ export function PayslipsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Slip #</th>
-              <th className="p-3">Employee</th>
-              <th className="p-3">Period</th>
-              <th className="p-3">Issue Date</th>
-              <th className="p-3">Status</th>
+              <SortableTh label="Slip #" sortKey="slip_number" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Issue Date" sortKey="issue_date" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
               <th className="p-3">File</th>
               <th className="p-3 text-right">Actions</th>
             </tr>

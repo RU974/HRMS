@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort, type SortState } from "@/components/tables/use-table-sort";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrencyStore, CURRENCY_OPTIONS } from "@/store/currency-store";
@@ -128,13 +129,17 @@ function Pagination({
   );
 }
 
-function TableHead({ cols }: { cols: string[] }) {
+function TableHead({ cols, sortKeys, sort, onSort }: { cols: string[]; sortKeys?: (string | null)[]; sort?: SortState; onSort?: (key: string) => void }) {
   return (
     <thead>
       <tr className="border-b border-[var(--border)] text-left text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-        {cols.map((c, i) => (
-          <th key={i} className={`p-3 ${i === cols.length - 1 ? "text-right" : ""}`}>{c}</th>
-        ))}
+        {cols.map((c, i) => {
+          const cls = `p-3 ${i === cols.length - 1 ? "text-right" : ""}`;
+          const key = sortKeys?.[i];
+          return key && sort && onSort
+            ? <SortableTh key={i} label={c} sortKey={key} sort={sort} onSort={onSort} className={cls} />
+            : <th key={i} className={cls}>{c}</th>;
+        })}
       </tr>
     </thead>
   );
@@ -344,7 +349,9 @@ function CategoriesTab() {
   const [importResult, setImportResult] = useState<InventoryImportResult | null>(null);
 
   const query = useQuery({ queryKey: ["inventory", "categories"], queryFn: listInventoryCategories });
-  const categories = query.data ?? [];
+  const { sorted: categories, sort, toggle: toggleSort } = useTableSort(query.data ?? [], "name", {
+    items_count: (c) => c.items_count ?? 0,
+  });
   const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(categories, "categories");
 
   const saveMutation = useMutation({
@@ -425,7 +432,7 @@ function CategoriesTab() {
           </div>
         </div>
         <table className="rtable w-full text-sm">
-          <TableHead cols={["Name", "Description", "Items", "Actions"]} />
+          <TableHead cols={["Name", "Description", "Items", "Actions"]} sortKeys={["name", "description", "items_count", null]} sort={sort} onSort={toggleSort} />
           <tbody>
             {query.isLoading && <tr><td colSpan={4} className="p-6 text-center"><LoadingSpinner /></td></tr>}
             {paged.map((cat) => (
@@ -646,12 +653,16 @@ function ItemsTab() {
   const items = Array.isArray(itemsQ.data) ? itemsQ.data : [];
 
   const q = search.trim().toLowerCase();
-  const filteredItems = q
+  const filteredBase = q
     ? items.filter((item) =>
         [item.name, item.sku, item.location, item.category?.name, item.condition, item.assigned_to_name]
           .some((v) => (v ?? "").toString().toLowerCase().includes(q))
       )
     : items;
+  const { sorted: filteredItems, sort, toggle: toggleSort } = useTableSort(filteredBase, "name", {
+    category: (i) => i.category?.name,
+    unit_cost: (i) => Number(i.unit_cost),
+  });
 
   const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(filteredItems, `${showArchived}|${q}`);
 
@@ -725,9 +736,10 @@ function ItemsTab() {
                 <th className="p-3 w-10">
                   <input type="checkbox" className="rounded" checked={allPagedSelected} onChange={toggleSelectAllPaged} aria-label="Select all on page" />
                 </th>
-                {["Name", "SKU", "Category", "Qty", "Available", "Cost", "Location", "Condition", "Actions"].map((c, i, arr) => (
-                  <th key={c} className={`p-3 ${i === arr.length - 1 ? "text-right" : ""}`}>{c}</th>
+                {([["Name", "name"], ["SKU", "sku"], ["Category", "category"], ["Qty", "quantity"], ["Available", "quantity_available"], ["Cost", "unit_cost"], ["Location", "location"], ["Condition", "condition"]] as const).map(([c, k]) => (
+                  <SortableTh key={c} label={c} sortKey={k} sort={sort} onSort={toggleSort} />
                 ))}
+                <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -959,7 +971,11 @@ function AssignmentsTab() {
     onError: (e: Error) => toast.error("Return failed", e.message),
   });
 
-  const assignments = Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [];
+  const { sorted: assignments, sort, toggle: toggleSort } = useTableSort(Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [], "employee", {
+    item: (a) => a.item?.name,
+    sku: (a) => a.item?.sku,
+    employee: (a) => a.employee?.name,
+  });
   const availableItems = (Array.isArray(itemsQ.data) ? itemsQ.data : []).filter((i) => !i.deleted_at);
   const employees = employeesQ.data?.data ?? [];
   const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(assignments, statusFilter);
@@ -983,7 +999,7 @@ function AssignmentsTab() {
         </div>
         <div className="overflow-x-auto">
           <table className="rtable w-full text-sm">
-            <TableHead cols={["Item", "SKU", "Employee", "Qty", "Assigned", "Returned", "Status", "Notes", "Actions"]} />
+            <TableHead cols={["Item", "SKU", "Employee", "Qty", "Assigned", "Returned", "Status", "Notes", "Actions"]} sortKeys={["item", "sku", "employee", "quantity", "assigned_date", "returned_date", "status", null, null]} sort={sort} onSort={toggleSort} />
             <tbody>
               {assignmentsQ.isLoading && <tr><td colSpan={9} className="p-6 text-center"><LoadingSpinner /></td></tr>}
               {paged.map((a) => (

@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
@@ -160,7 +161,7 @@ export function DeviceMappingPage() {
 
   const employees = employeesQuery.data?.data ?? [];
   const mappings = mappingsQuery.data ?? [];
-  const deviceUsers = deviceUsersQuery.data ?? [];
+  const { sorted: deviceUsers, sort, toggle: toggleSort } = useTableSort(deviceUsersQuery.data ?? [], "name");
 
   const rows: EmployeeMappingRow[] = useMemo(() => {
     return employees
@@ -376,10 +377,10 @@ export function DeviceMappingPage() {
               <table className="rtable w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--muted)]">
-                    <th className="py-2 pr-4">Device User ID</th>
-                    <th className="py-2 pr-4">Name on Device</th>
-                    <th className="py-2 pr-4">Status</th>
-                    <th className="py-2 pr-4">Mapped Employee</th>
+                    <SortableTh label="Device User ID" sortKey="device_user_id" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                    <SortableTh label="Name on Device" sortKey="name" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                    <SortableTh label="Status" sortKey="mapped" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                    <SortableTh label="Mapped Employee" sortKey="employee_name" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                     <th className="py-2 pr-4 text-right">Action</th>
                   </tr>
                 </thead>

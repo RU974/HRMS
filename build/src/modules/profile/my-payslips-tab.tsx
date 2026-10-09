@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,9 @@ export function MyPayslipsTab() {
     queryFn: async () => (await listPayslips()).data ?? [],
   });
 
-  const payslips = payslipsQ.data ?? [];
+  const { sorted: payslips, sort, toggle: toggleSort } = useTableSort(payslipsQ.data ?? [], "issue_date", {
+    period: (p) => (p.payroll ? p.payroll.year * 100 + p.payroll.month : null),
+  });
 
   async function handleDownload(item: Payslip) {
     setDownloadingId(item.id);
@@ -50,10 +53,10 @@ export function MyPayslipsTab() {
           <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                <th className="p-3">Slip #</th>
-                <th className="p-3">Period</th>
-                <th className="p-3">Issue Date</th>
-                <th className="p-3">Status</th>
+                <SortableTh label="Slip #" sortKey="slip_number" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Issue Date" sortKey="issue_date" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>

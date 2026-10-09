@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -35,7 +36,9 @@ export function SyncLogsPage() {
     },
   });
 
-  const logs = logsQuery.data?.data ?? [];
+  const { sorted: logs, sort, toggle: toggleSort } = useTableSort(logsQuery.data?.data ?? [], "device", {
+    device: (l) => l.device_name,
+  });
 
   return (
     <div>
@@ -99,12 +102,12 @@ export function SyncLogsPage() {
             <table className="rtable w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-[var(--muted)]">
-                  <th className="py-2 pr-4">Timestamp</th>
-                  <th className="py-2 pr-4">Device</th>
-                  <th className="py-2 pr-4">Fetched</th>
-                  <th className="py-2 pr-4">Matched</th>
-                  <th className="py-2 pr-4">Unmatched</th>
-                  <th className="py-2 pr-4">Status</th>
+                  <SortableTh label="Timestamp" sortKey="started_at" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Device" sortKey="device" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Fetched" sortKey="records_fetched" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Matched" sortKey="records_matched" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Unmatched" sortKey="records_unmatched" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                   <th className="py-2 pr-4 text-right">Actions</th>
                 </tr>
               </thead>

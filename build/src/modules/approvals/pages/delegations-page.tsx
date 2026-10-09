@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -51,7 +52,9 @@ export function DelegationsPage() {
     onError: (error) => toast.error("Delete failed", error instanceof Error ? error.message : "Unable to delete delegation."),
   });
 
-  const delegations = delegationsQuery.data ?? [];
+  const { sorted: delegations, sort, toggle: toggleSort } = useTableSort(delegationsQuery.data ?? [], "delegate", {
+    delegate: (d) => d.delegate?.name,
+  });
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -122,9 +125,9 @@ export function DelegationsPage() {
         <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-              <th className="p-3">Delegate</th>
-              <th className="p-3">Starts</th>
-              <th className="p-3">Ends</th>
+              <SortableTh label="Delegate" sortKey="delegate" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Starts" sortKey="starts_at" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Ends" sortKey="ends_at" sort={sort} onSort={toggleSort} />
               <th className="p-3">Notes</th>
               <th className="p-3 text-right">Actions</th>
             </tr>

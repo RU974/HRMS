@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -199,21 +200,25 @@ function FilterBar({
 
 // ─── Ticket Table ─────────────────────────────────────────────────────────────
 
-function TicketTable({ tickets }: { tickets: TicketType[] }) {
+function TicketTable({ tickets: ticketList }: { tickets: TicketType[] }) {
   const navigate = useNavigate();
+  const { sorted: tickets, sort, toggle: toggleSort } = useTableSort(ticketList, "title", {
+    department: (t) => t.department?.name,
+    assigned: (t) => t.assignedTo?.name,
+  });
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
       <table className="rtable w-full">
         <thead>
           <tr className="border-b border-[var(--border)] text-left text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-            <th className="p-3">Title</th>
-            <th className="p-3">Category</th>
-            <th className="p-3">Priority</th>
-            <th className="p-3">Status</th>
-            <th className="p-3">Department</th>
-            <th className="p-3">Assigned To</th>
-            <th className="p-3">Created</th>
+            <SortableTh label="Title" sortKey="title" sort={sort} onSort={toggleSort} />
+            <SortableTh label="Category" sortKey="category" sort={sort} onSort={toggleSort} />
+            <SortableTh label="Priority" sortKey="priority" sort={sort} onSort={toggleSort} />
+            <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+            <SortableTh label="Department" sortKey="department" sort={sort} onSort={toggleSort} />
+            <SortableTh label="Assigned To" sortKey="assigned" sort={sort} onSort={toggleSort} />
+            <SortableTh label="Created" sortKey="created_at" sort={sort} onSort={toggleSort} />
           </tr>
         </thead>
         <tbody>

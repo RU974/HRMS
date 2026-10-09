@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormInput } from "@/components/forms/form-input";
@@ -75,7 +76,9 @@ export function JobsPage() {
     onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
-  const jobs = jobsQuery.data?.data ?? [];
+  const { sorted: jobs, sort, toggle: toggleSort } = useTableSort(jobsQuery.data?.data ?? [], "title", {
+    department: (j) => j.department?.name,
+  });
   const departments = departmentsQuery.data ?? [];
 
   function closeModal() {
@@ -146,13 +149,13 @@ export function JobsPage() {
           <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                <th className="p-3">Title</th>
-                <th className="p-3">Department</th>
-                <th className="p-3">Type</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Positions</th>
-                <th className="p-3">Location</th>
-                <th className="p-3">Posted</th>
+                <SortableTh label="Title" sortKey="title" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Department" sortKey="department" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Type" sortKey="employment_type" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Positions" sortKey="open_positions" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Location" sortKey="location" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Posted" sortKey="posted_at" sort={sort} onSort={toggleSort} />
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>

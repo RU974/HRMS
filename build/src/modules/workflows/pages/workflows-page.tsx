@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -102,7 +103,9 @@ export function WorkflowsPage() {
     },
   });
 
-  const workflows = workflowsQuery.data ?? [];
+  const { sorted: workflows, sort, toggle: toggleSort } = useTableSort(workflowsQuery.data ?? [], "name", {
+    steps: (w) => w.steps?.length ?? 0,
+  });
   const isLoading = workflowsQuery.isLoading;
   const error = workflowsQuery.error instanceof Error ? workflowsQuery.error.message : null;
 
@@ -234,11 +237,11 @@ export function WorkflowsPage() {
         <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-              <th className="p-3">Name</th>
-              <th className="p-3">Module</th>
-              <th className="p-3">Steps</th>
+              <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Module" sortKey="module" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Steps" sortKey="steps" sort={sort} onSort={toggleSort} />
               <th className="p-3">Escalation</th>
-              <th className="p-3">Created</th>
+              <SortableTh label="Created" sortKey="created_at" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>

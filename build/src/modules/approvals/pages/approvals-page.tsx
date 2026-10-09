@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -62,7 +63,10 @@ export function ApprovalsPage() {
     },
   });
 
-  const approvals = approvalsQuery.data ?? [];
+  const { sorted: approvals, sort, toggle: toggleSort } = useTableSort(approvalsQuery.data ?? [], "id", {
+    workflow: (a) => a.workflow?.name ?? a.workflow?.module,
+    step: (a) => a.currentStep?.step_order,
+  });
   const isLoading = approvalsQuery.isLoading;
   const error = approvalsQuery.error instanceof Error ? approvalsQuery.error.message : null;
 
@@ -131,13 +135,13 @@ export function ApprovalsPage() {
         <table className="rtable min-w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-              <th className="p-3">ID</th>
-              <th className="p-3">Workflow</th>
-              <th className="p-3">Module</th>
-              <th className="p-3">Module ID</th>
-              <th className="p-3">Current step</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Requested</th>
+              <SortableTh label="ID" sortKey="id" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Workflow" sortKey="workflow" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Module" sortKey="module" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Module ID" sortKey="module_id" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Current step" sortKey="step" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Requested" sortKey="created_at" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>

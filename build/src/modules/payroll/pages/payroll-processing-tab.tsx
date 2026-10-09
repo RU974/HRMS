@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -46,6 +47,9 @@ export function PayrollProcessingTab() {
     queryFn:  async () => (await listPayrollProcessings(procMonthF || undefined, procYearF || undefined, procStatF || undefined)).data ?? [],
   });
 
+  const { sorted: sortedProcessings, sort, toggle: toggleSort } = useTableSort(processingsQ.data ?? [], "period", {
+    period: (p) => p.year * 100 + p.month,
+  });
   const [procModal, setProcModal] = useState(false);
   const [procEdit,  setProcEdit]  = useState<PayrollProcessing | null>(null);
 
@@ -111,15 +115,15 @@ export function PayrollProcessingTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Period</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Processed At</th>
+              <SortableTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Processed At" sortKey="processed_at" sort={sort} onSort={toggleSort} />
               <th className="p-3">Notes</th>
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(processingsQ.data ?? []).map(item => (
+            {sortedProcessings.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
                 <td className="p-3 font-medium" data-label="Period">{item.month}/{item.year}</td>
                 <td className="p-3" data-label="Status"><Badge label={item.status} tone={payrollBadge(item.status)} /></td>

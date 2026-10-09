@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -62,7 +63,13 @@ export function PayrollRecordsTab() {
   const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: async () => (await listPayroll()).data ?? [] });
 
   const employees = employeesQ.data ?? [];
-  const payrolls  = payrollsQ.data ?? [];
+  const { sorted: payrolls, sort, toggle: toggleSort } = useTableSort(payrollsQ.data ?? [], "employee", {
+    emp_id: (p) => p.employee?.employee_number,
+    employee: (p) => p.employee?.name,
+    period: (p) => p.year * 100 + p.month,
+    base_salary: (p) => Number(p.base_salary),
+    net_salary: (p) => Number(p.net_salary),
+  });
 
   // ── Generate modal ─────────────────────────────────────────────────────────
   const [genModal, setGenModal] = useState(false);
@@ -174,13 +181,13 @@ export function PayrollRecordsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Emp. ID</th>
-              <th className="p-3">Employee</th>
-              <th className="p-3">Period</th>
-              <th className="p-3">Base</th>
-              <th className="p-3">Net</th>
-              <th className="p-3">Payment Date</th>
-              <th className="p-3">Status</th>
+              <SortableTh label="Emp. ID" sortKey="emp_id" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Base" sortKey="base_salary" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Net" sortKey="net_salary" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Payment Date" sortKey="payment_date" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>

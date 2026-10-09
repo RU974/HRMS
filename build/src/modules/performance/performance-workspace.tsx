@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -453,7 +454,14 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
   }
 
   const label = meta.entityLabel;
-  const rows = activeData as Array<PerformanceReview | PerformanceKpi | PerformanceGoal | PerformanceAppraisal | PerformanceReviewTemplate>;
+  type PerfRow = PerformanceReview | PerformanceKpi | PerformanceGoal | PerformanceAppraisal | PerformanceReviewTemplate;
+  const unsortedRows = (activeTab === "appraisals" ? filteredAppraisals : activeData) as PerfRow[];
+  const { sorted: rows, sort, setSort, toggle: toggleSort } = useTableSort<PerfRow>(unsortedRows, "employee", {
+    employee: (r) => ("employee" in r ? employeeName(r.employee) : undefined),
+  });
+  useEffect(() => {
+    setSort({ key: activeTab === "templates" ? "name" : "employee", dir: "asc" });
+  }, [activeTab, setSort]);
   const showCreateButton = activeTab !== "trend";
 
   return (
@@ -551,50 +559,50 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
             <thead>
               {activeTab === "reviews" && (
                 <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Period</th>
-                  <th className="p-3">Rating</th>
+                  <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Period" sortKey="period" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Rating" sortKey="rating" sort={sort} onSort={toggleSort} />
                   <th className="p-3">Summary</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               )}
               {activeTab === "kpis" && (
                 <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">KPI</th>
-                  <th className="p-3">Target</th>
-                  <th className="p-3">Current</th>
-                  <th className="p-3">Unit</th>
+                  <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="KPI" sortKey="name" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Target" sortKey="target_value" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Current" sortKey="current_value" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Unit" sortKey="unit" sort={sort} onSort={toggleSort} />
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               )}
               {activeTab === "goals" && (
                 <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Goal</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Progress</th>
-                  <th className="p-3">Due Date</th>
+                  <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Goal" sortKey="title" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Progress" sortKey="progress" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Due Date" sortKey="due_date" sort={sort} onSort={toggleSort} />
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               )}
               {activeTab === "appraisals" && (
                 <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
                   <th className="p-3"></th>
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Cycle</th>
-                  <th className="p-3">Score</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Strengths</th>
+                  <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Cycle" sortKey="cycle" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Score" sortKey="overall_score" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Strengths" sortKey="strengths" sort={sort} onSort={toggleSort} />
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               )}
               {activeTab === "templates" && (
                 <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                  <th className="p-3">Name</th>
-                  <th className="p-3">Scale</th>
+                  <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+                  <SortableTh label="Scale" sortKey="scale_min" sort={sort} onSort={toggleSort} />
                   <th className="p-3">Criteria</th>
-                  <th className="p-3">Active</th>
+                  <SortableTh label="Active" sortKey="is_active" sort={sort} onSort={toggleSort} />
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               )}
@@ -681,7 +689,7 @@ export function PerformanceWorkspace({ initialTab }: { initialTab: PerformanceSe
                   </tr>
                 ))}
               {activeTab === "appraisals" &&
-                filteredAppraisals.map((item) => (
+                (rows as PerformanceAppraisal[]).map((item) => (
                   <tr key={item.id} className="border-b border-[var(--border)]/60">
                     <td className="p-3">
                       <input type="checkbox" checked={selectedAppraisalIds.includes(item.id)} onChange={() => toggleAppraisalSelection(item.id)} />

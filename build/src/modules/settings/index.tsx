@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -315,9 +316,14 @@ function UsersTab({ users, roles, companies, branches, onReload, busy }: {
   const [editing, setEditing] = useState<UserItem | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => users.filter(u =>
+  const filteredUsers = useMemo(() => users.filter(u =>
     `${u.name} ${u.email} ${u.company?.name ?? ""} ${u.branch?.name ?? ""}`.toLowerCase().includes(q.toLowerCase())
   ), [users, q]);
+  const { sorted: filtered, sort, toggle: toggleSort } = useTableSort(filteredUsers, "name", {
+    company: (u) => u.company?.name,
+    roles: (u) => getUserRoles(u).map(r => r.name).sort().join(", "),
+    status: (u) => (u.is_active === false ? "inactive" : "active"),
+  });
 
   async function handleSave(data: Record<string, unknown>) {
     try {
@@ -359,9 +365,11 @@ function UsersTab({ users, roles, companies, branches, onReload, busy }: {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--background)]">
-                  {["User", "Company / Branch", "Roles", "Status", ""].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">{h}</th>
-                  ))}
+                  <SortableTh label="User" sortKey="name" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Company / Branch" sortKey="company" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Roles" sortKey="roles" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -896,7 +904,12 @@ function BranchesTab({ branches, companies, onReload, busy }: { branches: Branch
   const [editing, setEditing] = useState<BranchItem | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const filtered = useMemo(() => branches.filter(b => `${b.name} ${b.code ?? ""} ${b.company?.name ?? ""}`.toLowerCase().includes(q.toLowerCase())), [branches, q]);
+  const filteredBranches = useMemo(() => branches.filter(b => `${b.name} ${b.code ?? ""} ${b.company?.name ?? ""}`.toLowerCase().includes(q.toLowerCase())), [branches, q]);
+  const { sorted: filtered, sort, toggle: toggleSort } = useTableSort(filteredBranches, "name", {
+    company: (b) => b.company?.name,
+    users_count: (b) => b.users_count ?? 0,
+    status: (b) => (b.is_active === false ? "inactive" : "active"),
+  });
 
   async function handleSave(data: Record<string, unknown>) {
     try {
@@ -936,9 +949,13 @@ function BranchesTab({ branches, companies, onReload, busy }: { branches: Branch
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--background)]">
-                  {["Branch", "Company", "Code", "Contact", "Users", "Status", ""].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">{h}</th>
-                  ))}
+                  <SortableTh label="Branch" sortKey="name" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Company" sortKey="company" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Code" sortKey="code" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Contact" sortKey="email" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Users" sortKey="users_count" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]" />
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--muted)]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">

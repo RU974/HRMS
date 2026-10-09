@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -62,6 +63,7 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
     queryFn: () => getReports({ q: search || undefined, type: reportType, status: statusFilter, module: moduleKey }),
     retry: false,
   });
+  const { sorted: sortedReports, sort, toggle: toggleSort } = useTableSort(data?.data ?? [], "name");
 
   const saveMutation = useMutation({
     mutationFn: async (payload: ReportFormState) => {
@@ -207,15 +209,15 @@ export function ReportCrudSection({ reportType, moduleKey }: { reportType: Repor
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-              <th className="p-3">Name</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Updated</th>
+              <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Updated" sortKey="updated_at" sort={sort} onSort={toggleSort} />
               <th className="p-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && <tr><td className="p-3 text-[var(--muted)]" colSpan={4}>Loading reports...</td></tr>}
-            {data?.data.map((report) => (
+            {sortedReports.map((report) => (
               <tr key={report.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
                 <td className="p-3" data-label="Name">
                   <p className="font-medium">{report.name}</p>

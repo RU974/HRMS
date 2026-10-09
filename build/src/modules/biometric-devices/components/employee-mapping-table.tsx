@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { EmployeeDeviceMapping } from "@/services/biometric-device-service";
@@ -21,14 +22,15 @@ export interface EmployeeMappingTableProps {
   savingEmployeeId?: number | null;
 }
 
-export function EmployeeMappingTable({ rows, onChange, onSave, onDelete, savingEmployeeId }: EmployeeMappingTableProps) {
+export function EmployeeMappingTable({ rows: mappingRows, onChange, onSave, onDelete, savingEmployeeId }: EmployeeMappingTableProps) {
+  const { sorted: rows, sort, toggle: toggleSort } = useTableSort(mappingRows, "employee_name");
   return (
     <div className="overflow-x-auto">
       <table className="rtable w-full text-left text-sm">
         <thead>
           <tr className="border-b border-[var(--border)] text-[var(--muted)]">
-            <th className="py-2 pr-4">Employee</th>
-            <th className="py-2 pr-4">Employee Code</th>
+            <SortableTh label="Employee" sortKey="employee_name" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+            <SortableTh label="Employee Code" sortKey="employee_code" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
             <th className="py-2 pr-4">Device User ID</th>
             <th className="py-2 pr-4">Card Number</th>
             <th className="py-2 pr-4 text-right">Actions</th>

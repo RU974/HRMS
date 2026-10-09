@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormInput } from "@/components/forms/form-input";
@@ -71,7 +72,9 @@ export function OnboardingPage() {
     onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
   });
 
-  const onboardings = onboardingQuery.data?.data ?? [];
+  const { sorted: onboardings, sort, toggle: toggleSort } = useTableSort(onboardingQuery.data?.data ?? [], "full_name", {
+    job: (o) => o.jobOpening?.title,
+  });
   const hiredCandidates = (candidatesQuery.data?.data ?? []).filter((candidate) => candidate.stage === "hired");
 
   function closeModal() {
@@ -146,10 +149,10 @@ export function OnboardingPage() {
           <table className="rtable w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                <th className="p-3">Candidate</th>
-                <th className="p-3">Job</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Start Date</th>
+                <SortableTh label="Candidate" sortKey="full_name" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Job" sortKey="job" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Status" sortKey="onboarding_status" sort={sort} onSort={toggleSort} />
+                <SortableTh label="Start Date" sortKey="onboarding_start_date" sort={sort} onSort={toggleSort} />
                 <th className="p-3">Notes</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>

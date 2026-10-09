@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -45,6 +46,9 @@ export function SalaryGradesTab() {
     enabled:  canView || canManage,
   });
 
+  const { sorted: sortedGrades, sort, toggle: toggleSort } = useTableSort(salaryGradesQ.data ?? [], "name", {
+    min_salary: (g) => Number(g.min_salary),
+  });
   const [gradeModal, setGradeModal] = useState(false);
   const [gradeEdit,  setGradeEdit]  = useState<SalaryGrade | null>(null);
 
@@ -98,16 +102,16 @@ export function SalaryGradesTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Name</th>
-              <th className="p-3">Salary Range</th>
-              <th className="p-3">Basic %</th>
-              <th className="p-3">HRA %</th>
-              <th className="p-3">Transport</th>
+              <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Salary Range" sortKey="min_salary" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Basic %" sortKey="basic_percent" sort={sort} onSort={toggleSort} />
+              <SortableTh label="HRA %" sortKey="hra_percent" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Transport" sortKey="transport_allowance" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(salaryGradesQ.data ?? []).map(item => (
+            {sortedGrades.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
                 <td className="p-3 font-medium" data-label="Name">{item.name}</td>
                 <td className="p-3" data-label="Salary Range">{fmt(item.min_salary)} – {fmt(item.max_salary)}</td>

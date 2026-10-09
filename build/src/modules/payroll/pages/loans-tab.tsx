@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -55,6 +56,12 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
 
   const employees = employeesQ.data ?? [];
 
+  const { sorted: sortedLoans, sort, toggle: toggleSort } = useTableSort(loansQ.data?.data ?? [], "employee", {
+    employee: (l) => l.employee?.name,
+    amount: (l) => Number(l.amount),
+    outstanding_balance: (l) => Number(l.outstanding_balance),
+    emi_amount: (l) => (l.emi_amount == null ? null : Number(l.emi_amount)),
+  });
   const [loanModal, setLoanModal] = useState(false);
   const [loanEdit,  setLoanEdit]  = useState<LoanAdvance | null>(null);
 
@@ -105,17 +112,17 @@ export function LoansTab({ type = "loan" }: { type?: LoanAdvanceType }) {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Employee</th>
-              <th className="p-3">Title</th>
-              <th className="p-3">Amount</th>
-              <th className="p-3">Outstanding</th>
-              <th className="p-3">EMI</th>
-              <th className="p-3">Status</th>
+              <SortableTh label="Employee" sortKey="employee" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Title" sortKey="title" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Amount" sortKey="amount" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Outstanding" sortKey="outstanding_balance" sort={sort} onSort={toggleSort} />
+              <SortableTh label="EMI" sortKey="emi_amount" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(loansQ.data?.data ?? []).map(item => (
+            {sortedLoans.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
                 <td className="p-3" data-label="Employee">{item.employee?.name ?? `#${item.employee_id}`}</td>
                 <td className="p-3 font-medium" data-label="Title">{item.title}</td>

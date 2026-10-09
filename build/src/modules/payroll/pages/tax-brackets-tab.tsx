@@ -1,3 +1,4 @@
+import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -42,6 +43,11 @@ export function TaxBracketsTab() {
     enabled:  canView || canManage,
   });
 
+  const { sorted: sortedBrackets, sort, toggle: toggleSort } = useTableSort(taxBracketsQ.data ?? [], "name", {
+    min_income: (b) => Number(b.min_income),
+    max_income: (b) => (b.max_income == null ? null : Number(b.max_income)),
+    rate: (b) => Number(b.rate),
+  });
   const [taxModal, setTaxModal] = useState(false);
   const [taxEdit,  setTaxEdit]  = useState<TaxBracket | null>(null);
 
@@ -95,15 +101,15 @@ export function TaxBracketsTab() {
         <table className="rtable w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-              <th className="p-3">Name</th>
-              <th className="p-3">Min Income</th>
-              <th className="p-3">Max Income</th>
-              <th className="p-3">Rate (%)</th>
+              <SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Min Income" sortKey="min_income" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Max Income" sortKey="max_income" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Rate (%)" sortKey="rate" sort={sort} onSort={toggleSort} />
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {(taxBracketsQ.data ?? []).map(item => (
+            {sortedBrackets.map(item => (
               <tr key={item.id} className="border-b border-[var(--border)]/50">
                 <td className="p-3 font-medium" data-label="Name">{item.name}</td>
                 <td className="p-3" data-label="Min Income">{fmt(item.min_income)}</td>
