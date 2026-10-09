@@ -179,6 +179,15 @@ export function getEmployeeAttendanceCalendar(employeeId: number, month: number,
   return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}?month=${month}&year=${year}&per_page=31`);
 }
 
+/** Approved/pending leaves overlapping a month, used to flag half-day leaves on the calendar. */
+export function getEmployeeLeavesForMonth(employeeId: number, month: number, year: number) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const last = new Date(year, month, 0).getDate();
+  return apiClient<PaginatedResponse<LeaveItem>>(
+    `/leaves?employee_id=${employeeId}&from_date=${year}-${pad(month)}-01&to_date=${year}-${pad(month)}-${pad(last)}&per_page=100`,
+  );
+}
+
 export function getEmployeeAttendance(employeeId: number) {
   return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}`);
 }

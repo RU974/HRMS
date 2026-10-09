@@ -18,12 +18,13 @@ import {
   updateAttendance,
   listAttendancePaginated,
   getEmployeeAttendanceCalendar,
+  getEmployeeLeavesForMonth,
   getEmployeeAttendance,
   getTeamDailyAttendance,
   getAttendanceMonthlyStats,
   requestAttendanceCorrection,
 } from "@/services/hr-management-service";
-import { getEmployees } from "@/services/employee-service";
+import { getEmployees, getEmployeeOptions } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -68,8 +69,19 @@ function SourceBadge({ source }: { source?: string | null }) {
 }
 
 // ── Calendar view ─────────────────────────────────────────────────────────────
-function CalendarView({ employeeId }: { employeeId: number }) {
+const HALF_DAY_MAX_HOURS = 4.5;
+
+function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: number; canPickEmployee: boolean }) {
   const now = new Date();
+  const [employeeId, setEmployeeId] = useState(ownEmployeeId);
+
+  const options = useQuery({
+    queryKey: ["employees-options"],
+    queryFn: () => getEmployeeOptions(),
+    enabled: canPickEmployee,
+  });
+  const empList = options.data?.data ?? [];
+
   const [year, setYear]   = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-based
 
@@ -79,8 +91,28 @@ function CalendarView({ employeeId }: { employeeId: number }) {
     enabled: employeeId > 0,
   });
 
+  const leavesQuery = useQuery({
+    queryKey: ["attendance", "calendar-leaves", employeeId, month, year],
+    queryFn:  () => getEmployeeLeavesForMonth(employeeId, month, year),
+    enabled: employeeId > 0,
+  });
+
   const records: AttendanceItem[] = (data as { data?: AttendanceItem[] } | undefined)?.data ?? [];
   const byDate = Object.fromEntries(records.map(r => [r.date?.slice(0, 10), r]));
+
+  // Dates covered by an approved half-day leave
+  const halfDayLeaveDates = new Set<string>();
+  for (const l of leavesQuery.data?.data ?? []) {
+    if (l.half_day && l.status === "approved") halfDayLeaveDates.add(l.from_date.slice(0, 10));
+  }
+
+  function dayKind(rec: AttendanceItem | undefined, dateStr: string): string {
+    if (!rec) return halfDayLeaveDates.has(dateStr) ? "halfday" : "";
+    if (rec.status === "leave" && halfDayLeaveDates.has(dateStr)) return "halfday";
+    if ((rec.status === "present" || rec.status === "late") && rec.check_out
+      && rec.duration_hours != null && rec.duration_hours > 0 && rec.duration_hours < HALF_DAY_MAX_HOURS) return "halfday";
+    return rec.status;
+  }
 
   const daysInMonth  = new Date(year, month, 0).getDate();
   const firstDayDow  = new Date(year, month - 1, 1).getDay(); // 0=Sun
@@ -93,6 +125,7 @@ function CalendarView({ employeeId }: { employeeId: number }) {
     late:    "bg-amber-100 text-amber-800 border-amber-200",
     absent:  "bg-red-100 text-red-800 border-red-200",
     leave:   "bg-blue-100 text-blue-800 border-blue-200",
+    halfday: "bg-orange-100 text-orange-800 border-orange-200",
   };
 
   function prevMonth() {
@@ -108,6 +141,16 @@ function CalendarView({ employeeId }: { employeeId: number }) {
     <Card>
       <div className="mb-4 flex items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Attendance Calendar</h3>
+        {canPickEmployee && (
+          <select
+            className={`${inputClass} max-w-[240px]`}
+            value={employeeId || ""}
+            onChange={e => setEmployeeId(Number(e.target.value))}
+          >
+            <option value="">Select employee…</option>
+            {empList.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        )}
         <div className="flex items-center gap-2">
           <Button variant="outline" className="text-xs px-3 py-1.5" onClick={prevMonth}>←</Button>
           <span className="min-w-[140px] text-center text-sm font-medium">{monthLabel}</span>
@@ -117,15 +160,16 @@ function CalendarView({ employeeId }: { employeeId: number }) {
 
       {/* Legend */}
       <div className="mb-3 flex flex-wrap gap-3">
-        {[["present","bg-emerald-100 text-emerald-800"],["late","bg-amber-100 text-amber-800"],["absent","bg-red-100 text-red-800"],["leave","bg-blue-100 text-blue-800"]].map(([s, cls]) => (
-          <span key={s} className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}>{s}</span>
+        {[["present","bg-emerald-100 text-emerald-800"],["late","bg-amber-100 text-amber-800"],["absent","bg-red-100 text-red-800"],["leave","bg-blue-100 text-blue-800"],["halfday","bg-orange-100 text-orange-800"]].map(([s, cls]) => (
+          <span key={s} className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}>{s === "halfday" ? "half day" : s}</span>
         ))}
         <span className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--muted)]">no record</span>
       </div>
 
-      {isLoading && <div className="h-48 animate-pulse rounded-xl bg-[var(--border)]" />}
+      {employeeId <= 0 && <p className="py-8 text-center text-sm text-[var(--muted)]">Select an employee to view their calendar.</p>}
+      {employeeId > 0 && isLoading && <div className="h-48 animate-pulse rounded-xl bg-[var(--border)]" />}
 
-      {!isLoading && (
+      {employeeId > 0 && !isLoading && (
         <div className="grid grid-cols-7 gap-1">
           {/* Day headers */}
           {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
@@ -140,17 +184,21 @@ function CalendarView({ employeeId }: { employeeId: number }) {
             const day    = i + 1;
             const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const rec    = byDate[dateStr];
+            const kind   = dayKind(rec, dateStr);
+            const dow    = new Date(year, month - 1, day).getDay();
+            const isWeekend = (dow === 0 || dow === 6) && !rec;
             const isToday = dateStr === todayStr;
 
             return (
               <div key={day}
                 className={`relative flex flex-col items-center justify-start rounded-xl border p-1.5 min-h-[52px] transition
-                  ${rec ? `${statusStyle[rec.status] ?? "bg-gray-50 border-gray-200"} cursor-pointer hover:opacity-80` : "border-[var(--border)] bg-[var(--background)]"}
+                  ${kind ? `${statusStyle[kind] ?? "bg-gray-50 border-gray-200"} cursor-pointer hover:opacity-80` : isWeekend ? "border-[var(--border)] bg-[var(--border)]/40 text-[var(--muted)]" : "border-[var(--border)] bg-[var(--background)]"}
                   ${isToday ? "ring-2 ring-[var(--primary)] ring-offset-1" : ""}
                 `}
-                title={rec ? `${rec.status}${rec.check_in ? ` · In: ${rec.check_in.slice(11,16)}` : ""}${rec.check_out ? ` · Out: ${rec.check_out.slice(11,16)}` : ""}` : ""}
+                title={rec || kind ? `${kind === "halfday" ? "half day" : kind}${rec?.check_in ? ` · In: ${rec.check_in.slice(11,16)}` : ""}${rec?.check_out ? ` · Out: ${rec.check_out.slice(11,16)}` : ""}` : isWeekend ? "Weekend" : ""}
               >
                 <span className={`text-xs font-bold ${isToday ? "text-[var(--primary)]" : ""}`}>{day}</span>
+                {kind === "halfday" && <span className="text-[9px] leading-tight font-semibold">½ day</span>}
                 {rec && (
                   <div className="mt-0.5 flex flex-col items-center gap-0.5">
                     {rec.check_in  && <span className="text-[9px] leading-tight opacity-70">{rec.check_in.slice(11,16)}</span>}
@@ -170,6 +218,7 @@ function CalendarView({ employeeId }: { employeeId: number }) {
           {[
             { label: "Present", value: records.filter(r => r.status === "present").length, color: "text-emerald-600" },
             { label: "Late",    value: records.filter(r => r.status === "late").length,    color: "text-amber-600" },
+            { label: "Half day", value: records.filter(r => dayKind(r, r.date.slice(0, 10)) === "halfday").length + [...halfDayLeaveDates].filter(d => !byDate[d]).length, color: "text-orange-600" },
             { label: "Absent",  value: records.filter(r => r.status === "absent").length,  color: "text-red-600" },
             { label: "Leave",   value: records.filter(r => r.status === "leave").length,   color: "text-blue-600" },
             { label: "WFH",     value: records.filter(r => r.work_from_home).length,       color: "text-violet-600" },
@@ -506,7 +555,7 @@ export function AttendancePage() {
 
   const tabDefs: { key: Tab; label: string; show?: boolean }[] = [
     { key: "records",  label: "Records" },
-    { key: "calendar", label: "Calendar", show: employeeId > 0 },
+    { key: "calendar", label: "Calendar", show: employeeId > 0 || seesTeam },
     { key: "team",     label: "Team View", show: seesTeam },
   ];
 
@@ -697,7 +746,7 @@ export function AttendancePage() {
       )}
 
       {/* Calendar tab */}
-      {tab === "calendar" && employeeId > 0 && <CalendarView employeeId={employeeId} />}
+      {tab === "calendar" && (employeeId > 0 || seesTeam) && <CalendarView ownEmployeeId={employeeId} canPickEmployee={seesTeam} />}
 
       {/* Team tab */}
       {tab === "team" && seesTeam && <TeamView />}
