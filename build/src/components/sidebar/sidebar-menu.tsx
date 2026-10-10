@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Bell, CalendarRange, ChevronDown, ChevronRight,
+  Bell, CalendarRange, ChevronDown, ChevronRight, ChevronUp,
   LogIn, LogOut, MessageCircleMore, WalletCards,
   User, Power,
 } from "lucide-react";
@@ -22,69 +22,82 @@ function isActivePath(currentPath: string, currentSearch: string, target?: strin
   return currentPath === path || currentPath.startsWith(`${path}/`);
 }
 
-/* ── Glossy active pill ── */
-const glossyActive = {
-  background: "linear-gradient(145deg, #3b82f6 0%, #2563eb 55%, #1d4ed8 100%)",
-  boxShadow: "0 4px 14px rgba(37,99,235,0.38), inset 0 1px 0 rgba(255,255,255,0.28)",
-} as const;
+const ACTIVE_BG = "rgba(255,255,255,0.10)";
+const ACTIVE_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 16px rgba(0,0,0,0.25)";
+
+type NavChild = { label: string; path?: string };
+
+function ChildLinks({ items, pathname, search }: { items: NavChild[]; pathname: string; search: string }) {
+  return (
+    <div className="relative ml-[22px] mt-1 space-y-0.5 pl-5">
+      {items.map((child, i) => {
+        const childActive = isActivePath(pathname, search, child.path ?? "");
+        if (!child.path) return null;
+        return (
+          <div key={child.label} className="relative">
+            {/* tree connector */}
+            <span
+              className="pointer-events-none absolute -left-5 w-4 rounded-bl-lg border-b border-l border-white/15"
+              style={{ height: i === 0 ? "50%" : "calc(50% + 4px)", top: i === 0 ? 0 : -4 }}
+            />
+            <Link
+              to={child.path}
+              className={cn(
+                "flex items-center rounded-xl px-3 py-2 text-[12px] font-medium transition-all duration-150",
+                childActive ? "text-white" : "text-white/55 hover:bg-white/5 hover:text-white"
+              )}
+              style={childActive ? { background: ACTIVE_BG, boxShadow: ACTIVE_SHADOW } : undefined}
+            >
+              {child.label}
+            </Link>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function NavItem({
   label, path, icon: Icon, children, active, open, onToggle, pathname, search, collapsed,
 }: {
   label: string; path?: string; icon: ComponentType<{ className?: string }>;
-  children?: Array<{ label: string; path?: string }>;
+  children?: NavChild[];
   active: boolean; open: boolean; onToggle: () => void;
   pathname: string; search: string; collapsed: boolean;
 }) {
   const hasChildren = (children?.length ?? 0) > 0;
+  const [flyout, setFlyout] = useState<{ top: number; left: number } | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showFlyout = (el: HTMLElement) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    const r = el.getBoundingClientRect();
+    setFlyout({ top: r.top, left: r.right + 8 });
+  };
+  const hideFlyout = () => {
+    closeTimer.current = setTimeout(() => setFlyout(null), 120);
+  };
 
   const rowClass = cn(
-    "relative flex items-center gap-2.5 rounded-xl transition-all duration-200 cursor-pointer select-none",
-    collapsed ? "justify-center p-2.5" : "px-3 py-2.5",
-    !active && "text-[var(--text)] hover:bg-[var(--primary)]/8 hover:text-[var(--primary)]"
+    "relative flex items-center gap-3 rounded-2xl transition-all duration-200 cursor-pointer select-none",
+    collapsed ? "mx-auto h-11 w-11 justify-center" : "px-3 py-3",
+    active ? "text-white" : "text-white/65 hover:bg-white/5 hover:text-white"
   );
+  const rowStyle = active ? { background: ACTIVE_BG, boxShadow: ACTIVE_SHADOW } : undefined;
 
   const inner = (
     <>
-      {/* Glossy shine overlay for active state */}
-      {active && (
-        <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
-          <div
-            className="absolute inset-x-0 top-0 h-1/2"
-            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 100%)" }}
-          />
-        </div>
-      )}
-
-      {/* Icon container */}
-      <div className={cn(
-        "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-200",
-        active ? "bg-white/20" : ""
-      )}>
-        <Icon className={cn(
-          "h-[15px] w-[15px] transition-colors",
-          active ? "text-white drop-shadow-sm" : "text-[var(--muted)]"
-        )} />
-      </div>
-
+      <Icon className="h-[19px] w-[19px] shrink-0" />
       {!collapsed && (
         <>
-          <span className={cn(
-            "flex-1 min-w-0 truncate text-[13px] font-semibold leading-none",
-            active ? "text-white drop-shadow-sm" : "text-[var(--text)]"
-          )}>
-            {label}
-          </span>
+          <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium leading-none">{label}</span>
           {hasChildren && (
             <button
               type="button"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }}
-              className={cn(
-                "flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors",
-                active ? "text-white/80 hover:text-white" : "text-[var(--muted)] hover:text-[var(--text)]"
-              )}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white/60 hover:text-white"
             >
-              {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
           )}
         </>
@@ -92,24 +105,18 @@ function NavItem({
     </>
   );
 
+  const hoverProps = collapsed && hasChildren
+    ? { onMouseEnter: (e: React.MouseEvent<HTMLElement>) => showFlyout(e.currentTarget), onMouseLeave: hideFlyout }
+    : {};
+
   return (
     <div className="space-y-0.5">
       {path ? (
-        <Link
-          to={path}
-          className={rowClass}
-          title={collapsed ? label : undefined}
-          style={active ? glossyActive : undefined}
-        >
+        <Link to={path} className={rowClass} title={collapsed && !hasChildren ? label : undefined} style={rowStyle} {...hoverProps}>
           {inner}
         </Link>
       ) : (
-        <div
-          className={rowClass}
-          onClick={hasChildren ? onToggle : undefined}
-          title={collapsed ? label : undefined}
-          style={active ? glossyActive : undefined}
-        >
+        <div className={rowClass} onClick={hasChildren ? onToggle : undefined} title={collapsed && !hasChildren ? label : undefined} style={rowStyle} {...hoverProps}>
           {inner}
         </div>
       )}
@@ -124,47 +131,45 @@ function NavItem({
             transition={{ duration: 0.18, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div
-              className="ml-[14px] mt-1 space-y-0.5 pl-3"
-              style={{ borderLeft: "2px solid color-mix(in srgb, var(--primary) 25%, var(--border))" }}
-            >
-              {(children ?? []).map((child) => {
-                const childActive = isActivePath(pathname, search, child.path ?? "");
-                return child.path ? (
-                  <Link
-                    key={child.label}
-                    to={child.path}
-                    className={cn(
-                      "relative flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium transition-all duration-150",
-                      childActive
-                        ? "text-white"
-                        : "text-[var(--muted)] hover:text-[var(--primary)] hover:bg-[var(--primary)]/8"
-                    )}
-                    style={childActive ? {
-                      background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-                      boxShadow: "0 2px 8px rgba(37,99,235,0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
-                    } : undefined}
-                  >
-                    {childActive && (
-                      <div className="absolute inset-0 rounded-lg overflow-hidden pointer-events-none">
-                        <div
-                          className="absolute inset-x-0 top-0 h-1/2"
-                          style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, transparent 100%)" }}
-                        />
-                      </div>
-                    )}
-                    <span className={cn(
-                      "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
-                      childActive ? "bg-white shadow-sm" : "bg-[var(--border)]"
-                    )} />
-                    {child.label}
-                  </Link>
-                ) : null;
-              })}
-            </div>
+            <ChildLinks items={children ?? []} pathname={pathname} search={search} />
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Collapsed flyout */}
+      {collapsed && hasChildren && flyout && (
+        <div
+          className="fixed z-[60] min-w-[168px] rounded-2xl p-1.5"
+          style={{
+            top: flyout.top,
+            left: flyout.left,
+            background: "color-mix(in srgb, var(--primary) 14%, #120a0d)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
+            backdropFilter: "blur(16px)",
+          }}
+          onMouseEnter={() => { if (closeTimer.current) clearTimeout(closeTimer.current); }}
+          onMouseLeave={hideFlyout}
+        >
+          {(children ?? []).map((child) => {
+            const childActive = isActivePath(pathname, search, child.path ?? "");
+            return child.path ? (
+              <Link
+                key={child.label}
+                to={child.path}
+                onClick={() => setFlyout(null)}
+                className={cn(
+                  "block rounded-xl px-3 py-2 text-[12.5px] font-medium transition-colors",
+                  childActive ? "text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
+                )}
+                style={childActive ? { background: ACTIVE_BG } : undefined}
+              >
+                {child.label}
+              </Link>
+            ) : null;
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -173,30 +178,17 @@ function SectionLabel({ title, open, onToggle, collapsed }: {
   title: string; open: boolean; onToggle: () => void; collapsed: boolean;
 }) {
   if (collapsed) {
-    return (
-      <div
-        className="my-3 mx-2 h-px"
-        style={{ background: "linear-gradient(90deg, transparent, var(--border), transparent)" }}
-      />
-    );
+    return <div className="mx-3 my-3 h-px bg-white/[0.07]" />;
   }
   return (
     <button
       type="button"
       onClick={onToggle}
-      className="mb-1.5 flex w-full items-center justify-between px-3 py-1 group transition-colors"
+      className="mb-1.5 flex w-full items-center justify-between px-3 py-1.5"
     >
-      <span
-        className="text-[9.5px] font-black uppercase tracking-[0.2em] transition-colors"
-        style={{ color: "color-mix(in srgb, var(--primary) 60%, var(--muted))" }}
-      >
-        {title}
-      </span>
-      <span
-        className="flex h-4 w-4 items-center justify-center rounded-md transition-all"
-        style={{ color: "var(--muted)" }}
-      >
-        {open ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/40">{title}</span>
+      <span className="text-white/40">
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </span>
     </button>
   );
@@ -210,52 +202,28 @@ function QuickButton({
   disabled?: boolean; accent?: string; collapsed: boolean; path?: string;
 }) {
   const className = cn(
-    "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[12px] font-semibold",
-    "text-[var(--text)] transition-all duration-150",
-    collapsed && "justify-center px-0 py-2.5",
+    "flex items-center gap-3 rounded-2xl text-left text-[13px] font-medium text-white/65 transition-all duration-150 hover:bg-white/5 hover:text-white",
+    collapsed ? "mx-auto h-11 w-11 justify-center" : "w-full px-3 py-2.5",
     disabled && "opacity-40 cursor-not-allowed pointer-events-none"
   );
 
   const content = (
     <>
-      <div
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-150"
-        style={{
-          background: accent ? `${accent}1a` : undefined,
-          color: accent,
-          boxShadow: accent ? `0 2px 8px ${accent}22` : undefined,
-        }}
-      >
-        <Icon className="h-[14px] w-[14px]" />
-      </div>
-      {!collapsed && <span className="text-[var(--text)]">{loading ? "Working…" : label}</span>}
+      <Icon className="h-[18px] w-[18px] shrink-0" />
+      {!collapsed && <span className="flex-1 truncate">{loading ? "Working…" : label}</span>}
+      {!collapsed && accent && <span className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />}
     </>
   );
 
   if (path) {
     return (
-      <Link
-        to={path}
-        className={className}
-        title={collapsed ? label : undefined}
-        style={{ "--hover-bg": `${accent}12` } as React.CSSProperties}
-        onMouseEnter={(e) => { if (accent) (e.currentTarget as HTMLElement).style.background = `${accent}12`; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ""; }}
-      >
+      <Link to={path} className={className} title={collapsed ? label : undefined}>
         {content}
       </Link>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={className}
-      title={collapsed ? label : undefined}
-      onMouseEnter={(e) => { if (accent) (e.currentTarget as HTMLElement).style.background = `${accent}12`; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ""; }}
-    >
+    <button type="button" onClick={onClick} disabled={disabled} className={className} title={collapsed ? label : undefined}>
       {content}
     </button>
   );
@@ -310,8 +278,7 @@ function EmployeeShortcuts({ collapsed }: { collapsed: boolean }) {
     <div className="space-y-0.5 pt-1">
       {!collapsed && (
         <p
-          className="mb-1.5 px-3 text-[9.5px] font-black uppercase tracking-[0.2em]"
-          style={{ color: "color-mix(in srgb, var(--primary) 60%, var(--muted))" }}
+          className="mb-1.5 px-3 text-[10px] font-medium uppercase tracking-[0.14em] text-white/40"
         >
           Quick Access
         </p>
@@ -359,98 +326,10 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
     },
   });
 
-  const initials = (user?.name ?? "U").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-  const role     = user?.rolesRelation?.[0]?.name ?? user?.roles?.[0]?.name ?? "Employee";
-
   return (
-    <div
-      className="shrink-0 p-3"
-      style={{ borderTop: "1px solid color-mix(in srgb, var(--border) 80%, var(--primary))" }}
-    >
-      {collapsed ? (
-        <div className="flex flex-col items-center gap-2.5">
-          <Link to="/profile" title="My profile">
-            <div
-              className="relative grid h-9 w-9 place-items-center rounded-xl text-[12px] font-bold text-white"
-              style={{
-                background: "linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%)",
-                boxShadow: "0 4px 12px rgba(37,99,235,0.4), inset 0 1px 0 rgba(255,255,255,0.3)",
-              }}
-            >
-              <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
-                <div className="absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%)" }} />
-              </div>
-              {initials}
-            </div>
-          </Link>
-          <button
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
-            title="Sign out"
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:border-red-200 hover:bg-red-50 hover:text-red-500 transition-all"
-          >
-            <Power className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ) : (
-        <div
-          className="relative flex items-center gap-3 rounded-xl p-3 overflow-hidden"
-          style={{
-            background: "linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, var(--background)) 0%, var(--background) 100%)",
-            border: "1px solid color-mix(in srgb, var(--primary) 20%, var(--border))",
-            boxShadow: "0 2px 12px rgba(37,99,235,0.08), inset 0 1px 0 rgba(255,255,255,0.5)",
-          }}
-        >
-          {/* Subtle shine on card */}
-          <div
-            className="absolute inset-x-0 top-0 h-px pointer-events-none"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.8), transparent)" }}
-          />
-
-          <Link to="/profile" title="My profile" className="shrink-0">
-            <div
-              className="relative grid h-9 w-9 place-items-center rounded-xl text-[12px] font-bold text-white"
-              style={{
-                background: "linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%)",
-                boxShadow: "0 4px 12px rgba(37,99,235,0.4), inset 0 1px 0 rgba(255,255,255,0.3)",
-              }}
-            >
-              <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
-                <div className="absolute inset-x-0 top-0 h-1/2" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%)" }} />
-              </div>
-              {initials}
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--card)] bg-emerald-500" style={{ boxShadow: "0 0 6px rgba(16,185,129,0.6)" }} />
-            </div>
-          </Link>
-
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-bold leading-tight text-[var(--text)]">
-              {user?.name ?? "User"}
-            </p>
-            <p className="truncate text-[10px] leading-tight font-medium" style={{ color: "color-mix(in srgb, var(--primary) 70%, var(--muted))" }}>
-              {role}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1">
-            <Link
-              to="/profile"
-              title="Profile"
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] transition-all"
-            >
-              <User className="h-3.5 w-3.5" />
-            </Link>
-            <button
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-              title="Sign out"
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-50 hover:text-red-500 transition-all"
-            >
-              <Power className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+    <div className="shrink-0 space-y-0.5 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+      <QuickButton icon={User} label="My Profile" path="/profile" collapsed={collapsed} />
+      <QuickButton icon={Power} label="Sign out" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending} collapsed={collapsed} />
     </div>
   );
 }
@@ -525,7 +404,7 @@ export function SidebarMenu({ collapsed = false }: { collapsed?: boolean }) {
           );
         })}
 
-        <div className="pt-3" style={{ borderTop: "1px solid color-mix(in srgb, var(--border) 80%, var(--primary))" }}>
+        <div className="pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
           <EmployeeShortcuts collapsed={collapsed} />
         </div>
       </nav>

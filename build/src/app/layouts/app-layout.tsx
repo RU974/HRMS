@@ -23,7 +23,8 @@ export function AppLayout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[var(--background)]">
+    <div className="relative isolate min-h-screen overflow-x-hidden">
+      <div className="app-wallpaper" aria-hidden />
 
       {/* ── Sidebar ── */}
       <Sidebar />

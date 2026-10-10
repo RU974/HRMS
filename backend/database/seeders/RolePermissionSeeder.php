@@ -103,6 +103,7 @@ class RolePermissionSeeder extends Seeder
                 'notification:view',
                 'chat:view', 'chat:create', 'call:use',
                 'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:assign',
+                'payroll:view_own',
             ],
             'IT Support' => [
                 'dashboard:view',
