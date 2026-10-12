@@ -119,7 +119,14 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
   const firstDayDow  = new Date(year, month - 1, 1).getDay(); // 0=Sun
   const paddingDays  = (firstDayDow + 6) % 7; // shift to Mon-start
   const monthLabel   = new Date(year, month - 1, 1).toLocaleString("default", { month: "long", year: "numeric" });
-  const todayStr     = new Date().toISOString().slice(0, 10);
+  const todayStr     = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Night shifts (e.g. 20:00-05:00) check out the next calendar day.
+  function isOvernight(rec: AttendanceItem): boolean {
+    if (!rec.check_in || !rec.check_out) return false;
+    return rec.check_out.slice(0, 10) > rec.check_in.slice(0, 10)
+      || rec.check_out.slice(11, 16) < rec.check_in.slice(11, 16);
+  }
 
   const statusStyle: Record<string, string> = {
     present: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -193,22 +200,28 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
 
             return (
               <div key={day}
-                className={`relative flex flex-col items-center justify-start rounded-xl border p-1.5 min-h-[72px] transition
+                className={`relative flex flex-col items-center justify-start rounded-xl border p-1.5 min-h-[84px] transition
                   ${kind ? `${statusStyle[kind] ?? "bg-gray-50 border-gray-200"} cursor-pointer hover:opacity-80` : isWeekend ? "border-[var(--border)] bg-[var(--border)]/40 text-[var(--muted)]" : "border-[var(--border)] bg-[var(--background)]"}
                   ${isToday ? "ring-2 ring-[var(--primary)] ring-offset-1" : ""}
                 `}
-                title={rec || kind ? `${kind === "halfday" ? "half day" : kind}${rec?.check_in ? ` · In: ${rec.check_in.slice(11,16)}` : ""}${rec?.check_out ? ` · Out: ${rec.check_out.slice(11,16)}` : ""}` : isWeekend ? "Weekend" : ""}
+                title={rec || kind ? `${kind === "halfday" ? "half day" : kind}${rec?.check_in ? ` · In: ${rec.check_in.slice(11,16)}` : ""}${rec?.check_out ? ` · Out: ${rec.check_out.slice(11,16)}${rec && isOvernight(rec) ? " (next day)" : ""}` : ""}` : isWeekend ? "Weekend" : ""}
               >
                 <span className={`text-xs font-bold ${isToday ? "text-[var(--primary)]" : ""}`}>{day}</span>
                 {kind === "halfday" && <span className="text-[9px] leading-tight font-semibold">½ day</span>}
                 {rec && (
-                  <div className="mt-0.5 flex flex-col items-center gap-0.5">
-                    {rec.check_in  && <span className="text-[10px] leading-tight font-medium">In {rec.check_in.slice(11,16)}</span>}
-                    {rec.check_out && (
-                      <span className="text-[10px] leading-tight font-medium">
-                        Out {rec.check_out.slice(11,16)}
-                        {rec.check_out.slice(0, 10) > String(rec.date).slice(0, 10) && <sup className="ml-0.5">+1d</sup>}
+                  <div className="mt-1 flex w-full flex-col items-center gap-0.5">
+                    {rec.check_in && (
+                      <span className="text-[11px] leading-tight font-medium">
+                        <span className="opacity-70">In</span> {rec.check_in.slice(11,16)}
                       </span>
+                    )}
+                    {rec.check_out ? (
+                      <span className="text-[11px] leading-tight font-medium">
+                        <span className="opacity-70">Out</span> {rec.check_out.slice(11,16)}
+                        {isOvernight(rec) && <span className="ml-1 rounded bg-black/10 px-1 text-[9px] font-bold">+1 day</span>}
+                      </span>
+                    ) : rec.check_in && (
+                      <span className="text-[10px] leading-tight italic opacity-70">{dateStr === todayStr ? "On shift" : "No check-out"}</span>
                     )}
                     {rec.work_from_home && <span className="text-[9px] leading-tight font-semibold opacity-80">WFH</span>}
                     {(rec.overtime_hours ?? 0) > 0 && <span className="text-[9px] leading-tight opacity-70">+{rec.overtime_hours?.toFixed(1)}h OT</span>}
