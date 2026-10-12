@@ -16,7 +16,7 @@ class AttendanceController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Attendance::with('employee');
+        $query = Attendance::with('employee.shift');
         $this->scopeToCompany($request, $query, 'employee.user');
         if ($this->isLineManagerOnly($request)) {
             $query->whereHas('employee', fn ($q) => $this->scopeToOwnTeam($q, $request));

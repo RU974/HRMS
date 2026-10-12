@@ -69,6 +69,42 @@ function SourceBadge({ source }: { source?: string | null }) {
   );
 }
 
+// Hours elapsed since check-in and time left until the shift ends, for open records.
+function ShiftProgress({ item, now }: { item: AttendanceItem; now: Date }) {
+  if (!item.check_in || item.check_out) return <span className="text-[var(--muted)]">—</span>;
+
+  const checkIn = new Date(item.check_in.replace(" ", "T"));
+  const elapsedMs = now.getTime() - checkIn.getTime();
+  if (Number.isNaN(elapsedMs) || elapsedMs < 0) return <span className="text-[var(--muted)]">—</span>;
+
+  const fmt = (ms: number) => {
+    const mins = Math.floor(ms / 60000);
+    return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m`;
+  };
+
+  let endLabel: string | null = null;
+  let remaining: number | null = null;
+  if (item.shift_end_time) {
+    const [h, m] = item.shift_end_time.split(":").map(Number);
+    const end = new Date(checkIn);
+    end.setHours(h, m, 0, 0);
+    if (end <= checkIn) end.setDate(end.getDate() + 1); // night shift ends next day
+    endLabel = item.shift_end_time;
+    remaining = end.getTime() - now.getTime();
+  }
+
+  return (
+    <div className="text-xs leading-tight">
+      <p className="font-semibold text-[var(--text)]">{fmt(elapsedMs)} on shift</p>
+      {endLabel && (
+        <p className={remaining !== null && remaining <= 0 ? "text-amber-600" : "text-[var(--muted)]"}>
+          {remaining !== null && remaining <= 0 ? `Shift ended ${endLabel}` : `Ends ${endLabel} · ${fmt(remaining ?? 0)} left`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Calendar view ─────────────────────────────────────────────────────────────
 const HALF_DAY_MAX_HOURS = 4.5;
 
@@ -525,6 +561,8 @@ export function AttendancePage() {
     queryKey: ["attendance", "today", employeeId],
     queryFn:  () => getEmployeeAttendance(employeeId),
     enabled: !!employeeId,
+    // Pick up biometric punches synced while the page is open.
+    refetchInterval: 60_000,
     select: d => {
       const rows = (d as { data: AttendanceItem[] }).data ?? [];
       const todays = rows.find(a => a.date?.startsWith(today)) ?? null;
@@ -637,12 +675,12 @@ export function AttendancePage() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                {!checkedIn && (
-                  <Button onClick={() => checkInMutation.mutate()} disabled={checkInMutation.isPending}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    {checkInMutation.isPending ? "Checking in..." : "✓ Check In"}
-                  </Button>
-                )}
+                {/* Once punched in (web or synced from biometric) Check In is locked and Check Out is available. */}
+                <Button onClick={() => checkInMutation.mutate()} disabled={checkedIn || checkInMutation.isPending}
+                  title={checkedIn ? (todayRec?.source === "biometric" ? "Already punched in on the biometric device" : "Already checked in") : undefined}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white disabled:cursor-not-allowed disabled:opacity-50">
+                  {checkInMutation.isPending ? "Checking in..." : checkedIn ? "🔒 Check In" : "✓ Check In"}
+                </Button>
                 {checkedIn && !checkedOut && (
                   <Button onClick={() => checkOutMutation.mutate()} disabled={checkOutMutation.isPending}
                     className="bg-red-500 hover:bg-red-600 text-white">
@@ -726,6 +764,7 @@ export function AttendancePage() {
                   <SortableTh label="Status" sortKey="status" sort={recSort} onSort={toggleRecSort} />
                   <SortableTh label="In" sortKey="check_in" sort={recSort} onSort={toggleRecSort} />
                   <SortableTh label="Out" sortKey="check_out" sort={recSort} onSort={toggleRecSort} />
+                  <th className="p-3">Shift</th>
                   <SortableTh label="OT" sortKey="overtime" sort={recSort} onSort={toggleRecSort} />
                   <th className="p-3">Flags</th>
                   <SortableTh label="Source" sortKey="source" sort={recSort} onSort={toggleRecSort} />
@@ -735,14 +774,14 @@ export function AttendancePage() {
               <tbody>
                 {query.isLoading && [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-[var(--border)]/50">
-                    {[...Array(canManage ? 9 : 8)].map((__, j) => (
+                    {[...Array(canManage ? 10 : 9)].map((__, j) => (
                       <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>
                     ))}
                   </tr>
                 ))}
 
                 {!query.isLoading && records.length === 0 && (
-                  <tr><td colSpan={canManage ? 9 : 8} className="p-10 text-center text-sm text-[var(--muted)]">No attendance records found.</td></tr>
+                  <tr><td colSpan={canManage ? 10 : 9}className="p-10 text-center text-sm text-[var(--muted)]">No attendance records found.</td></tr>
                 )}
 
                 {records.map(item => (
@@ -752,6 +791,7 @@ export function AttendancePage() {
                     <td data-label="Status" className="p-3"><StatusBadge status={item.status} /></td>
                     <td data-label="In" className="p-3">{item.check_in  ? item.check_in.slice(11,16)  : "—"}</td>
                     <td data-label="Out" className="p-3">{item.check_out ? item.check_out.slice(11,16) : "—"}</td>
+                    <td data-label="Shift" className="p-3"><ShiftProgress item={item} now={now} /></td>
                     <td data-label="OT" className="p-3 text-xs font-medium">
                       {(item.overtime_hours ?? 0) > 0
                         ? <span className="text-emerald-600">+{item.overtime_hours?.toFixed(1)}h</span>

@@ -40,6 +40,8 @@ class Attendance extends Model
         'duration_hours',
         'is_early_arrival',
         'is_late_arrival',
+        'shift_start_time',
+        'shift_end_time',
     ];
 
     public function employee(): BelongsTo
@@ -55,6 +57,20 @@ class Attendance extends Model
     public function getDurationHoursAttribute(): float
     {
         return (new AttendanceCalculator())->getDurationHours($this);
+    }
+
+    public function getShiftStartTimeAttribute(): ?string
+    {
+        $time = $this->employee?->shift?->start_time;
+
+        return $time ? substr((string) $time, 0, 5) : null;
+    }
+
+    public function getShiftEndTimeAttribute(): ?string
+    {
+        $time = $this->employee?->shift?->end_time;
+
+        return $time ? substr((string) $time, 0, 5) : null;
     }
 
     public function getIsEarlyArrivalAttribute(): bool

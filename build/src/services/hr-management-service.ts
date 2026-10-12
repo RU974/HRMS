@@ -46,6 +46,8 @@ export interface AttendanceItem {
   overtime_hours?: number;
   duration_hours?: number;
   is_late_arrival?: boolean;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
   correction_status?: "pending" | "approved" | "rejected" | null;
   correction_request_notes?: string | null;
   correction_response_notes?: string | null;
