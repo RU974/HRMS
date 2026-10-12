@@ -15,12 +15,14 @@ class Shift extends Model
         'name',
         'start_time',
         'end_time',
+        'working_days',
         'grace_minutes',
         'is_active',
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'is_active'    => 'boolean',
+        'working_days' => 'array',
     ];
 
     public function departmentGraces(): HasMany

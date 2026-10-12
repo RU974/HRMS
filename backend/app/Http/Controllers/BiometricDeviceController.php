@@ -386,6 +386,9 @@ class BiometricDeviceController extends Controller
             'last_sync_at' => now(),
         ]);
 
+        // Closed days with no punches and no approved leave become absences.
+        app(\App\Services\AttendanceAbsenceService::class)->markAbsences(now()->subDays(3), now()->subDay(), $device->company_id);
+
         \App\Models\BiometricSyncLog::create([
             'device_id'         => $device->id,
             'company_id'        => $device->company_id,

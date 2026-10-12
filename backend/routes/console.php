@@ -53,6 +53,9 @@ Schedule::command('tickets:auto-close')->daily();
 // Sync biometric devices whose scheduled interval is due.
 Schedule::command('biometric:sync-scheduled')->everyFiveMinutes();
 
+// Mark employees absent on finished working days with no punches and no approved leave.
+Schedule::command('attendance:mark-absent')->dailyAt('00:30');
+
 // ─── Calls ────────────────────────────────────────────────────────────────
 
 // Mark unanswered calls as missed and drop participants whose client stopped

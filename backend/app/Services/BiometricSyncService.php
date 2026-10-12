@@ -148,6 +148,8 @@ class BiometricSyncService
                 'status' => 'online',
                 'last_sync_at' => now(),
             ]);
+
+            app(AttendanceAbsenceService::class)->markAbsences(now()->subDays(3), now()->subDay(), $device->company_id);
         } catch (\Throwable $e) {
             $log->update([
                 'finished_at' => now(),

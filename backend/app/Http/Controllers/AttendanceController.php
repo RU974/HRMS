@@ -215,7 +215,30 @@ class AttendanceController extends Controller
             'absent' => $stats->where('status', 'absent')->sum('count'),
             'leave' => $stats->where('status', 'leave')->sum('count'),
             'late' => $stats->where('status', 'late')->sum('count'),
+            'off_days' => $this->countWeeklyOffDays((int) $employeeId, (int) $month, (int) $year),
         ]);
+    }
+
+    /** Unmarked weekly-off days (e.g. Saturday/Sunday) up to today for the month. */
+    private function countWeeklyOffDays(int $employeeId, int $month, int $year): int
+    {
+        $employee = Employee::find($employeeId);
+        if (!$employee) {
+            return 0;
+        }
+        $service = app(\App\Services\AttendanceAbsenceService::class);
+        $start = Carbon::create($year, $month, 1)->startOfDay();
+        $end   = $start->copy()->endOfMonth()->startOfDay();
+        if ($end->gt(Carbon::today())) {
+            $end = Carbon::today();
+        }
+        $count = 0;
+        for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
+            if (!$service->isWorkingDay($employee, $d)) {
+                $count++;
+            }
+        }
+        return $count;
     }
 
     public function checkIn(Request $request)

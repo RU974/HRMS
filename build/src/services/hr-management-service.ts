@@ -18,6 +18,8 @@ export interface ShiftItem {
   name: string;
   start_time: string;
   end_time: string;
+  /** ISO weekday numbers, 1 = Monday ... 7 = Sunday. Null on shifts created before this field existed. */
+  working_days?: number[] | null;
   grace_minutes: number;
   is_active: boolean;
   department_graces?: { department_id: number; grace_minutes: number }[];
