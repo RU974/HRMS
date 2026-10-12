@@ -56,6 +56,13 @@ class AttendanceController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
+        if ($request->filled('search')) {
+            $term = '%' . trim((string) $request->input('search')) . '%';
+            $query->whereHas('employee', fn ($q) => $q->where(function ($s) use ($term) {
+                $s->where('name', 'like', $term)
+                    ->orWhere('employee_number', 'like', $term);
+            }));
+        }
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
 

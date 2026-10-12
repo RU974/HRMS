@@ -170,9 +170,11 @@ export interface TeamDailyAttendanceRow {
   monthly_absences: number;
 }
 
-export function listAttendancePaginated(page: number, employeeId?: number) {
-  const base = `/attendance?per_page=20&page=${page}`;
-  return apiClient<PaginatedResponse<AttendanceItem>>(employeeId ? `${base}&employee_id=${employeeId}` : base);
+export function listAttendancePaginated(page: number, employeeId?: number, search?: string) {
+  let url = `/attendance?per_page=20&page=${page}`;
+  if (employeeId) url += `&employee_id=${employeeId}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  return apiClient<PaginatedResponse<AttendanceItem>>(url);
 }
 
 export function getEmployeeAttendanceCalendar(employeeId: number, month: number, year: number) {

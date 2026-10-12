@@ -493,10 +493,18 @@ export function AttendancePage() {
   }
 
   // Records list
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
   const query = useQuery({
-    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId],
-    queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId),
+    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId, search],
+    queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId, search || undefined),
     enabled: seesTeam || employeeId > 0,
+    placeholderData: (prev) => prev,
   });
 
   // Today's record (for the check-in card)
@@ -683,7 +691,17 @@ export function AttendancePage() {
         <Card>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-base font-semibold">Attendance Records</h3>
-            {canManage && <Button onClick={openCreate}>+ New Record</Button>}
+            <div className="flex flex-wrap items-center gap-3">
+              <FormInput
+                type="search"
+                aria-label="Search attendance records"
+                placeholder="Search by employee name or ID…"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="w-64"
+              />
+              {canManage && <Button onClick={openCreate}>+ New Record</Button>}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
