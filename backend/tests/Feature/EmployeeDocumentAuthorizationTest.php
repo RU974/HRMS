@@ -26,6 +26,7 @@ class EmployeeDocumentAuthorizationTest extends TestCase
     protected $hrUser;
     protected $adminUser;
     protected $department;
+    protected $company;
 
     protected function setUp(): void
     {
@@ -36,12 +37,13 @@ class EmployeeDocumentAuthorizationTest extends TestCase
     private function setupTestData(): void
     {
         // Create departments
+        $this->company = \App\Models\Company::create(['name' => 'Docs Co']);
         $this->department = Department::create(['name' => 'Engineering']);
         $deptFinance = Department::create(['name' => 'Finance']);
 
         // Create manager user and employee
-        $this->manager = $this->createUserWithRole(User::ROLE_EMPLOYEE);
-        $this->manager->givePermissionTo('view employees');
+        $this->manager = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
+        $this->manager->givePermissionTo('employees:view');
         $this->manager->refresh();
         
         $this->managerEmployee = Employee::create([
@@ -55,7 +57,7 @@ class EmployeeDocumentAuthorizationTest extends TestCase
         ]);
 
         // Create direct report user and employee
-        $this->directReport = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $this->directReport = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
         $this->directReportEmployee = Employee::create([
             'user_id' => $this->directReport->id,
             'name' => 'Direct Report',
@@ -68,8 +70,8 @@ class EmployeeDocumentAuthorizationTest extends TestCase
         ]);
 
         // Create unrelated manager user and employee
-        $this->unrelatedManager = $this->createUserWithRole(User::ROLE_EMPLOYEE);
-        $this->unrelatedManager->givePermissionTo('view employees');
+        $this->unrelatedManager = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
+        $this->unrelatedManager->givePermissionTo('employees:view');
         $this->unrelatedManager->refresh();
         
         $this->unrelatedManagerEmployee = Employee::create([
@@ -83,20 +85,20 @@ class EmployeeDocumentAuthorizationTest extends TestCase
         ]);
 
         // Create generic viewer (has view employees permission only)
-        $this->genericViewer = $this->createUserWithRole(User::ROLE_EMPLOYEE);
-        $viewPermission = Permission::where('name', 'view employees')->first();
+        $this->genericViewer = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
+        $viewPermission = Permission::where('name', 'employees:view')->first();
         if ($viewPermission) {
-            $this->genericViewer->givePermissionTo('view employees');
+            $this->genericViewer->givePermissionTo('employees:view');
             $this->genericViewer->refresh();
         }
 
         // Create HR user with manage employee documents permission
-        $this->hrUser = $this->createUserWithRole(User::ROLE_HR_EXECUTIVE);
-        $this->hrUser->givePermissionTo('manage employee documents');
+        $this->hrUser = $this->createUserWithRole(User::ROLE_HR_EXECUTIVE, ['company_id' => $this->company->id]);
+        $this->hrUser->givePermissionTo('documents:edit');
         $this->hrUser->refresh();
 
         // Create admin user
-        $this->adminUser = $this->createUserWithRole(User::ROLE_COMPANY_ADMIN);
+        $this->adminUser = $this->createUserWithRole(User::ROLE_COMPANY_ADMIN, ['company_id' => $this->company->id]);
     }
 
     // ============================================
@@ -219,11 +221,11 @@ class EmployeeDocumentAuthorizationTest extends TestCase
 
     public function test_user_with_view_employees_permission_only_cannot_access_manager_only_documents()
     {
-        $viewer = $this->createUserWithRole(User::ROLE_EMPLOYEE);
-        $viewer->givePermissionTo('view employees');
+        $viewer = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
+        $viewer->givePermissionTo('employees:view');
 
         $employee = Employee::create([
-            'user_id' => $this->createUserWithRole(User::ROLE_EMPLOYEE)->id,
+            'user_id' => $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id])->id,
             'name' => 'Some Employee',
             'email' => 'emp@example.com',
             'department_id' => $this->department->id,
@@ -247,11 +249,11 @@ class EmployeeDocumentAuthorizationTest extends TestCase
 
     public function test_user_with_view_attendance_permission_only_cannot_access_manager_only_documents()
     {
-        $viewer = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $viewer = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
         $viewer->givePermissionTo('view attendance');
 
         $employee = Employee::create([
-            'user_id' => $this->createUserWithRole(User::ROLE_EMPLOYEE)->id,
+            'user_id' => $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id])->id,
             'name' => 'Some Employee',
             'email' => 'emp2@example.com',
             'department_id' => $this->department->id,
@@ -279,7 +281,7 @@ class EmployeeDocumentAuthorizationTest extends TestCase
 
     public function test_same_company_user_without_management_relationship_cannot_access_manager_only_documents()
     {
-        $otherManager = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $otherManager = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
         $otherManagerEmployee = Employee::create([
             'user_id' => $otherManager->id,
             'name' => 'Other Manager',
@@ -289,7 +291,7 @@ class EmployeeDocumentAuthorizationTest extends TestCase
             'salary' => 5000,
             'status' => 'active',
         ]);
-        $otherManager->givePermissionTo('view employees');
+        $otherManager->givePermissionTo('employees:view');
 
         $document = EmployeeDocument::create([
             'employee_id' => $this->directReportEmployee->id,
@@ -406,7 +408,7 @@ class EmployeeDocumentAuthorizationTest extends TestCase
         // Create an employee in a DIFFERENT department
         $otherDept = Department::create(['name' => 'Sales']);
         $employeeInOtherDept = Employee::create([
-            'user_id' => $this->createUserWithRole(User::ROLE_EMPLOYEE)->id,
+            'user_id' => $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id])->id,
             'name' => 'Sales Employee',
             'email' => 'sales-emp-' . time() . '@example.com',
             'department_id' => $otherDept->id,
@@ -434,8 +436,8 @@ class EmployeeDocumentAuthorizationTest extends TestCase
 
     public function test_generic_viewer_cannot_see_manager_only_documents_in_index()
     {
-        $viewer = $this->createUserWithRole(User::ROLE_EMPLOYEE);
-        $viewer->givePermissionTo('view employees');
+        $viewer = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
+        $viewer->givePermissionTo('employees:view');
 
         $document = EmployeeDocument::create([
             'employee_id' => $this->directReportEmployee->id,

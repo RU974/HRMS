@@ -112,7 +112,7 @@ class UserManagementService
 
     private function resolveAssignableRoleIds(array $roleIds, ?User $actor): array
     {
-        if (!$actor || (!$actor->can('settings:manage_settings') && !$actor->can('users:edit'))) {
+        if (!$actor || (!$actor->can('settings:manage_settings') && !$actor->can('users:edit') && !$actor->can('users:assign'))) {
             abort(403, 'You are not authorized to assign roles.');
         }
 

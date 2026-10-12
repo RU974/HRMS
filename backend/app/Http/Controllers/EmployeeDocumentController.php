@@ -160,6 +160,12 @@ class EmployeeDocumentController extends Controller
                 return false;
             }
 
+            // A manager is an employee. An account with view permissions but no employee record cannot
+            // manage anyone, so it must not read manager-only documents (the scope check below would let it through).
+            if (!$user->employee) {
+                return false;
+            }
+
             // Verify user is within the managed scope of the document's employee
             if (!$this->isInCompany($request, $document->employee_id)) {
                 return false;

@@ -3,32 +3,25 @@
 namespace App\Listeners;
 
 use App\Events\ApprovalRejected;
-use App\Models\NotificationItem;
+use App\Listeners\Concerns\NotifiesApprovalParticipants;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\InteractsWithQueue;
 
 class NotifyApprovalRejected implements ShouldQueue
 {
     use InteractsWithQueue;
+    use NotifiesApprovalParticipants;
 
     public function handle(ApprovalRejected $event): void
     {
-        $approval = $event->approval;
-        $workflow = $approval->workflow;
+        $approval = $event->approval->loadMissing('workflow');
 
-        // Notify requester of rejection
-        NotificationItem::create([
-            'user_id' => $approval->requested_by,
-            'type' => 'approval_rejected',
-            'title' => "{$workflow->module} approval rejected",
-            'message' => "Your {$workflow->module} request #{$approval->id} has been rejected. Please review and resubmit.",
-            'data' => [
-                'approval_id' => $approval->id,
-                'module' => $workflow->module,
-                'status' => 'rejected',
-                'notes' => $approval->getLatestNote('rejection'),
-            ],
-            'read_at' => null,
-        ]);
+        if ($this->handledByModule($approval)) {
+            return;
+        }
+
+        $module = $approval->workflow?->module ?? $approval->module;
+
+        $this->notify($approval, [$approval->requested_by], 'approval_rejected', "{$module} approval rejected", "Your {$module} request #{$approval->id} has been rejected. Please review and resubmit.");
     }
 }

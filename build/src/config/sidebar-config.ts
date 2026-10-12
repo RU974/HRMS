@@ -136,13 +136,18 @@ export const sidebarSections: SidebarSectionConfig[] = [
       {
         label: "Recruitment",
         icon: FolderKanban,
-        permissions: ["recruitment:view", "recruitment:create", "recruitment:edit", "recruitment:delete"],
+        permissions: ["recruitment:view", "recruitment:create", "recruitment:edit", "recruitment:delete", "recruitment:interview", "recruitment:onboarding_task", "recruitment:request", "recruitment:refer"],
         children: [
           { label: "Overview",     path: "/recruitment",                icon: FolderKanban,    permissions: ["recruitment:view"] },
-          { label: "Jobs",         path: "/recruitment/jobs",           icon: BriefcaseBusiness, permissions: ["recruitment:view"] },
+          { label: "Jobs",         path: "/recruitment/jobs",           icon: BriefcaseBusiness, permissions: ["recruitment:view", "recruitment:request"] },
           { label: "Candidates",   path: "/recruitment/candidates",     icon: Users2,          permissions: ["recruitment:view"] },
-          { label: "Interviews",   path: "/recruitment/interviews",     icon: CalendarClock,   permissions: ["recruitment:view"] },
-          { label: "Onboarding",   path: "/recruitment/onboarding",     icon: FileText,        permissions: ["recruitment:view"] },
+          { label: "Talent pool",  path: "/recruitment/talent-pool",    icon: UserCircle2,     permissions: ["recruitment:view"] },
+          { label: "Referrals",    path: "/recruitment/referrals",      icon: Users2,          permissions: ["recruitment:view"] },
+          { label: "Refer someone", path: "/recruitment/refer",         icon: UserCircle2,     permissions: ["recruitment:refer"] },
+          { label: "Interviews",   path: "/recruitment/interviews",     icon: CalendarClock,   permissions: ["recruitment:view", "recruitment:interview"] },
+          { label: "Offers",       path: "/recruitment/offers",         icon: ScrollText,      permissions: ["recruitment:view"] },
+          { label: "Onboarding",   path: "/recruitment/onboarding",     icon: FileText,        permissions: ["recruitment:view", "recruitment:onboarding_task"] },
+          { label: "Reports",      path: "/recruitment/reports",        icon: ChartColumn,     permissions: ["recruitment:view"] },
         ],
       },
       {

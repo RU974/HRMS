@@ -97,6 +97,13 @@ class PermissionSeeder extends Seeder
             ['module' => 'employees', 'action' => 'view_all', 'name' => 'employees:view_all'],
             // call:use lets a user start, answer and join audio/video calls
             ['module' => 'call', 'action' => 'use', 'name' => 'call:use'],
+            // recruitment participation for non-recruiters: score own interviews / complete own onboarding tasks
+            ['module' => 'recruitment', 'action' => 'interview', 'name' => 'recruitment:interview'],
+            ['module' => 'recruitment', 'action' => 'onboarding_task', 'name' => 'recruitment:onboarding_task'],
+            // hiring managers can raise a job requisition without full recruitment access
+            ['module' => 'recruitment', 'action' => 'request', 'name' => 'recruitment:request'],
+            // any employee can refer a candidate for an open job and follow their own referrals
+            ['module' => 'recruitment', 'action' => 'refer', 'name' => 'recruitment:refer'],
             ['module' => '*', 'action' => '*', 'name' => '*.*'],
         ];
 

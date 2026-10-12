@@ -46,10 +46,28 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\CallController;
 use App\Http\Controllers\ChatConversationController;
 use App\Http\Controllers\ChatMessageController;
+use App\Http\Controllers\Recruitment\CandidateBulkController as RecruitmentCandidateBulkController;
+use App\Http\Controllers\Recruitment\EmailTemplateController as RecruitmentEmailTemplateController;
+use App\Http\Controllers\Recruitment\HeadcountBudgetController as RecruitmentHeadcountBudgetController;
 use App\Http\Controllers\Recruitment\CandidateController as RecruitmentCandidateController;
+use App\Http\Controllers\Recruitment\CandidateDocumentController as RecruitmentCandidateDocumentController;
+use App\Http\Controllers\Recruitment\CandidatePortalController as RecruitmentCandidatePortalController;
+use App\Http\Controllers\Recruitment\CareersController as RecruitmentCareersController;
+use App\Http\Controllers\Recruitment\CareersSettingsController as RecruitmentCareersSettingsController;
+use App\Http\Controllers\Recruitment\CandidateCheckController as RecruitmentCandidateCheckController;
+use App\Http\Controllers\Recruitment\JobQuestionController as RecruitmentJobQuestionController;
+use App\Http\Controllers\Recruitment\PipelineController as RecruitmentPipelineController;
+use App\Http\Controllers\Recruitment\ReferenceFormController as RecruitmentReferenceFormController;
+use App\Http\Controllers\Recruitment\ReferralController as RecruitmentReferralController;
+use App\Http\Controllers\Recruitment\RecruitmentAnalyticsController;
+use App\Http\Controllers\Recruitment\RecruitmentDirectoryController;
 use App\Http\Controllers\Recruitment\InterviewController as RecruitmentInterviewController;
 use App\Http\Controllers\Recruitment\JobOpeningController as RecruitmentJobOpeningController;
+use App\Http\Controllers\Recruitment\JobRequisitionController as RecruitmentJobRequisitionController;
+use App\Http\Controllers\Recruitment\OfferController as RecruitmentOfferController;
 use App\Http\Controllers\Recruitment\OnboardingController as RecruitmentOnboardingController;
+use App\Http\Controllers\Recruitment\OnboardingTaskController as RecruitmentOnboardingTaskController;
+use App\Http\Controllers\Recruitment\OnboardingTemplateController as RecruitmentOnboardingTemplateController;
 use App\Http\Controllers\BiometricDeviceController;
 use App\Http\Controllers\TaxBracketController;
 use App\Http\Controllers\SalaryGradeController;
@@ -88,6 +106,35 @@ $registerRoutes = function (): void {
         Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:auth');
         Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth');
+    });
+
+    // Public careers site: no authentication, rate limited, company resolved by slug only.
+    Route::prefix('public/careers')->middleware('throttle:careers-read')->group(function () {
+        Route::get('{slug}', [RecruitmentCareersController::class, 'company_profile']);
+        Route::get('{slug}/jobs/{job}', [RecruitmentCareersController::class, 'job'])->whereNumber('job');
+        Route::post('{slug}/jobs/{job}/apply', [RecruitmentCareersController::class, 'apply'])->whereNumber('job')->middleware('throttle:careers-apply');
+        Route::post('{slug}/portal-link', [RecruitmentCareersController::class, 'portalLink'])->middleware('throttle:portal-link');
+    });
+
+    // Candidate portal: the secret token in the URL identifies the candidate, no account needed.
+    Route::prefix('public/portal')->middleware('throttle:careers-read')->group(function () {
+        Route::get('{token}', [RecruitmentCandidatePortalController::class, 'show']);
+        Route::get('{token}/offer-pdf', [RecruitmentCandidatePortalController::class, 'offerPdf']);
+        Route::get('{token}/documents/{document}/download', [RecruitmentCandidatePortalController::class, 'download'])->whereNumber('document');
+        Route::post('{token}/offer', [RecruitmentCandidatePortalController::class, 'respondToOffer'])->middleware('throttle:portal-write');
+        Route::post('{token}/documents', [RecruitmentCandidatePortalController::class, 'upload'])->middleware('throttle:portal-write');
+        Route::post('{token}/offer/code', [RecruitmentCandidatePortalController::class, 'sendSigningCode'])->middleware('throttle:portal-code');
+        Route::post('{token}/interviews/{interview}/reschedule', [RecruitmentCandidatePortalController::class, 'requestReschedule'])->whereNumber('interview')->middleware('throttle:portal-write');
+        Route::post('{token}/withdraw', [RecruitmentCandidatePortalController::class, 'withdraw'])->middleware('throttle:portal-write');
+        Route::post('{token}/messages', [RecruitmentCandidatePortalController::class, 'sendMessage'])->middleware('throttle:portal-write');
+        Route::post('{token}/talent-pool', [RecruitmentCandidatePortalController::class, 'answerTalentPool'])->middleware('throttle:portal-write');
+        Route::post('{token}/erase', [RecruitmentCandidatePortalController::class, 'erase'])->middleware('throttle:portal-write');
+    });
+
+    // Referees answer a reference request from an emailed private link.
+    Route::prefix('public/references')->middleware('throttle:careers-read')->group(function () {
+        Route::get('{token}', [RecruitmentReferenceFormController::class, 'show']);
+        Route::post('{token}', [RecruitmentReferenceFormController::class, 'submit'])->middleware('throttle:portal-write');
     });
 
     // Protected routes - require authentication
@@ -348,17 +395,138 @@ $registerRoutes = function (): void {
 
         // Recruitment routes — Enterprise feature
         Route::middleware('license.feature:recruitment')->group(function () {
+            // Offer decisions are made by approvers (HR Manager / Company Admin), who need approvals:approve rather than recruitment access.
+            Route::middleware('permission:approvals:approve')->group(function () {
+                Route::post('offers/{offer}/approve', [RecruitmentOfferController::class, 'approve']);
+                Route::post('offers/{offer}/reject', [RecruitmentOfferController::class, 'reject']);
+                Route::post('job-openings/{job}/approve', [RecruitmentJobOpeningController::class, 'approveRequisition'])->whereNumber('job');
+                Route::post('job-openings/{job}/reject', [RecruitmentJobOpeningController::class, 'rejectRequisition'])->whereNumber('job');
+            });
+
+            // Hiring managers raise requisitions for new roles; they go live once approved.
+            Route::middleware('permission:recruitment:request|recruitment:create')->group(function () {
+                Route::get('requisitions', [RecruitmentJobRequisitionController::class, 'mine']);
+                Route::get('requisitions/departments', [RecruitmentJobRequisitionController::class, 'departments']);
+                Route::post('requisitions', [RecruitmentJobRequisitionController::class, 'store']);
+                Route::post('requisitions/budget-check', [RecruitmentHeadcountBudgetController::class, 'check']);
+                Route::put('requisitions/{job}', [RecruitmentJobRequisitionController::class, 'update'])->whereNumber('job');
+                Route::post('requisitions/{job}/submit', [RecruitmentJobRequisitionController::class, 'resubmit'])->whereNumber('job');
+                Route::post('requisitions/{job}/withdraw', [RecruitmentJobRequisitionController::class, 'withdrawRequisition'])->whereNumber('job');
+            });
+
+            // Employees can put someone forward for an open job and follow their own referrals.
+            Route::middleware('permission:recruitment:refer')->group(function () {
+                Route::get('referrals/jobs', [RecruitmentReferralController::class, 'openJobs']);
+                Route::get('referrals/mine', [RecruitmentReferralController::class, 'mine']);
+                Route::post('referrals', [RecruitmentReferralController::class, 'submit']);
+            });
+
+            // Assignees without recruitment access can see and complete their own onboarding tasks.
+            Route::middleware('permission:recruitment:view|recruitment:onboarding_task')->group(function () {
+                Route::get('onboarding-tasks', [RecruitmentOnboardingTaskController::class, 'index']);
+                Route::post('onboarding-tasks/{task}/complete', [RecruitmentOnboardingTaskController::class, 'complete']);
+                Route::post('onboarding-tasks/{task}/reopen', [RecruitmentOnboardingTaskController::class, 'reopen']);
+            });
+
+            // Interviewers without recruitment access can see and score their own interviews.
+            Route::middleware('permission:recruitment:view|recruitment:interview')->group(function () {
+                Route::get('interviews', [RecruitmentInterviewController::class, 'index']);
+                Route::get('interviews/{interview}', [RecruitmentInterviewController::class, 'show']);
+                Route::post('interviews/{interview}/scorecard', [RecruitmentInterviewController::class, 'submitScorecard']);
+            });
+
             Route::middleware('permission:recruitment:view')->group(function () {
                 Route::get('recruitment/pipeline-summary', [RecruitmentCandidateController::class, 'pipelineSummary']);
+                Route::get('recruitment/pipeline', [RecruitmentPipelineController::class, 'show']);
+                Route::get('recruitment/agencies', [RecruitmentReferralController::class, 'agencies']);
+                Route::get('recruitment/referral-bonuses', [RecruitmentReferralController::class, 'bonuses']);
+                Route::get('job-openings/{job}/questions', [RecruitmentJobQuestionController::class, 'show'])->whereNumber('job');
+                Route::get('candidates/{candidate}/checks', [RecruitmentCandidateCheckController::class, 'index']);
+                Route::get('recruitment/stats', [RecruitmentCandidateController::class, 'stats']);
+                Route::get('recruitment/board', [RecruitmentCandidateController::class, 'board']);
+                Route::get('recruitment/overview', [RecruitmentAnalyticsController::class, 'overview']);
+                Route::get('recruitment/people', [RecruitmentDirectoryController::class, 'people']);
+                Route::get('recruitment/analytics', [RecruitmentAnalyticsController::class, 'analytics']);
+                Route::get('recruitment/careers-settings', [RecruitmentCareersSettingsController::class, 'show']);
+                Route::get('candidates/{candidate}/resume', [RecruitmentCandidateController::class, 'downloadResume']);
+                Route::get('candidates/{candidate}/notes', [RecruitmentCandidateController::class, 'notes']);
+                Route::get('candidates/{candidate}/messages', [RecruitmentCandidateController::class, 'messages']);
+                Route::get('candidates/{candidate}/reschedule-requests', [RecruitmentCandidateController::class, 'rescheduleRequests']);
+                Route::get('job-openings/{job}/suggested-candidates', [RecruitmentJobOpeningController::class, 'suggestedCandidates'])->whereNumber('job');
+                Route::get('email-templates', [RecruitmentEmailTemplateController::class, 'index']);
+                Route::get('recruitment/headcount', [RecruitmentHeadcountBudgetController::class, 'index']);
+                Route::get('recruitment/headcount/departments', [RecruitmentHeadcountBudgetController::class, 'departments']);
+                Route::get('recruitment/currency', [RecruitmentHeadcountBudgetController::class, 'currency']);
+                Route::get('candidates/{candidate}/documents', [RecruitmentCandidateDocumentController::class, 'index']);
+                Route::get('candidates/{candidate}/documents/{document}/download', [RecruitmentCandidateDocumentController::class, 'download'])->whereNumber('document');
+                Route::get('offers', [RecruitmentOfferController::class, 'index']);
+                Route::get('offers/{offer}', [RecruitmentOfferController::class, 'show']);
+                Route::get('offers/{offer}/pdf', [RecruitmentOfferController::class, 'pdf']);
+                Route::get('offers/{offer}/signature-verification', [RecruitmentOfferController::class, 'verifySignature']);
+                Route::get('onboarding-templates', [RecruitmentOnboardingTemplateController::class, 'index']);
+                Route::get('onboarding-templates/{template}', [RecruitmentOnboardingTemplateController::class, 'show']);
                 Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->only(['index', 'show']);
                 Route::apiResource('candidates', RecruitmentCandidateController::class)->only(['index', 'show']);
-                Route::apiResource('interviews', RecruitmentInterviewController::class)->only(['index', 'show']);
                 Route::apiResource('onboarding', RecruitmentOnboardingController::class)->only(['index', 'show']);
             });
 
             Route::middleware('permission:recruitment:create|recruitment:edit|recruitment:delete')->group(function () {
+                Route::post('candidates/{candidate}/hire', [RecruitmentCandidateController::class, 'hire']);
+                Route::put('recruitment/pipeline', [RecruitmentPipelineController::class, 'save']);
+                Route::delete('recruitment/pipeline', [RecruitmentPipelineController::class, 'reset']);
+                Route::put('job-openings/{job}/questions', [RecruitmentJobQuestionController::class, 'save'])->whereNumber('job');
+                Route::post('candidates/{candidate}/checks', [RecruitmentCandidateCheckController::class, 'store']);
+                Route::put('candidate-checks/{check}', [RecruitmentCandidateCheckController::class, 'update'])->whereNumber('check');
+                Route::post('candidate-checks/{check}/waive', [RecruitmentCandidateCheckController::class, 'waive'])->whereNumber('check');
+                Route::post('candidate-checks/{check}/send-request', [RecruitmentCandidateCheckController::class, 'sendRequest'])->whereNumber('check');
+                Route::delete('candidate-checks/{check}', [RecruitmentCandidateCheckController::class, 'destroy'])->whereNumber('check');
+                Route::post('recruitment/agencies', [RecruitmentReferralController::class, 'storeAgency']);
+                Route::put('recruitment/agencies/{agency}', [RecruitmentReferralController::class, 'updateAgency'])->whereNumber('agency');
+                Route::delete('recruitment/agencies/{agency}', [RecruitmentReferralController::class, 'destroyAgency'])->whereNumber('agency');
+                Route::put('recruitment/referral-bonuses/{bonus}', [RecruitmentReferralController::class, 'updateBonus'])->whereNumber('bonus');
+                Route::post('recruitment/referral-bonuses/{bonus}/approve', [RecruitmentReferralController::class, 'approveBonus'])->whereNumber('bonus');
+                Route::post('recruitment/referral-bonuses/{bonus}/pay', [RecruitmentReferralController::class, 'payBonus'])->whereNumber('bonus');
+                Route::post('recruitment/referral-bonuses/{bonus}/cancel', [RecruitmentReferralController::class, 'cancelBonus'])->whereNumber('bonus');
+                Route::patch('candidates/{candidate}/stage', [RecruitmentCandidateController::class, 'changeStage']);
+                Route::put('recruitment/careers-settings', [RecruitmentCareersSettingsController::class, 'update']);
+                Route::post('candidates/{candidate}/resume', [RecruitmentCandidateController::class, 'uploadResume']);
+                Route::post('candidates/{candidate}/resume/parse', [RecruitmentCandidateController::class, 'reparseResume']);
+                Route::post('recruitment/resume-parse', [RecruitmentCandidateController::class, 'parseResume']);
+                Route::post('candidates/{candidate}/portal-link', [RecruitmentCandidateController::class, 'portalLink']);
+                Route::post('candidates/{candidate}/talent-pool', [RecruitmentCandidateController::class, 'addToTalentPool']);
+                Route::delete('candidates/{candidate}/talent-pool', [RecruitmentCandidateController::class, 'removeFromTalentPool']);
+                Route::post('candidates/{candidate}/consider', [RecruitmentCandidateController::class, 'considerForJob']);
+                Route::post('candidates/bulk', [RecruitmentCandidateBulkController::class, 'apply']);
+                Route::get('candidates/bulk-runs/{run}', [RecruitmentCandidateBulkController::class, 'run'])->whereNumber('run');
+                Route::post('candidates/{candidate}/merge', [RecruitmentCandidateController::class, 'merge']);
+                Route::post('candidates/{candidate}/erase', [RecruitmentCandidateController::class, 'erase']);
+                Route::post('candidates/{candidate}/messages', [RecruitmentCandidateController::class, 'sendMessage']);
+                Route::post('candidates/{candidate}/talent-pool/consent-request', [RecruitmentCandidateController::class, 'requestPoolConsent']);
+                Route::post('reschedule-requests/{request}/decline', [RecruitmentCandidateController::class, 'declineReschedule'])->whereNumber('request');
+                Route::post('email-templates/starters', [RecruitmentEmailTemplateController::class, 'addStarters']);
+                Route::apiResource('email-templates', RecruitmentEmailTemplateController::class)->only(['store', 'update', 'destroy']);
+                Route::put('recruitment/headcount', [RecruitmentHeadcountBudgetController::class, 'upsert']);
+                Route::put('recruitment/currency', [RecruitmentHeadcountBudgetController::class, 'saveCurrency']);
+                Route::delete('recruitment/headcount/{id}', [RecruitmentHeadcountBudgetController::class, 'destroy'])->whereNumber('id');
+                Route::post('candidates/import', [RecruitmentCandidateBulkController::class, 'import']);
+                Route::post('candidates/{candidate}/documents', [RecruitmentCandidateDocumentController::class, 'store']);
+                Route::post('candidates/{candidate}/documents/request', [RecruitmentCandidateDocumentController::class, 'requestDocuments']);
+                Route::post('candidates/{candidate}/documents/{document}/review', [RecruitmentCandidateDocumentController::class, 'review'])->whereNumber('document');
+                Route::delete('candidates/{candidate}/documents/{document}', [RecruitmentCandidateDocumentController::class, 'destroy'])->whereNumber('document');
+                Route::delete('candidates/{candidate}/resume', [RecruitmentCandidateController::class, 'deleteResume']);
+                Route::post('candidates/{candidate}/notes', [RecruitmentCandidateController::class, 'addNote']);
+                Route::apiResource('offers', RecruitmentOfferController::class)->only(['store', 'update', 'destroy']);
+                Route::apiResource('onboarding-tasks', RecruitmentOnboardingTaskController::class)->only(['store', 'update', 'destroy']);
+                Route::apiResource('onboarding-templates', RecruitmentOnboardingTemplateController::class)->only(['store', 'update', 'destroy']);
+                Route::post('job-openings/{job}/submit', [RecruitmentJobOpeningController::class, 'submitRequisition'])->whereNumber('job');
+                Route::post('offers/{offer}/submit', [RecruitmentOfferController::class, 'submit']);
+                Route::post('offers/{offer}/send', [RecruitmentOfferController::class, 'send']);
+                Route::post('offers/{offer}/respond', [RecruitmentOfferController::class, 'respond']);
+                Route::post('offers/{offer}/withdraw', [RecruitmentOfferController::class, 'withdraw']);
+                Route::delete('candidates/{candidate}/notes/{note}', [RecruitmentCandidateController::class, 'deleteNote']);
                 Route::apiResource('job-openings', RecruitmentJobOpeningController::class)->except(['index', 'show']);
                 Route::apiResource('candidates', RecruitmentCandidateController::class)->except(['index', 'show']);
+                Route::post('interviews/{interview}/cancel', [RecruitmentInterviewController::class, 'cancel']);
                 Route::apiResource('interviews', RecruitmentInterviewController::class)->except(['index', 'show']);
                 Route::apiResource('onboarding', RecruitmentOnboardingController::class)->except(['index', 'show']);
             });

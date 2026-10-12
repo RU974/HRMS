@@ -12,7 +12,8 @@
         "laravel/reverb": "^1.10",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
-        "rats/zkteco": "^002.0"
+        "rats/zkteco": "^002.0",
+        "smalot/pdfparser": "^2.12"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

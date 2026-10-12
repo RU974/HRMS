@@ -34,6 +34,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Holds the company's exchange rates for the length of a request.
+        $this->app->singleton(\App\Services\Recruitment\CurrencyService::class);
+
         //
     }
 
@@ -50,6 +53,39 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('auth', function (Request $request): Limit {
             return Limit::perMinute(10)->by(sprintf('%s|%s', (string) $request->ip(), (string) $request->input('email')));
+        });
+
+        // Public careers site: generous reads, strict applications per visitor.
+        RateLimiter::for('careers-read', function (Request $request): Limit {
+            return Limit::perMinute(60)->by('careers-read:' . $request->ip());
+        });
+
+        RateLimiter::for('careers-apply', function (Request $request): array {
+            return [
+                Limit::perMinute(6)->by('careers-apply:' . $request->ip()),
+                Limit::perHour(30)->by('careers-apply-hour:' . $request->ip()),
+            ];
+        });
+
+        // A candidate answering an offer or uploading a handful of documents; per link and per visitor.
+        RateLimiter::for('portal-write', function (Request $request): Limit {
+            return Limit::perMinute(30)->by('portal-write:' . $request->ip() . '|' . $request->route('token'));
+        });
+
+        // Emailing a signing code: few per link so the inbox cannot be flooded.
+        RateLimiter::for('portal-code', function (Request $request): array {
+            return [
+                Limit::perMinute(3)->by('portal-code:' . $request->route('token')),
+                Limit::perHour(10)->by('portal-code-hour:' . $request->route('token')),
+            ];
+        });
+
+        // Asking for a portal link rotates it, so one address cannot be hammered.
+        RateLimiter::for('portal-link', function (Request $request): array {
+            return [
+                Limit::perHour(3)->by('portal-link:' . $request->ip() . '|' . mb_strtolower((string) $request->input('email'))),
+                Limit::perHour(12)->by('portal-link-ip:' . $request->ip()),
+            ];
         });
 
         RateLimiter::for('search', function (Request $request): Limit {
@@ -104,6 +140,15 @@ class AppServiceProvider extends ServiceProvider
         // Leave request notifications
         Event::listen(LeaveRequested::class, NotifyLeaveRequested::class);
         Event::listen(LeaveStatusChanged::class, NotifyLeaveStatusChanged::class);
+
+        // Offers mirror the outcome of their approval (see OfferService::applyApprovalResult).
+        // Job requisitions do the same (see JobRequisitionService::applyApprovalResult).
+        $syncRecruitmentApproval = function ($event) {
+            app(\App\Services\Recruitment\OfferService::class)->applyApprovalResult($event->approval);
+            app(\App\Services\Recruitment\JobRequisitionService::class)->applyApprovalResult($event->approval);
+        };
+        Event::listen(\App\Events\ApprovalApproved::class, $syncRecruitmentApproval);
+        Event::listen(\App\Events\ApprovalRejected::class, $syncRecruitmentApproval);
 
         // Ticket notifications
         Ticket::observe(TicketObserver::class);

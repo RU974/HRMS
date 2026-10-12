@@ -13,6 +13,7 @@ import {
   AlertCircle, TrendingDown, Activity, Award,
 } from "lucide-react";
 import { TicketStatsWidget } from "@/modules/tickets/ticket-stats-widget";
+import { RecruitmentDashboardWidget } from "@/modules/recruitment/recruitment-dashboard-widget";
 import { useChartJs } from "./use-chart-js";
 import { Chart } from "@/lib/chart-setup";
 
@@ -510,6 +511,9 @@ export function ManagementDashboard({ roleName }: { roleName: string }) {
 
       {/* ── Ticket stats widget ── */}
       <TicketStatsWidget />
+
+      {/* ── Recruitment snapshot (hidden without recruitment access) ── */}
+      <RecruitmentDashboardWidget />
 
       {/* ── Bottom row ── */}
       <section className="grid gap-4 xl:grid-cols-3">

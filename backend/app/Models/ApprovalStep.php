@@ -75,7 +75,7 @@ class ApprovalStep extends Model
      *
      * @return Collection<int, int>
      */
-    public function approverUserIds(?int $requestedBy = null, ?int $companyId = null): Collection
+    public function approverUserIds(?int $requestedBy = null, int|string|null $companyId = null): Collection
     {
         $rows = $this->approvers->isNotEmpty()
             ? $this->approvers
@@ -101,7 +101,7 @@ class ApprovalStep extends Model
     /**
      * @return Collection<int, int>
      */
-    private function resolveApprover(string $type, ?string $identifier, ?int $requestedBy, ?int $companyId): Collection
+    private function resolveApprover(string $type, ?string $identifier, ?int $requestedBy, int|string|null $companyId): Collection
     {
         if ($identifier === null) {
             return collect();

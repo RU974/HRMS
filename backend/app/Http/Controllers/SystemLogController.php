@@ -18,7 +18,7 @@ class SystemLogController extends Controller
         $this->scopeToCompany($request, $q, 'user');
 
         if ($request->filled('method')) {
-            $q->where('http_method', strtoupper((string) $request->input('method')));
+            $q->where('method', strtoupper((string) $request->input('method')));
         }
         if ($request->filled('module')) {
             $q->where('module', $request->input('module'));
@@ -29,8 +29,10 @@ class SystemLogController extends Controller
         if ($request->filled('search')) {
             $search = (string) $request->input('search');
             $q->where(function ($query) use ($search): void {
-                $query->where('description', 'like', '%' . $search . '%')
-                    ->orWhere('endpoint', 'like', '%' . $search . '%');
+                $query->where('module', 'like', '%' . $search . '%')
+                    ->orWhere('action', 'like', '%' . $search . '%')
+                    ->orWhere('user_role', 'like', '%' . $search . '%')
+                    ->orWhere('ip_address', 'like', '%' . $search . '%');
             });
         }
 

@@ -44,7 +44,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
         $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
         Sanctum::actingAs($employeeUser);
 
-        $this->get('/api/v1/employees/export/csv')->assertForbidden();
+        $this->post('/api/v1/employees/export/csv')->assertForbidden();
     }
 
     public function test_employee_cannot_check_in_for_another_employee()
@@ -320,7 +320,7 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
             ->assertJsonFragment(['correction_status' => 'pending']);
     }
 
-    public function test_attendance_update_rejects_checkout_before_checkin()
+    public function test_attendance_update_treats_an_earlier_checkout_as_the_next_day()
     {
         $managerUser = $this->createUserWithRole(User::ROLE_ATTENDANCE_MANAGER);
         $department = Department::create(['name' => 'Finance']);
@@ -346,9 +346,15 @@ class EmployeeAttendanceAuthorizationTest extends TestCase
         $this->putJson('/api/v1/attendance/' . $attendance->id, [
             'check_in' => '09:00',
             'check_out' => '08:00',
-        ])
-            ->assertStatus(422)
-            ->assertJson(['message' => 'Check-out cannot be earlier than check-in.']);
+        ])->assertOk();
+
+        // A check-out clock time earlier than the check-in is a night shift ending the next day, not an error.
+        $attendance->refresh();
+        $this->assertSame(
+            \Carbon\Carbon::parse($attendance->date)->addDay()->toDateString(),
+            \Carbon\Carbon::parse($attendance->check_out)->toDateString()
+        );
+        $this->assertTrue(\Carbon\Carbon::parse($attendance->check_out)->greaterThan(\Carbon\Carbon::parse($attendance->check_in)));
     }
 }
 

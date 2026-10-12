@@ -61,3 +61,9 @@ Schedule::command('calls:expire-stale')->everyMinute()->withoutOverlapping();
 
 // WebRTC signalling rows are only useful during call setup.
 Schedule::command('calls:prune-signals')->daily();
+
+// ─── Recruitment ────────────────────────────────────────────────────────────
+
+// Remind interviewers about missing scorecards and assignees about due onboarding tasks.
+Schedule::command('recruitment:send-reminders')->hourly();
+Schedule::command('recruitment:apply-retention')->dailyAt('02:30');

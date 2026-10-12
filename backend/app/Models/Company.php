@@ -24,10 +24,22 @@ class Company extends Model
         'timezone',
         'is_active',
         'logo_path',
+        'careers_slug',
+        'careers_enabled',
+        'careers_intro',
+        'requisition_approval_required',
+        'requisition_cost_threshold',
+        'base_currency',
+        'talent_pool_retention_months',
+        'candidate_retention_months',
+        'referral_bonus_amount',
+        'referral_bonus_wait_days',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'careers_enabled' => 'boolean',
+        'requisition_approval_required' => 'boolean',
     ];
 
     protected $appends = [

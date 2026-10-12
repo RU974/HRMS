@@ -22,7 +22,7 @@ class RolePermissionSeeder extends Seeder
                 'recruitment:view', 'recruitment:create', 'recruitment:edit', 'recruitment:delete',
                 'documents:view', 'documents:create', 'documents:edit', 'documents:delete',
                 'approvals:view', 'approvals:approve', 'approvals:manage_settings',
-                'settings:manage_settings', 'reports:view', 'reports:manage_settings', 'reports:export',
+                'settings:manage_settings', 'audit_logs:view', 'reports:view', 'reports:manage_settings', 'reports:export',
                 'performance:view', 'performance:edit', 'performance:manage_settings',
                 'announcement:view', 'announcement:create', 'announcement:edit', 'announcement:delete',
                 'notification:view', 'notification:create', 'notification:edit', 'notification:delete',
@@ -36,12 +36,13 @@ class RolePermissionSeeder extends Seeder
                 'dashboard:view',
                 'employees:view', 'employees:view_all', 'employees:create', 'employees:edit',
                 'leaves:view', 'leaves:approve', 'leaves:manage_settings',
-                'attendance:view', 'attendance:edit',
+                'attendance:view', 'attendance:edit', 'attendance:approve',
                 'payroll:view',
                 'recruitment:view', 'recruitment:create', 'recruitment:edit',
                 'documents:view', 'documents:create', 'documents:edit', 'documents:delete',
                 'approvals:view', 'approvals:approve', 'approvals:manage_settings',
                 'reports:view', 'reports:export', 'announcement:view', 'announcement:create', 'announcement:edit',
+                'notification:view',
                 'performance:view', 'performance:edit',
                 'chat:view', 'chat:create', 'call:use',
                 'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:delete', 'tickets:assign',
@@ -73,7 +74,7 @@ class RolePermissionSeeder extends Seeder
             ],
             'Attendance Manager' => [
                 'dashboard:view',
-                'attendance:view', 'attendance:create', 'attendance:edit', 'attendance:manage_settings',
+                'attendance:view', 'attendance:create', 'attendance:edit', 'attendance:approve', 'attendance:manage_settings',
                 'biometric:view', 'biometric:create', 'biometric:edit', 'biometric:sync', 'biometric:manage_mapping',
                 'employees:view', 'employees:view_all',
                 'approvals:view',
@@ -104,6 +105,7 @@ class RolePermissionSeeder extends Seeder
                 'chat:view', 'chat:create', 'call:use',
                 'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:assign',
                 'payroll:view_own',
+                'recruitment:request',
             ],
             'IT Support' => [
                 'dashboard:view',
@@ -141,6 +143,13 @@ class RolePermissionSeeder extends Seeder
             }
 
             $permissions = [];
+
+            // Any employee can be asked to interview a candidate or own an onboarding task, so
+            // every role may act on its own assignments. Access to other people's data is still
+            // governed by recruitment:view.
+            if ($roleName !== 'Super Admin') {
+                $permissionNames = array_merge($permissionNames, ['recruitment:interview', 'recruitment:onboarding_task', 'recruitment:refer']);
+            }
 
             foreach ($permissionNames as $permName) {
                 if ($permName === '*.*') {

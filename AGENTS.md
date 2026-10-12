@@ -6,7 +6,7 @@ Repository guidance for coding agents working in the HRMS repository.
 
 - **Owner:** Engineering Team
 - **Root:** repository root (use relative paths such as `backend/` and `build/`)
-- **Last-updated:** 2026-06-28
+- **Last-updated:** 2026-10-13
 
 ## Purpose
 
@@ -96,7 +96,8 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 | `payroll/` | Payroll run, salary grades, increments, bonuses, deductions, loan advances, tax brackets, payslips |
 | `performance/` | Appraisals, goals, KPIs, reviews, templates, trends |
 | `profile/` | Employee self-service profile |
-| `recruitment/` | Job openings, candidates, interviews, onboarding pipeline |
+| `recruitment/` | Overview, jobs, candidates (Kanban board + detail page with resume, notes, timeline), interviews (calendar, scorecards), offers (approval, PDF), onboarding (templates + tasks), reports |
+| `careers/` | Public, unauthenticated careers site (`/careers/:slug`) with job detail and application form, and the private candidate portal (`/candidate-portal/:token`) |
 | `reports/` | Employee, attendance, payroll, leave, and analytics report pages |
 | `search/` | Global search results |
 | `settings/` | Company settings and licensing tab |
@@ -163,10 +164,23 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 | `PerformanceReviewController` | Review cycles |
 | `PerformanceReviewTemplateController` | Review templates |
 | `PerformanceMetaController` | Performance meta configuration |
-| `Recruitment/JobOpeningController` | Job opening CRUD |
-| `Recruitment/CandidateController` | Candidate pipeline |
-| `Recruitment/InterviewController` | Interview scheduling |
-| `Recruitment/OnboardingController` | Onboarding tasks |
+| `Recruitment/JobOpeningController` | Job opening CRUD (owners, salary range, public flag) |
+| `Recruitment/CandidateController` | Candidate pipeline, stage changes, hire action, board, resume, notes |
+| `Recruitment/InterviewController` | Interview scheduling, conflict detection, cancel, scorecards |
+| `Recruitment/OfferController` | Offer lifecycle (draft → approval → sent → accepted), PDF |
+| `Recruitment/OnboardingController` | Hired-candidate onboarding records and progress |
+| `Recruitment/OnboardingTaskController` | Onboarding tasks (assign, complete, skip) |
+| `Recruitment/OnboardingTemplateController` | Onboarding task templates |
+| `Recruitment/RecruitmentAnalyticsController` | Overview numbers and hiring analytics |
+| `Recruitment/CareersSettingsController` | Public careers page settings |
+| `Recruitment/CareersController` | Public careers API (no auth, rate limited) |
+| `Recruitment/RecruitmentDirectoryController` | Company-scoped people picker for recruitment forms |
+| `Recruitment/JobRequisitionController` | Hiring-manager endpoints to request, edit, resubmit and withdraw a job requisition |
+| `Recruitment/CandidateBulkController` | Bulk candidate actions (move, reject, tag, pool, email) on ticked ids or on everything matching a filter (`select_all`, large runs report progress via `candidates/bulk-runs/{id}`), and CSV import with dry run |
+| `Recruitment/CandidateDocumentController` | Staff side of candidate documents: request, upload, review, download |
+| `Recruitment/CandidatePortalController` | Public candidate portal (token link): status, offer accept (emailed one-time code + consent = e-signature record) / decline, document upload, reschedule request, withdraw, messages, talent-pool consent, erase my data |
+| `Recruitment/EmailTemplateController` | Saved candidate email templates (and the ready-made starter set) |
+| `Recruitment/HeadcountBudgetController` | Approved headcount / new-hire budget per department and year, usage summary, live budget check for a role |
 | `InventoryCategoryController` | Inventory category CRUD |
 | `InventoryItemController` | Inventory item CRUD |
 | `InventoryAssignmentController` | Item assignment to employees |
@@ -219,6 +233,32 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 | `UserManagementService` | User creation and management helpers |
 | `WorkflowEngine` | Workflow template parsing and instantiation |
 | `Recruitment/Search` | Recruitment-scoped search |
+| `Recruitment/CandidateWorkflowService` | Stage rules, stage history, hire (employee + user + onboarding) |
+| `Recruitment/OfferService` | Offer lifecycle, approval via `ApprovalEngine`, PDF letter |
+| `Recruitment/OnboardingService` | Applies templates at hire, task status, progress sync, reminders |
+| `Recruitment/RecruitmentNotificationService` | In-app recruitment notifications (never throws) |
+| `Recruitment/RecruitmentAnalyticsService` | Funnel, time-to-hire, source and offer analytics |
+| `Recruitment/ResumeStorageService` | Private resume storage (`local` disk, authenticated download only); parses on upload |
+| `Recruitment/ResumeParserService` | Reads PDF/DOCX/DOC text and extracts name, email, phone, skills and experience (best effort, never throws) |
+| `Recruitment/JobRequisitionService` | Job requisition approval via `WorkflowEngine`/`ApprovalEngine` (HR Manager step, plus a Company Admin step when over the approved headcount/budget or cost threshold), result mirrored onto the job |
+| `Recruitment/CandidatePortalService` | Issues hashed-token portal links and builds the candidate-safe portal view; offer answers |
+| `Recruitment/CandidateDocumentService` | Requested/uploaded candidate documents on the private disk |
+| `Recruitment/DuplicateCandidateService` | Same person across jobs (matching email or normalised phone, per company) |
+| `Recruitment/TalentPoolService` | Silver-medalist / general talent pool, consent (granted / declined) and retention expiry, matches for new openings, and putting a pool candidate forward for another job |
+| `Recruitment/CandidateBulkService` / `CandidateImportService` | Per-candidate bulk actions with partial-success reporting; CSV import |
+| `Recruitment/CandidateMailer` | Plain-text candidate email with `{{name}}`, `{{first_name}}`, `{{job}}`, `{{company}}` placeholders (failures are logged, never thrown) |
+| `Recruitment/CandidateFilter` | The single place candidate-list filters become query constraints (table, board and "select everything matching") |
+| `Recruitment/CandidateBulkRunService` | Resolves a filter-wide selection on the server, runs it inline (<=200) or as a recorded run finished after the response (`RunCandidateBulkAction`) |
+| `Recruitment/FitScoringService` | Scores a resume against a job's requirements (skills 70 / experience 30), stores `fit_score` + breakdown, suggests talent-pool people for an opening |
+| `Recruitment/DuplicateMergeService` | Folds duplicate applications into one record (interviews, notes, documents, offers, history, messages move over) |
+| `Recruitment/CandidateMessageService` | Candidate <-> team message thread on the candidate record |
+| `Recruitment/InterviewRescheduleService` | Candidate reschedule requests; moving the interview answers them and emails the new time |
+| `Recruitment/CandidateWithdrawalService` | Candidate withdraws: rejected with a "withdrawn" reason, interviews cancelled, offers withdrawn |
+| `Recruitment/OfferSigningService` | E-signature evidence for portal acceptance: emailed code, typed name, consent text, IP/user agent, document fingerprint; freezes the signed PDF and seals the record with an HMAC so `verify()` (`GET offers/{id}/signature-verification`) detects any later change. Auditable, not a certified signature |
+| `Recruitment/HeadcountService` | Headcount/budget usage and the budget check that decides whether a requisition also needs the Company Admin; money is converted into the company's base currency |
+| `Recruitment/CurrencyService` | Company base currency and exchange rates (`recruitment/currency`); a currency with no rate is reported and escalated, never guessed |
+| `Recruitment/ResumeAiExtractor` | Optional (off by default) AI second opinion for resumes the pattern parser could not follow; fills only missing name/skills/experience |
+| `Recruitment/CandidateRetentionService` | Erases personal data on request or when a company's retention period passes (`recruitment:apply-retention`, daily) |
 
 ### Backend conventions
 
@@ -234,6 +274,8 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 - Versioned mirror: `/api/v1/*` (use only when needed)
 - Protected routes: `auth:sanctum` and `audit.log` middleware
 - Biometric agent routes: `/api/auth/biometric-agent/*` — authenticated by shared secret (no session)
+- Public careers routes: `/api/v1/public/careers/{slug}[/jobs/{id}[/apply]]` and `POST /api/v1/public/careers/{slug}/portal-link` — unauthenticated, throttled (`careers-read`, `careers-apply`, `portal-link`), company resolved by slug only
+- Candidate portal routes: `/api/v1/public/portal/{token}[/offer|/offer-pdf|/documents[/{id}/download]]` — unauthenticated, throttled (`careers-read`, `portal-write`); the secret token (only its SHA-256 hash is stored) identifies one candidate and nothing internal (notes, ratings, scorecards, rejection reasons) is ever returned
 - Success response shape: `{ success: true, message: string, data: ... }`
 - Error response shape: `{ success: false, message: string, errors?: ... }`
 
@@ -249,6 +291,13 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 - Device registration and employee mapping are managed from the HRMS web UI (biometric-devices module)
 
 ## Access control
+
+- Recruitment uses `recruitment:view|create|edit|delete|manage_settings`, plus `recruitment:interview` and `recruitment:onboarding_task` which every role holds so people can score their own interviews and complete their own onboarding tasks (they never see other recruitment data). Offer decisions need `approvals:approve` and the HR Manager / Company Admin role.
+- `recruitment:request` lets a Department Manager raise a job requisition (`/requisitions`) without any other recruitment access. When a company turns on `requisition_approval_required` (recruitment settings), every new job also goes through approval; approvers need `approvals:approve` plus the HR Manager / Company Admin role and cannot approve their own request.
+- Scheduled job `recruitment:send-reminders` (hourly) sends scorecard and onboarding-task reminders and expires stale offers.
+- Scheduled job `recruitment:apply-retention` (daily) lets expired talent-pool entries lapse, warns the team 14 days before, and erases rejected candidates older than the company's `candidate_retention_months`. Retention periods, the requisition cost threshold and headcount budgets are managed under `recruitment:manage_settings` (Jobs > Careers page / Headcount budgets).
+- Resume parsing is pattern based and reports a confidence per field (`resume_parsed.confidence`). A guessed or missing name flags the resume (`name_unclear`). Set `RECRUITMENT_AI_PARSER=true` plus `ANTHROPIC_API_KEY` to let Anthropic's API fill gaps; this sends resume text to a third party, so it is opt-in.
+- Scanned or image-only resumes (PDF, JPG, PNG) are read by `ResumeOcrService` when Tesseract (and Poppler's `pdftoppm` for PDFs) are installed; they are auto-detected on PATH or the usual install folders, or set via `RECRUITMENT_TESSERACT_PATH` / `RECRUITMENT_PDFTOPPM_PATH` / `RECRUITMENT_OCR_COMMAND`. Without them, unreadable resumes are flagged (`resume_review_reason`) rather than guessed at. The careers settings report `email_delivery: false` while `MAIL_MAILER` is `log`.
 
 - Assume role and permission restrictions on protected endpoints.
 - Do not use manager/admin-only endpoints for employee self-service flows.

@@ -13,7 +13,8 @@ class SettingsLogsAuthorizationTest extends TestCase
 
     public function test_company_admin_can_view_system_logs(): void
     {
-        $companyAdmin = $this->createUserWithRole(User::ROLE_COMPANY_ADMIN);
+        $company = \App\Models\Company::create(['name' => 'Logs Co']);
+        $companyAdmin = $this->createUserWithRole(User::ROLE_COMPANY_ADMIN, ['company_id' => $company->id]);
 
         Sanctum::actingAs($companyAdmin);
 
@@ -25,7 +26,7 @@ class SettingsLogsAuthorizationTest extends TestCase
     public function test_audit_only_user_cannot_view_system_logs(): void
     {
         $user = $this->createUserWithRole(User::ROLE_EMPLOYEE);
-        $user->givePermissionTo('view audit logs');
+        $user->givePermissionTo('audit_logs:view');
 
         Sanctum::actingAs($user);
 

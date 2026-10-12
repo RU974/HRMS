@@ -213,9 +213,11 @@ class ReportDashboardTest extends TestCase
 
     public function test_dashboard_summary_returns_expected_structure(): void
     {
-        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);
+        $company = \App\Models\Company::create(['name' => 'Dashboard Co']);
+        $user = $this->createUserWithRole(User::ROLE_HR_MANAGER, ['company_id' => $company->id]);
         $department = Department::create(['name' => 'Operations']);
         $employee = Employee::create([
+            'company_id' => $company->id,
             'user_id' => $user->id,
             'name' => 'Summary Employee',
             'email' => 'summary.employee@example.com',

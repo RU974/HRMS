@@ -72,6 +72,7 @@ class ApprovalWorkflowTest extends TestCase
     public function test_company_scoped_approvals_are_visible_only_to_same_company_users(): void
     {
         $companyA = Company::create(['name' => 'Company A']);
+        $this->grantLicense($companyA, ["approvals"]);
         $companyB = Company::create(['name' => 'Company B']);
 
         $companyAdmin = $this->createUserWithRole(User::ROLE_SUPER_ADMIN, [

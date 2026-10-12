@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Approval;
 use App\Models\ApprovalStep;
 use App\Models\Workflow;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class WorkflowTest extends TestCase
@@ -150,21 +152,23 @@ class WorkflowTest extends TestCase
 
     public function test_create_workflow_with_validation(): void
     {
-        $response = $this->postJson('/api/v1/workflows', [
+        $payload = [
             'name' => 'Payroll Approval',
             'module' => 'payroll',
-            'definition' => json_encode([
-                'steps' => [
-                    [
-                        'step_number' => 1,
-                        'approver_type' => 'role',
-                        'approver_identifier' => 1,
-                    ],
-                ],
-            ]),
-        ]);
+            'definition' => ['description' => 'Payroll approval'],
+            'steps' => [
+                ['step_order' => 1, 'approver_type' => 'role', 'approver_identifier' => User::ROLE_HR_MANAGER, 'conditions' => []],
+            ],
+        ];
 
-        $response->assertStatus(201);
+        // Workflow management needs a signed-in user with the right permission.
+        $this->postJson('/api/v1/workflows', $payload)->assertUnauthorized();
+
+        Sanctum::actingAs($this->createUserWithRole(User::ROLE_SUPER_ADMIN));
+
+        $this->postJson('/api/v1/workflows', array_diff_key($payload, ['steps' => 1]))->assertStatus(422)->assertJsonValidationErrors('steps');
+        $this->postJson('/api/v1/workflows', $payload)->assertStatus(201)->assertJsonPath('data.name', 'Payroll Approval');
+
         $this->assertDatabaseHas('workflows', [
             'name' => 'Payroll Approval',
             'module' => 'payroll',

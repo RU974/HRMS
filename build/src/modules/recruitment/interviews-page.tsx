@@ -1,264 +1,255 @@
-import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
-import { FormEvent, useState } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormInput } from "@/components/forms/form-input";
-import { Modal } from "@/components/modals/modal";
+import { toast } from "@/components/notifications/toast";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import {
-  Candidate,
-  Interview,
-  InterviewPayload,
-  createInterview,
-  deleteInterview,
-  listCandidates,
-  listInterviews,
-  updateInterview,
-} from "@/services/recruitment-service";
-import { RecruitmentSubnav, formatRecruitmentDate } from "./shared";
-import { toast } from "@/components/notifications/toast";
+import { Interview, deleteInterview, listInterviews } from "@/services/recruitment-service";
+import { useAuthStore } from "@/store/auth-store";
+import { CancelInterviewModal, InterviewFormModal, ScorecardModal } from "./interview-components";
+import { Badge, ConfirmModal, RecruitmentSubnav, formatRecruitmentDate, selectClass } from "./shared";
 
-const defaultInterviewForm: InterviewPayload = {
-  candidate_id: 0,
-  interviewer_name: "",
-  interview_type: "technical",
-  scheduled_at: "",
-  result: "pending",
-  feedback: "",
-};
+type View = "calendar" | "list";
+
+function startOfWeek(date: Date) {
+  const result = new Date(date);
+  const day = (result.getDay() + 6) % 7; // Monday = 0
+  result.setHours(0, 0, 0, 0);
+  result.setDate(result.getDate() - day);
+  return result;
+}
+
+function isoDate(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const resultTone = { pass: "emerald", fail: "red", hold: "amber", pending: "slate" } as const;
+const statusTone = { scheduled: "blue", completed: "emerald", cancelled: "slate" } as const;
 
 export function InterviewsPage() {
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const viewAll = hasPermission("recruitment:view");
+  const canCreate = hasPermission("recruitment:create");
+  const canEdit = hasPermission("recruitment:edit");
+  const canDelete = hasPermission("recruitment:delete");
+
+  const [view, setView] = useState<View>("calendar");
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [mineOnly, setMineOnly] = useState(!viewAll);
+  const [statusFilter, setStatusFilter] = useState<Interview["status"] | "">("");
   const [search, setSearch] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingInterview, setEditingInterview] = useState<Interview | null>(null);
-  const [interviewForm, setInterviewForm] = useState<InterviewPayload>(defaultInterviewForm);
+  const [formState, setFormState] = useState<{ open: boolean; interview: Interview | null }>({ open: false, interview: null });
+  const [cancelTarget, setCancelTarget] = useState<Interview | null>(null);
+  const [scorecardTarget, setScorecardTarget] = useState<Interview | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Interview | null>(null);
+
+  const weekEnd = useMemo(() => {
+    const end = new Date(weekStart);
+    end.setDate(end.getDate() + 6);
+    return end;
+  }, [weekStart]);
 
   const interviewsQuery = useQuery({
-    queryKey: ["recruitment", "interviews", search],
-    queryFn: () => listInterviews(search),
-  });
-  const candidatesQuery = useQuery({
-    queryKey: ["recruitment", "candidates", "interview-options"],
-    queryFn: () => listCandidates(),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: createInterview,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
-      toast.success("Interview scheduled", "Interview has been scheduled successfully.");
-      closeModal();
-    },
-    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: Partial<InterviewPayload> }) => updateInterview(id, payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
-      toast.success("Interview updated", "Interview details saved.");
-      closeModal();
-    },
-    onError: (mutationError: Error) => { toast.error("Save failed", mutationError.message); setError(mutationError.message); },
+    queryKey: ["recruitment", "interviews", { view, from: isoDate(weekStart), search, mineOnly, statusFilter }],
+    queryFn: () =>
+      listInterviews({
+        mine: mineOnly,
+        status: statusFilter,
+        ...(view === "calendar" ? { from: isoDate(weekStart), to: isoDate(weekEnd) } : { q: search || undefined }),
+      }),
+    placeholderData: (previous) => previous,
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteInterview,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["recruitment", "interviews"] });
+      await queryClient.invalidateQueries({ queryKey: ["recruitment"] });
       toast.success("Deleted", "Interview removed.");
+      setDeleteTarget(null);
     },
-    onError: (mutationError: Error) => { toast.error("Delete failed", mutationError.message); setError(mutationError.message); },
+    onError: (error: Error) => {
+      toast.error("Delete failed", error.message);
+      setDeleteTarget(null);
+    },
   });
 
-  const { sorted: interviews, sort, toggle: toggleSort } = useTableSort(interviewsQuery.data?.data ?? [], "candidate", {
-    candidate: (i) => i.candidate?.full_name,
+  const interviews = useMemo(
+    () => [...(interviewsQuery.data?.data ?? [])].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)),
+    [interviewsQuery.data]
+  );
+
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(weekStart);
+    day.setDate(day.getDate() + index);
+    return day;
   });
-  const candidates = (candidatesQuery.data?.data ?? []).filter((candidate: Candidate) => candidate.stage !== "rejected");
 
-  function closeModal() {
-    setModalOpen(false);
-    setError(null);
-    setEditingInterview(null);
-    setInterviewForm(defaultInterviewForm);
+  function canScore(interview: Interview) {
+    if (interview.status === "cancelled" || !interview.interviewer_id) return false;
+    if (new Date(interview.scheduled_at) > new Date()) return false;
+    // Recruiters see every interview but may only score their own; interviewers only ever receive their own.
+    return viewAll ? interview.interviewer?.user_id === user?.id : true;
   }
 
-  function openCreate() {
-    closeModal();
-    setModalOpen(true);
+  function actions(interview: Interview) {
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        {canScore(interview) && (
+          <Button variant="outline" onClick={() => setScorecardTarget(interview)}>
+            {interview.my_scorecard || interview.scorecards?.some((card) => card.submitted_by === user?.id) ? "Edit scorecard" : "Scorecard"}
+          </Button>
+        )}
+        {canEdit && interview.status === "scheduled" && <Button variant="outline" onClick={() => setCancelTarget(interview)}>Cancel</Button>}
+        {canEdit && <Button variant="outline" onClick={() => setFormState({ open: true, interview })}>Edit</Button>}
+        {canDelete && <Button variant="outline" onClick={() => setDeleteTarget(interview)}>Delete</Button>}
+      </div>
+    );
   }
 
-  function submitForm(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
-    if (!interviewForm.candidate_id || !interviewForm.interviewer_name.trim() || !interviewForm.scheduled_at) {
-      setError("Candidate, interviewer, and schedule are required.");
-      return;
-    }
-
-    const payload: InterviewPayload = {
-      ...interviewForm,
-      interviewer_name: interviewForm.interviewer_name.trim(),
-      feedback: interviewForm.feedback?.trim() || "",
-    };
-
-    if (editingInterview) {
-      updateMutation.mutate({ id: editingInterview.id, payload });
-      return;
-    }
-
-    createMutation.mutate(payload);
-  }
-
-  async function onDelete(id: number) {
-    if (!window.confirm("Delete this interview record?")) return;
-    setError(null);
-    await deleteMutation.mutateAsync(id);
-  }
+  const candidateLink = (interview: Interview) =>
+    viewAll && interview.candidate_id ? (
+      <Link className="hover:underline" to={`/recruitment/candidates/${interview.candidate_id}`}>{interview.candidate?.full_name ?? "-"}</Link>
+    ) : (
+      <>{interview.candidate?.full_name ?? "-"}</>
+    );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Interviews" subtitle="Schedule interview sessions and keep outcomes attached to each candidate." />
+      <PageHeader title="Interviews" subtitle={viewAll ? "Schedule interviews, avoid clashes, and collect structured feedback." : "Your assigned interviews and scorecards."} />
       <RecruitmentSubnav />
 
       <section className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
-          <FormInput placeholder="Search interviews..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-          <Button className="ml-auto" onClick={openCreate}>New Interview</Button>
+          <div className="inline-flex overflow-hidden rounded-xl border border-[var(--border)]" role="group" aria-label="View">
+            {(["calendar", "list"] as View[]).map((mode) => (
+              <button key={mode} type="button" aria-pressed={view === mode} onClick={() => setView(mode)} className={`px-3 py-2 text-sm capitalize ${view === mode ? "bg-[var(--primary)] text-white" : "bg-[var(--card)]"}`}>
+                {mode}
+              </button>
+            ))}
+          </div>
+
+          {view === "list" && viewAll && (
+            <FormInput aria-label="Search interviews" placeholder="Search by candidate or interviewer..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
+          )}
+          <select aria-label="Filter by status" className={`${selectClass} w-auto min-w-36`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Interview["status"] | "")}>
+            <option value="">All statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          {viewAll && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} /> Only mine
+            </label>
+          )}
+          {canCreate && <Button className="ml-auto" onClick={() => setFormState({ open: true, interview: null })}>Schedule Interview</Button>}
         </div>
 
-        {error && <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {interviewsQuery.isError && (
+          <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+            Could not load interviews. {(interviewsQuery.error as Error).message}
+          </div>
+        )}
 
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card><p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Total</p><p className="mt-2 text-3xl font-semibold">{interviews.length}</p></Card>
-          <Card><p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Pending</p><p className="mt-2 text-3xl font-semibold">{interviews.filter((interview) => interview.result === "pending").length}</p></Card>
-          <Card><p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Passed</p><p className="mt-2 text-3xl font-semibold">{interviews.filter((interview) => interview.result === "pass").length}</p></Card>
-          <Card><p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Failed</p><p className="mt-2 text-3xl font-semibold">{interviews.filter((interview) => interview.result === "fail").length}</p></Card>
-        </div>
+        {view === "calendar" ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => setWeekStart((current) => { const next = new Date(current); next.setDate(next.getDate() - 7); return next; })}>← Previous</Button>
+              <Button variant="outline" onClick={() => setWeekStart(startOfWeek(new Date()))}>This week</Button>
+              <Button variant="outline" onClick={() => setWeekStart((current) => { const next = new Date(current); next.setDate(next.getDate() + 7); return next; })}>Next →</Button>
+              <span className="ml-2 text-sm font-medium">{weekStart.toLocaleDateString(undefined, { day: "numeric", month: "short" })} – {weekEnd.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</span>
+            </div>
 
-        <div className="overflow-x-auto">
-          <table className="rtable w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
-                <SortableTh label="Candidate" sortKey="candidate" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Interviewer" sortKey="interviewer_name" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Type" sortKey="interview_type" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Schedule" sortKey="scheduled_at" sort={sort} onSort={toggleSort} />
-                <SortableTh label="Result" sortKey="result" sort={sort} onSort={toggleSort} />
-                <th className="p-3">Feedback</th>
-                <th className="p-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {interviewsQuery.isLoading && (
-                <tr>
-                  <td className="p-4 text-[var(--muted)]" colSpan={7}>Loading interviews...</td>
-                </tr>
-              )}
-              {!interviewsQuery.isLoading && interviews.map((item) => (
-                <tr key={item.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
-                  <td className="p-3 font-medium" data-label="Candidate">{item.candidate?.full_name ?? "-"}</td>
-                  <td className="p-3" data-label="Interviewer">{item.interviewer_name}</td>
-                  <td className="p-3 capitalize" data-label="Type">{item.interview_type}</td>
-                  <td className="p-3" data-label="Schedule">{formatRecruitmentDate(item.scheduled_at, true)}</td>
-                  <td className="p-3 capitalize" data-label="Result">{item.result}</td>
-                  <td className="max-w-[260px] truncate p-3 text-[var(--muted)]" data-label="Feedback">{item.feedback ?? "-"}</td>
-                  <td className="p-3" data-label="Actions">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setEditingInterview(item);
-                          setInterviewForm({
-                            candidate_id: item.candidate_id,
-                            interviewer_name: item.interviewer_name,
-                            interview_type: item.interview_type,
-                            scheduled_at: item.scheduled_at.slice(0, 16),
-                            result: item.result,
-                            feedback: item.feedback ?? "",
-                          });
-                          setModalOpen(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button variant="outline" onClick={() => void onDelete(item.id)}>Delete</Button>
+            <div className="grid gap-3 md:grid-cols-7">
+              {days.map((day) => {
+                const key = isoDate(day);
+                const dayInterviews = interviews.filter((interview) => isoDate(new Date(interview.scheduled_at)) === key);
+                const today = key === isoDate(new Date());
+                return (
+                  <div key={key} className={`rounded-2xl border p-2 ${today ? "border-[var(--primary)]" : "border-[var(--border)]"}`}>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</p>
+                    <div className="space-y-2">
+                      {dayInterviews.map((interview) => (
+                        <div key={interview.id} className={`rounded-xl border border-[var(--border)] p-2 text-xs ${interview.status === "cancelled" ? "opacity-60" : ""}`}>
+                          <p className="font-semibold">{new Date(interview.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {interview.duration_minutes}m</p>
+                          <p className="mt-0.5 font-medium">{candidateLink(interview)}</p>
+                          <p className="capitalize text-[var(--muted)]">{interview.interview_type} · {interview.interviewer_name}</p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <Badge tone={statusTone[interview.status]}>{interview.status}</Badge>
+                            {(interview.pending_reschedule_count ?? 0) > 0 && <Badge tone="amber">move requested</Badge>}
+                            {interview.result !== "pending" && <Badge tone={resultTone[interview.result]}>{interview.result}</Badge>}
+                          </div>
+                          {interview.meeting_link && <a className="mt-1 block truncate text-[var(--primary)] hover:underline" href={interview.meeting_link} target="_blank" rel="noreferrer noopener">Join link</a>}
+                          <div className="mt-2">{actions(interview)}</div>
+                        </div>
+                      ))}
+                      {dayInterviews.length === 0 && <p className="py-3 text-center text-xs text-[var(--muted)]">—</p>}
                     </div>
-                  </td>
+                  </div>
+                );
+              })}
+            </div>
+            {interviewsQuery.isLoading && <p className="text-sm text-[var(--muted)]">Loading interviews...</p>}
+          </>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="rtable w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-left text-[var(--muted)]">
+                  <th className="p-3">When</th>
+                  <th className="p-3">Candidate</th>
+                  <th className="p-3">Interviewer</th>
+                  <th className="p-3">Type</th>
+                  <th className="p-3">Where</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Result</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
-              ))}
-              {!interviewsQuery.isLoading && interviews.length === 0 && (
-                <tr>
-                  <td className="p-6 text-center text-[var(--muted)]" colSpan={7}>No interviews found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {interviewsQuery.isLoading && <tr><td className="p-4 text-[var(--muted)]" colSpan={8}>Loading interviews...</td></tr>}
+                {!interviewsQuery.isLoading && [...interviews].reverse().map((interview) => (
+                  <tr key={interview.id} className="border-b border-[var(--border)]/60 hover:bg-[var(--border)]/20">
+                    <td className="p-3" data-label="When">{formatRecruitmentDate(interview.scheduled_at, true)}<span className="block text-xs text-[var(--muted)]">{interview.duration_minutes} min</span></td>
+                    <td className="p-3 font-medium" data-label="Candidate">{candidateLink(interview)}</td>
+                    <td className="p-3" data-label="Interviewer">{interview.interviewer_name}</td>
+                    <td className="p-3 capitalize" data-label="Type">{interview.interview_type}</td>
+                    <td className="p-3" data-label="Where">
+                      {interview.meeting_link ? <a className="text-[var(--primary)] hover:underline" href={interview.meeting_link} target="_blank" rel="noreferrer noopener">{interview.location || "Join link"}</a> : interview.location || "-"}
+                    </td>
+                    <td className="p-3" data-label="Status">
+                      <Badge tone={statusTone[interview.status]}>{interview.status}</Badge>
+                      {(interview.pending_reschedule_count ?? 0) > 0 && <span className="ml-1"><Badge tone="amber">candidate asked to move it</Badge></span>}
+                    </td>
+                    <td className="p-3" data-label="Result"><Badge tone={resultTone[interview.result]}>{interview.result}</Badge></td>
+                    <td className="p-3" data-label="Actions">{actions(interview)}</td>
+                  </tr>
+                ))}
+                {!interviewsQuery.isLoading && interviews.length === 0 && (
+                  <tr><td className="p-6 text-center text-[var(--muted)]" colSpan={8}>{viewAll ? "No interviews found." : "No interviews are assigned to you."}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      {modalOpen && (
-        <Modal title={editingInterview ? "Edit Interview" : "Create Interview"} onClose={closeModal}>
-          <form className="space-y-4" onSubmit={submitForm}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium">Candidate</label>
-                <select
-                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
-                  value={interviewForm.candidate_id || ""}
-                  onChange={(e) => setInterviewForm((prev) => ({ ...prev, candidate_id: Number(e.target.value) }))}
-                >
-                  <option value="">Select candidate</option>
-                  {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.full_name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Interviewer</label>
-                <FormInput value={interviewForm.interviewer_name} onChange={(e) => setInterviewForm((prev) => ({ ...prev, interviewer_name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Type</label>
-                <select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={interviewForm.interview_type ?? "technical"} onChange={(e) => setInterviewForm((prev) => ({ ...prev, interview_type: e.target.value as InterviewPayload["interview_type"] }))}>
-                  <option value="screening">Screening</option>
-                  <option value="technical">Technical</option>
-                  <option value="behavioral">Behavioral</option>
-                  <option value="managerial">Managerial</option>
-                  <option value="hr">HR</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Scheduled At</label>
-                <FormInput type="datetime-local" value={interviewForm.scheduled_at} onChange={(e) => setInterviewForm((prev) => ({ ...prev, scheduled_at: e.target.value }))} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Result</label>
-                <select className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm" value={interviewForm.result ?? "pending"} onChange={(e) => setInterviewForm((prev) => ({ ...prev, result: e.target.value as InterviewPayload["result"] }))}>
-                  <option value="pending">Pending</option>
-                  <option value="pass">Pass</option>
-                  <option value="fail">Fail</option>
-                  <option value="hold">Hold</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Feedback</label>
-              <textarea
-                className="min-h-28 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
-                value={interviewForm.feedback ?? ""}
-                onChange={(e) => setInterviewForm((prev) => ({ ...prev, feedback: e.target.value }))}
-                placeholder="Capture interview notes and next-step decisions."
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
-              <Button type="submit">{editingInterview ? "Update" : "Create"}</Button>
-            </div>
-          </form>
-        </Modal>
+      {formState.open && <InterviewFormModal interview={formState.interview} onClose={() => setFormState({ open: false, interview: null })} />}
+      {cancelTarget && <CancelInterviewModal interview={cancelTarget} onClose={() => setCancelTarget(null)} />}
+      {scorecardTarget && <ScorecardModal interview={scorecardTarget} onClose={() => setScorecardTarget(null)} />}
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete interview"
+          message={`Delete the interview with ${deleteTarget.candidate?.full_name ?? "this candidate"}? Its scorecards are deleted too and this cannot be undone.`}
+          confirmLabel="Delete"
+          busy={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </div>
   );

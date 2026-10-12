@@ -3,167 +3,131 @@
 namespace Tests\Feature;
 
 use App\Models\Approval;
-use App\Models\Role;
+use App\Models\ApprovalStep;
+use App\Models\Company;
 use App\Models\User;
 use App\Models\Workflow;
+use App\Services\WorkflowEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
+/** Role-based access to approvals and workflow management, using the seeded system roles. */
 class RBACTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $adminUser;
-    protected User $hrManagerUser;
-    protected User $employeeUser;
-    protected Role $adminRole;
-    protected Role $hrManagerRole;
-    protected Role $employeeRole;
+    private Company $company;
+
+    private User $superAdmin;
+
+    private User $hrManager;
+
+    private User $employee;
 
     public function setUp(): void
     {
         parent::setUp();
 
-        // Create roles
-        $this->adminRole = Role::create(['name' => 'Super Admin', 'company_id' => 1]);
-        $this->hrManagerRole = Role::create(['name' => 'HR Manager', 'company_id' => 1]);
-        $this->employeeRole = Role::create(['name' => 'Employee', 'company_id' => 1]);
+        $this->company = Company::create(['name' => 'RBAC Co']);
+        $this->grantLicense($this->company, ['approvals']);
 
-        // Create permissions and assign to roles
-        $this->setupPermissions();
-
-        // Create users with roles
-        $this->adminUser = User::create([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'password' => bcrypt('password'),
-            'company_id' => 1,
-            'role_id' => $this->adminRole->id,
-        ]);
-
-        $this->hrManagerUser = User::create([
-            'name' => 'HR Manager',
-            'email' => 'hr@example.com',
-            'password' => bcrypt('password'),
-            'company_id' => 1,
-            'role_id' => $this->hrManagerRole->id,
-        ]);
-
-        $this->employeeUser = User::create([
-            'name' => 'Employee User',
-            'email' => 'employee@example.com',
-            'password' => bcrypt('password'),
-            'company_id' => 1,
-            'role_id' => $this->employeeRole->id,
-        ]);
+        $this->superAdmin = $this->createUserWithRole(User::ROLE_SUPER_ADMIN);
+        $this->hrManager = $this->createUserWithRole(User::ROLE_HR_MANAGER, ['company_id' => $this->company->id]);
+        $this->employee = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $this->company->id]);
     }
 
-    private function setupPermissions(): void
+    /** A pending approval whose only step is for HR Managers. */
+    private function hrApproval(): Approval
     {
-        // Create permissions
-        $permissions = [
-            'approvals:view',
-            'approvals:approve',
-            'approvals:manage_settings',
-            'users:view',
-            'users:create',
-            'users:edit',
-        ];
-
-        $createdPermissions = [];
-        foreach ($permissions as $permission) {
-            $createdPermissions[$permission] = \App\Models\Permission::create(['name' => $permission, 'company_id' => 1]);
-        }
-
-        // Assign all permissions to admin
-        $this->adminRole->permissions()->sync(array_values($createdPermissions));
-
-        // Assign limited permissions to HR Manager
-        $this->hrManagerRole->permissions()->sync([
-            $createdPermissions['approvals:view']->id,
-            $createdPermissions['approvals:approve']->id,
-            $createdPermissions['users:view']->id,
+        $workflow = Workflow::create(['name' => 'Leave', 'module' => 'leaves', 'company_id' => $this->company->id, 'definition' => ['description' => 'x']]);
+        ApprovalStep::create([
+            'workflow_id' => $workflow->id, 'step_order' => 1, 'approver_type' => 'role',
+            'approver_identifier' => User::ROLE_HR_MANAGER, 'conditions' => [], 'required_approvals' => 1,
         ]);
 
-        // Assign minimal permissions to Employee
-        $this->employeeRole->permissions()->sync([
-            $createdPermissions['approvals:view']->id,
-        ]);
+        return (new WorkflowEngine())->startWorkflow('leaves', 1, $workflow, $this->employee->id);
     }
 
     public function test_super_admin_can_access_all_approvals(): void
     {
-        $response = $this->actingAs($this->adminUser)
-            ->getJson('/api/v1/approvals');
+        Sanctum::actingAs($this->superAdmin);
 
-        $response->assertStatus(200);
+        $this->getJson('/api/v1/approvals')->assertOk();
     }
 
-    public function test_hr_manager_can_view_approvals(): void
+    public function test_hr_managers_and_employees_can_view_approvals(): void
     {
-        $response = $this->actingAs($this->hrManagerUser)
-            ->getJson('/api/v1/approvals');
+        Sanctum::actingAs($this->hrManager);
+        $this->getJson('/api/v1/approvals')->assertOk();
 
-        $response->assertStatus(200);
+        Sanctum::actingAs($this->employee);
+        $this->getJson('/api/v1/approvals')->assertOk();
     }
 
-    public function test_employee_can_view_approvals(): void
+    public function test_users_from_another_company_cannot_see_the_approval(): void
     {
-        $response = $this->actingAs($this->employeeUser)
-            ->getJson('/api/v1/approvals');
+        $approval = $this->hrApproval();
+        $other = Company::create(['name' => 'Other Co']);
+        $this->grantLicense($other, ['approvals']);
 
-        $response->assertStatus(200);
+        Sanctum::actingAs($this->createUserWithRole(User::ROLE_HR_MANAGER, ['company_id' => $other->id]));
+
+        $this->assertCount(0, $this->getJson('/api/v1/approvals')->assertOk()->json('data'));
+        $this->postJson("/api/v1/approvals/{$approval->id}/approve")->assertNotFound();
     }
 
     public function test_employee_cannot_approve_approvals(): void
     {
-        $approval = Approval::factory()->create(['company_id' => 1]);
+        $approval = $this->hrApproval();
 
-        $response = $this->actingAs($this->employeeUser)
-            ->postJson("/api/v1/approvals/{$approval->id}/approve");
+        Sanctum::actingAs($this->employee);
 
-        $response->assertStatus(403);
+        $this->postJson("/api/v1/approvals/{$approval->id}/approve")->assertForbidden();
+        $this->assertSame('pending', $approval->fresh()->status);
     }
 
-    public function test_hr_manager_can_approve_approvals(): void
+    public function test_hr_manager_can_approve_an_approval_waiting_for_their_role(): void
     {
-        $approval = Approval::factory()->create(['company_id' => 1]);
+        $approval = $this->hrApproval();
 
-        $response = $this->actingAs($this->hrManagerUser)
-            ->postJson("/api/v1/approvals/{$approval->id}/approve", ['notes' => 'Approved']);
+        Sanctum::actingAs($this->hrManager);
 
-        $response->assertStatus(200);
+        $this->postJson("/api/v1/approvals/{$approval->id}/approve", ['notes' => 'Approved'])->assertOk();
+        $this->assertSame('approved', $approval->fresh()->status);
     }
 
     public function test_user_without_permission_cannot_manage_workflows(): void
     {
-        $response = $this->actingAs($this->employeeUser)
-            ->postJson('/api/v1/workflows', [
-                'name' => 'Test Workflow',
-                'module' => 'leaves',
-                'definition' => [],
-            ]);
+        Sanctum::actingAs($this->employee);
 
-        $response->assertStatus(403);
+        $this->postJson('/api/v1/workflows', $this->workflowPayload())->assertForbidden();
     }
 
-    public function test_admin_can_manage_workflows(): void
+    public function test_admin_and_hr_manager_can_manage_workflows(): void
     {
-        $response = $this->actingAs($this->adminUser)
-            ->postJson('/api/v1/workflows', [
-                'name' => 'Leave Request Workflow',
-                'module' => 'leaves',
-                'definition' => [],
-            ]);
+        Sanctum::actingAs($this->superAdmin);
+        $this->postJson('/api/v1/workflows', $this->workflowPayload())->assertCreated();
 
-        $response->assertStatus(201);
+        Sanctum::actingAs($this->hrManager);
+        $this->postJson('/api/v1/workflows', $this->workflowPayload('Second'))->assertCreated();
     }
 
     public function test_role_permission_inheritance(): void
     {
-        $this->assertTrue($this->hrManagerUser->hasPermission('approvals:view'));
-        $this->assertTrue($this->hrManagerUser->hasPermission('approvals:approve'));
-        $this->assertFalse($this->hrManagerUser->hasPermission('users:create'));
-        $this->assertFalse($this->employeeUser->hasPermission('approvals:approve'));
+        $this->assertTrue($this->hrManager->hasPermission('approvals:view'));
+        $this->assertTrue($this->hrManager->hasPermission('approvals:approve'));
+        $this->assertFalse($this->hrManager->hasPermission('users:create'));
+        $this->assertFalse($this->employee->hasPermission('approvals:approve'));
+    }
+
+    private function workflowPayload(string $name = 'Leave Request Workflow'): array
+    {
+        return [
+            'name' => $name,
+            'module' => 'leaves',
+            'definition' => ['description' => 'Leave approval'],
+            'steps' => [['step_order' => 1, 'approver_type' => 'role', 'approver_identifier' => User::ROLE_HR_MANAGER, 'conditions' => []]],
+        ];
     }
 }

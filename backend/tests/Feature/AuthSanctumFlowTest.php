@@ -32,7 +32,7 @@ class AuthSanctumFlowTest extends TestCase
         $this->withHeader('Authorization', 'Bearer ' . $token)
             ->getJson('/api/v1/auth/me')
             ->assertOk()
-            ->assertJsonPath('data.email', 'flow@example.com');
+            ->assertJsonPath('data.user.email', 'flow@example.com');
 
         $refresh = $this->withHeader('Authorization', 'Bearer ' . $token)
             ->postJson('/api/v1/auth/refresh');

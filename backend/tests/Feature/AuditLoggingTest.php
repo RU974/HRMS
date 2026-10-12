@@ -2,172 +2,126 @@
 
 namespace Tests\Feature;
 
+use App\Models\Approval;
 use App\Models\AuditLog;
+use App\Models\Company;
 use App\Models\User;
+use App\Models\Workflow;
+use App\Services\ApprovalEngine;
+use App\Services\AuditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 class AuditLoggingTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $user;
+    private User $user;
+
+    private Company $company;
 
     public function setUp(): void
     {
         parent::setUp();
 
+        $this->company = Company::create(['name' => 'Audit Co']);
         $this->user = User::create([
             'name' => 'Test User',
             'email' => 'test@example.com',
             'password' => bcrypt('password'),
-            'company_id' => 1,
+            'company_id' => $this->company->id,
         ]);
     }
 
-    public function test_audit_log_records_approval_action(): void
+    private function record(array $overrides = []): AuditLog
     {
-        AuditLog::create([
+        return AuditLog::create(array_merge([
             'user_id' => $this->user->id,
             'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => [
-                'status' => 'approved',
-            ],
+            'module' => 'approvals',
+            'company_id' => $this->company->id,
             'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 1,
+            'old_value' => ['status' => 'pending'],
+            'new_value' => ['status' => 'approved'],
+        ], $overrides));
+    }
+
+    public function test_approving_through_the_engine_writes_an_audit_entry(): void
+    {
+        $workflow = Workflow::create(['name' => 'Leave', 'module' => 'leaves', 'company_id' => $this->company->id, 'definition' => ['description' => 'x']]);
+        $approval = Approval::create([
+            'module' => 'leaves', 'module_id' => 1, 'workflow_id' => $workflow->id, 'status' => 'pending',
+            'requested_by' => $this->user->id, 'company_id' => $this->company->id,
         ]);
+
+        (new ApprovalEngine())->approve($approval, $this->user->id, ['notes' => 'ok']);
 
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
+            'module' => 'leaves',
+            'approval_id' => $approval->id,
+            'company_id' => $this->company->id,
         ]);
+        $this->assertSame('approved', AuditLog::where('approval_id', $approval->id)->value('new_value')['status']);
     }
 
     public function test_audit_log_is_immutable(): void
     {
-        $log = AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => ['status' => 'approved'],
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 1,
-        ]);
+        $log = $this->record();
 
-        // Attempt to update (should fail or be tracked separately)
-        $originalCreatedAt = $log->created_at;
-        
-        $this->assertEquals('approve', $log->action);
-        $this->assertEquals($originalCreatedAt, $log->created_at);
+        $this->assertTrue($log->refresh()->immutable);
+
+        try {
+            $log->update(['action' => 'reject']);
+            $this->fail('An audit log was edited.');
+        } catch (\LogicException $exception) {
+            $this->assertSame('Audit logs are immutable.', $exception->getMessage());
+        }
+
+        $this->expectException(\LogicException::class);
+        $log->delete();
     }
 
-    public function test_audit_log_tracks_all_changes(): void
+    public function test_audit_log_keeps_the_before_and_after_values(): void
     {
-        $changes = [
-            'status' => 'approved',
-            'current_step_id' => 2,
-            'approved_at' => now(),
-        ];
+        $log = $this->record(['old_value' => ['status' => 'pending', 'step' => 1], 'new_value' => ['status' => 'approved', 'step' => 2]]);
 
-        $log = AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => $changes,
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 1,
-        ]);
-
-        $this->assertEquals($changes, $log->changes);
+        $log->refresh();
+        $this->assertSame(['status' => 'pending', 'step' => 1], $log->old_value);
+        $this->assertSame(['status' => 'approved', 'step' => 2], $log->new_value);
     }
 
-    public function test_audit_log_includes_user_and_ip(): void
+    public function test_the_audit_service_stamps_user_and_ip(): void
     {
-        $log = AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'reject',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => ['status' => 'rejected'],
-            'ip_address' => '192.168.1.1',
-            'user_agent' => 'Mozilla/5.0',
-            'company_id' => 1,
-        ]);
+        Auth::login($this->user);
 
-        $this->assertEquals($this->user->id, $log->user_id);
-        $this->assertEquals('192.168.1.1', $log->ip_address);
-        $this->assertStringContainsString('Mozilla', $log->user_agent);
+        $log = AuditService::record(['action' => 'reject', 'module' => 'leaves', 'company_id' => $this->company->id]);
+
+        $this->assertSame($this->user->id, $log->user_id);
+        $this->assertNotEmpty($log->ip_address);
+        $this->assertTrue($log->immutable);
     }
 
-    public function test_audit_logs_can_be_queried_by_entity(): void
+    public function test_audit_logs_can_be_queried_by_module_and_approval(): void
     {
-        AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'create',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => ['status' => 'pending'],
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 1,
-        ]);
+        $this->record(['action' => 'create', 'module' => 'leaves', 'approval_id' => null]);
+        $this->record(['action' => 'approve', 'module' => 'leaves', 'approval_id' => null]);
+        $this->record(['action' => 'approve', 'module' => 'payroll']);
 
-        AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => ['status' => 'approved'],
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 1,
-        ]);
-
-        $logs = AuditLog::where('entity_type', 'Approval')
-            ->where('entity_id', 1)
-            ->get();
+        $logs = AuditLog::where('module', 'leaves')->orderBy('id')->get();
 
         $this->assertCount(2, $logs);
-        $this->assertEquals('create', $logs[0]->action);
-        $this->assertEquals('approve', $logs[1]->action);
+        $this->assertSame(['create', 'approve'], $logs->pluck('action')->all());
     }
 
     public function test_audit_log_is_company_scoped(): void
     {
-        AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 1,
-            'changes' => [],
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 1,
-        ]);
+        $other = Company::create(['name' => 'Other Co']);
+        $this->record();
+        $this->record(['company_id' => $other->id]);
 
-        AuditLog::create([
-            'user_id' => $this->user->id,
-            'action' => 'approve',
-            'entity_type' => 'Approval',
-            'entity_id' => 2,
-            'changes' => [],
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Test',
-            'company_id' => 2,
-        ]);
-
-        $company1Logs = AuditLog::where('company_id', 1)->get();
-        $company2Logs = AuditLog::where('company_id', 2)->get();
-
-        $this->assertCount(1, $company1Logs);
-        $this->assertCount(1, $company2Logs);
+        $this->assertCount(1, AuditLog::where('company_id', $this->company->id)->get());
+        $this->assertCount(1, AuditLog::where('company_id', $other->id)->get());
     }
 }

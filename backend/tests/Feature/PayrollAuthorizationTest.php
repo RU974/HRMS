@@ -82,11 +82,14 @@ class PayrollAuthorizationTest extends TestCase
 
     public function test_generate_payroll_skips_existing_employee_month_record(): void
     {
-        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER);
-        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE);
+        $company = \App\Models\Company::create(['name' => 'Payroll Co']);
+        $this->grantLicense($company, ['payroll']);
+        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER, ['company_id' => $company->id]);
+        $employeeUser = $this->createUserWithRole(User::ROLE_EMPLOYEE, ['company_id' => $company->id]);
         $department = Department::create(['name' => 'Finance']);
         $employee = Employee::create([
             'user_id' => $employeeUser->id,
+            'company_id' => $company->id,
             'name' => 'Payroll Emp 3',
             'email' => 'payroll.emp3@example.com',
             'department_id' => $department->id,
@@ -110,14 +113,20 @@ class PayrollAuthorizationTest extends TestCase
 
         Sanctum::actingAs($manager);
 
-        $this->postJson('/api/v1/payroll/generate', [
+        // Generation runs as a tracked background run; its summary reports what happened.
+        $runId = $this->postJson('/api/v1/payroll/generate', [
             'month' => 5,
             'year' => 2026,
         ])
+            ->assertStatus(202)
+            ->json('data.background_run_id');
+
+        $this->getJson("/api/v1/background-runs/{$runId}")
             ->assertOk()
-            ->assertJsonPath('data.created', 0)
-            ->assertJsonPath('data.skipped', 1)
-            ->assertJsonPath('data.failed', 0);
+            ->assertJsonPath('data.status', 'done')
+            ->assertJsonPath('data.summary.created', 0)
+            ->assertJsonPath('data.summary.skipped', 1)
+            ->assertJsonPath('data.summary.failed', 0);
     }
 }
 

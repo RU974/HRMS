@@ -21,12 +21,9 @@ class UserRoleAssignmentTest extends TestCase
             'name' => 'Operations',
         ]);
 
-        $permission = Permission::firstOrCreate([
-            'module' => 'user',
-            'action' => 'manage',
-        ], [
-            'description' => 'User manage',
-        ]);
+        $permission = Permission::where('name', 'users:view')->firstOrFail();
+        $company = \App\Models\Company::create(['name' => 'Roles Co']);
+        $this->grantLicense($company, ['payroll']);
 
         $employeeRole = Role::firstOrCreate([
             'company_id' => null,
@@ -41,6 +38,7 @@ class UserRoleAssignmentTest extends TestCase
         $manager = $this->createUserWithRole(User::ROLE_HR_MANAGER, [
             'name' => 'Manager User',
             'email' => 'manager@example.com',
+            'company_id' => $company->id,
         ]);
 
         Sanctum::actingAs($manager);
@@ -64,7 +62,7 @@ class UserRoleAssignmentTest extends TestCase
             ->firstOrFail();
 
         $this->assertSame([User::ROLE_EMPLOYEE], $employeeUser->roles->pluck('name')->all());
-        $this->assertTrue($employeeUser->hasPermission('user.manage'));
+        $this->assertTrue($employeeUser->hasPermission('users:view'));
 
         Sanctum::actingAs($employeeUser);
 
@@ -73,18 +71,15 @@ class UserRoleAssignmentTest extends TestCase
 
         $permissions = $permissionsResponse->json('data.permissions');
         $this->assertTrue(
-            in_array('manage users', $permissions, true) || in_array('user.manage', $permissions, true)
+            in_array('users:view', $permissions, true)
         );
     }
 
     public function test_user_management_allows_manage_users_permission_to_assign_roles(): void
     {
-        $permission = Permission::firstOrCreate([
-            'module' => 'user',
-            'action' => 'manage',
-        ], [
-            'description' => 'Manage users',
-        ]);
+        $permissionIds = Permission::whereIn('name', ['users:view', 'users:create', 'users:assign'])->pluck('id')->all();
+        $company = \App\Models\Company::create(['name' => 'Roles Co']);
+        $this->grantLicense($company, ['payroll']);
 
         $manageUsersRole = Role::firstOrCreate([
             'company_id' => null,
@@ -94,7 +89,7 @@ class UserRoleAssignmentTest extends TestCase
             'guard_name' => 'web',
             'is_system' => false,
         ]);
-        $manageUsersRole->permissions()->sync([$permission->id]);
+        $manageUsersRole->permissions()->sync($permissionIds);
 
         $employeeRole = Role::firstOrCreate([
             'company_id' => null,
@@ -108,6 +103,7 @@ class UserRoleAssignmentTest extends TestCase
         $actor = $this->createUserWithRole('User Manager', [
             'name' => 'Actor User',
             'email' => 'actor.user@example.com',
+            'company_id' => $company->id,
         ]);
 
         Sanctum::actingAs($actor);

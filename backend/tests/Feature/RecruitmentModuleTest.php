@@ -49,9 +49,15 @@ class RecruitmentModuleTest extends TestCase
             'result' => 'pending',
         ])->assertCreated();
 
-        $this->putJson("/api/v1/candidates/{$candidateId}", [
-            'stage' => 'hired',
-        ])->assertOk();
+        foreach (['screening', 'interview', 'offer'] as $stage) {
+            $this->putJson("/api/v1/candidates/{$candidateId}", ['stage' => $stage])->assertOk();
+        }
+
+        $this->postJson("/api/v1/candidates/{$candidateId}/hire", [
+            'salary' => 150000,
+            'joining_date' => '2026-05-21',
+            'skip_offer' => true,
+        ])->assertOk()->assertJsonPath('data.candidate.stage', 'hired');
 
         $this->postJson('/api/v1/onboarding', [
             'candidate_id' => $candidateId,
@@ -77,14 +83,18 @@ class RecruitmentModuleTest extends TestCase
 
         $this->getJson('/api/v1/job-openings')->assertForbidden();
         $this->getJson('/api/v1/candidates')->assertForbidden();
-        $this->getJson('/api/v1/interviews')->assertForbidden();
         $this->getJson('/api/v1/onboarding')->assertForbidden();
+
+        // Employees may be asked to interview, so they can open the interview list, but it only
+        // ever contains interviews assigned to them.
+        $this->getJson('/api/v1/interviews')->assertOk()->assertJsonCount(0, 'data.data');
+        $this->postJson('/api/v1/interviews', ['candidate_id' => 1, 'interviewer_name' => 'X', 'scheduled_at' => '2026-07-01 10:00:00'])->assertForbidden();
     }
 
     public function test_recruitment_viewers_cannot_create_update_or_delete_resources(): void
     {
         $viewer = User::factory()->create();
-        $viewer->givePermissionTo('view recruitment');
+        $viewer->givePermissionTo('recruitment:view');
         Sanctum::actingAs($viewer);
 
         $jobOpening = JobOpening::create([
@@ -158,6 +168,8 @@ class RecruitmentModuleTest extends TestCase
         $this->putJson("/api/v1/interviews/{$interview->id}", ['result' => 'pass'])->assertForbidden();
         $this->deleteJson("/api/v1/interviews/{$interview->id}")->assertForbidden();
 
+        $this->postJson("/api/v1/candidates/{$candidate->id}/hire")->assertForbidden();
+
         $this->postJson('/api/v1/onboarding', [
             'candidate_id' => $hiredCandidate->id,
             'onboarding_status' => 'in_progress',
@@ -177,12 +189,16 @@ class RecruitmentModuleTest extends TestCase
         $recruiterA = $this->createUserWithRole(User::ROLE_RECRUITER, ['company_id' => $companyA->id]);
         $recruiterB = $this->createUserWithRole(User::ROLE_RECRUITER, ['company_id' => $companyB->id]);
 
-        $department = Department::create(['name' => 'Engineering']);
+        $this->grantLicense($companyA, ['recruitment']);
+        $this->grantLicense($companyB, ['recruitment']);
+
+        $departmentA = Department::create(['name' => 'Engineering', 'company_id' => $companyA->id]);
+        $departmentB = Department::create(['name' => 'Engineering', 'company_id' => $companyB->id]);
 
         Sanctum::actingAs($recruiterA);
         $jobA = $this->postJson('/api/v1/job-openings', [
             'title' => 'Backend Engineer',
-            'department_id' => $department->id,
+            'department_id' => $departmentA->id,
             'employment_type' => 'full_time',
             'status' => 'open',
             'open_positions' => 2,
@@ -208,7 +224,7 @@ class RecruitmentModuleTest extends TestCase
         Sanctum::actingAs($recruiterB);
         $jobB = $this->postJson('/api/v1/job-openings', [
             'title' => 'Frontend Engineer',
-            'department_id' => $department->id,
+            'department_id' => $departmentB->id,
             'employment_type' => 'full_time',
             'status' => 'open',
             'open_positions' => 1,

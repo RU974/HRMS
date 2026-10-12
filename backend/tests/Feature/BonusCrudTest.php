@@ -15,6 +15,8 @@ class BonusCrudTest extends TestCase
 {
     use RefreshDatabase;
 
+    private ?\App\Models\Company $company = null;
+
     public function test_payroll_manager_can_create_list_show_update_and_delete_bonus(): void
     {
         [$manager, $employee] = $this->createPayrollManagerAndEmployee();
@@ -140,7 +142,10 @@ class BonusCrudTest extends TestCase
 
     private function createPayrollManagerAndEmployee(): array
     {
-        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER);
+        // Accounts always belong to a company; users without one are refused by design.
+        $this->company = \App\Models\Company::create(['name' => 'Bonus Co']);
+        $this->grantLicense($this->company, ['payroll']);
+        $manager = $this->createUserWithRole(User::ROLE_PAYROLL_MANAGER, ['company_id' => $this->company->id]);
 
         return [$manager, $this->createEmployee('Bonus Employee One', 'bonus.one@example.com')];
     }
@@ -150,7 +155,7 @@ class BonusCrudTest extends TestCase
         $department = Department::firstOrCreate(['name' => 'Finance']);
 
         return Employee::create([
-            'user_id' => User::factory()->create()->id,
+            'user_id' => User::factory()->create(['company_id' => $this->company?->id])->id,
             'name' => $name,
             'email' => $email,
             'department_id' => $department->id,

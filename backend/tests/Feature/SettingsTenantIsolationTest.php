@@ -118,33 +118,25 @@ class SettingsTenantIsolationTest extends TestCase
 
         $logA = AuditLog::create([
             'user_id' => $userA->id,
+            'company_id' => $companyA->id,
             'method' => 'GET',
-            'path' => 'api/v1/settings/branches',
-            'status_code' => 200,
             'module' => 'settings',
             'action' => 'view',
-            'description' => 'Company A audit log',
-            'endpoint' => 'api/v1/settings/branches',
-            'http_method' => 'GET',
         ]);
         $logB = AuditLog::create([
             'user_id' => $userB->id,
+            'company_id' => $companyB->id,
             'method' => 'GET',
-            'path' => 'api/v1/settings/branches',
-            'status_code' => 200,
             'module' => 'settings',
             'action' => 'view',
-            'description' => 'Company B audit log',
-            'endpoint' => 'api/v1/settings/branches',
-            'http_method' => 'GET',
         ]);
 
         Sanctum::actingAs($admin);
 
         $this->getJson('/api/v1/settings/system-logs')
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $logA->id);
+            ->assertJsonCount(1, 'data.data')
+            ->assertJsonPath('data.data.0.id', $logA->id);
 
         $this->getJson('/api/v1/settings/system-logs/' . $logA->id)
             ->assertOk()

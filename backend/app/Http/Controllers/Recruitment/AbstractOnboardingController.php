@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Recruitment;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Recruitment\Concerns\EnsuresCompanyIsolation;
 use App\Models\Candidate;
-use App\Services\Recruitment\CandidateWorkflowService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 abstract class AbstractOnboardingController extends Controller
 {
@@ -26,9 +26,13 @@ abstract class AbstractOnboardingController extends Controller
     {
         $this->authorizePermission($request, 'recruitment:view');
 
-        $query = Candidate::with(['jobOpening', 'employee'])
+        $query = Candidate::with(['jobOpening', 'interviews', 'employee'])
+            ->withCount([
+                'onboardingTasks as tasks_total',
+                'onboardingTasks as tasks_done' => fn ($query) => $query->whereIn('status', ['completed', 'skipped']),
+            ])
             ->where('stage', 'hired')
-            ->latest();
+            ->latest('id');
 
         if ($request->filled('onboarding_status')) {
             $query->where('onboarding_status', $request->onboarding_status);
@@ -43,96 +47,75 @@ abstract class AbstractOnboardingController extends Controller
             });
         }
 
-        return $this->ok($query->paginate((int) $request->input('per_page', 15)));
+        $perPage = min(max((int) $request->input('per_page', 15), 1), 100);
+
+        return $this->ok($query->paginate($perPage));
     }
 
     public function store(Request $request)
     {
-        $this->authorizePermission($request, 'recruitment:manage_settings');
-
-        $workflowService = app(CandidateWorkflowService::class);
+        $this->authorizeAnyPermission($request, ['recruitment:create', 'recruitment:edit']);
 
         $validated = $request->validate([
             'candidate_id' => ['required', $this->validateCandidateBelongsToCompany($request)],
             'onboarding_status' => 'required|in:pending,in_progress,completed,deferred',
             'onboarding_start_date' => 'nullable|date',
             'onboarding_notes' => 'nullable|string',
-            'onboarding_checklist' => 'sometimes|nullable|array',
-            'onboarding_checklist.*.title' => 'required_with:onboarding_checklist|string|max:255',
-            'onboarding_checklist.*.completed' => 'sometimes|boolean',
-            'onboarding_checklist.*.notes' => 'sometimes|nullable|string',
         ]);
 
-        $candidate = Candidate::findOrFail($validated['candidate_id']);
+        $candidate = $this->resolveTenantModel(Candidate::class, $validated['candidate_id']);
 
-        if (array_key_exists('onboarding_checklist', $validated)) {
-            $validated['onboarding_checklist'] = $workflowService->normalizeChecklist($validated['onboarding_checklist'] ?? []);
+        if ($candidate->stage !== 'hired') {
+            throw ValidationException::withMessages([
+                'candidate_id' => ['Only hired candidates can be onboarded. Hire the candidate first.'],
+            ]);
         }
 
         $candidate->update([
-            'stage' => 'hired',
             'onboarding_status' => $validated['onboarding_status'],
             'onboarding_start_date' => $validated['onboarding_start_date'] ?? null,
             'onboarding_notes' => $validated['onboarding_notes'] ?? null,
-            'onboarding_checklist' => $validated['onboarding_checklist'] ?? $candidate->onboarding_checklist,
         ]);
 
-        $workflowService->convertToEmployee($candidate, $request->user()?->company_id);
-
-        return $this->ok($candidate->load(['jobOpening', 'employee']), 'Onboarding created successfully', 201);
+        return $this->ok($candidate->load(['jobOpening', 'interviews', 'employee']), 'Onboarding created successfully', 201);
     }
 
     public function show($id)
     {
         $this->authorizePermission(request(), 'recruitment:view');
 
-        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load(['jobOpening', 'employee']));
+        return $this->ok($this->resolveTenantModel(Candidate::class, $id)->load(['jobOpening', 'interviews', 'employee', 'onboardingTasks.assignee']));
     }
 
     public function update(Request $request, $id)
     {
-        $this->authorizeAnyPermission($request, ['recruitment:manage_settings', 'edit recruitment']);
+        $this->authorizeAnyPermission($request, ['recruitment:create', 'recruitment:edit']);
 
         $candidate = $this->resolveTenantModel(Candidate::class, $id);
 
-        $workflowService = app(CandidateWorkflowService::class);
+        if ($candidate->stage !== 'hired') {
+            throw ValidationException::withMessages([
+                'candidate_id' => ['Only hired candidates can be onboarded. Hire the candidate first.'],
+            ]);
+        }
 
         $validated = $request->validate([
             'onboarding_status' => 'sometimes|in:pending,in_progress,completed,deferred',
             'onboarding_start_date' => 'sometimes|nullable|date',
             'onboarding_notes' => 'sometimes|nullable|string',
-            'onboarding_checklist' => 'sometimes|nullable|array',
-            'onboarding_checklist.*.title' => 'required_with:onboarding_checklist|string|max:255',
-            'onboarding_checklist.*.completed' => 'sometimes|boolean',
-            'onboarding_checklist.*.notes' => 'sometimes|nullable|string',
         ]);
 
-        if (array_key_exists('onboarding_checklist', $validated)) {
-            $validated['onboarding_checklist'] = $workflowService->normalizeChecklist($validated['onboarding_checklist'] ?? []);
-        }
+        $candidate->update($validated);
 
-        $candidate->update([
-            ...$validated,
-            'stage' => 'hired',
-        ]);
-
-        $workflowService->convertToEmployee($candidate, $request->user()?->company_id);
-
-        return $this->ok($candidate->load(['jobOpening', 'employee']), 'Onboarding updated successfully');
+        return $this->ok($candidate->load(['jobOpening', 'interviews', 'employee']), 'Onboarding updated successfully');
     }
 
     public function destroy($id)
     {
-        $this->authorizeAnyPermission(request(), ['recruitment:manage_settings', 'edit recruitment']);
+        $this->authorizePermission(request(), 'recruitment:delete');
 
-        $candidate = $this->resolveTenantModel(Candidate::class, $id);
-        $candidate->update([
-            'onboarding_status' => null,
-            'onboarding_start_date' => null,
-            'onboarding_notes' => null,
-            'onboarding_checklist' => null,
-        ]);
-
-        return $this->ok($candidate->load('jobOpening'), 'Onboarding deleted successfully');
+        // The employee record is created at hire time, so clearing onboarding data would
+        // leave a hired candidate without a trace of the process. Update the status instead.
+        return $this->fail('Onboarding records cannot be deleted. Set the status to deferred or completed instead.', 422);
     }
 }

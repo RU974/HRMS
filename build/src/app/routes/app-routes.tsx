@@ -19,6 +19,16 @@ const CandidatesPage = lazy(() => import("@/modules/recruitment/candidates-page"
 const InterviewsPage = lazy(() => import("@/modules/recruitment/interviews-page").then((m) => ({ default: m.InterviewsPage })));
 const JobsPage = lazy(() => import("@/modules/recruitment/jobs-page").then((m) => ({ default: m.JobsPage })));
 const OnboardingPage = lazy(() => import("@/modules/recruitment/onboarding-page").then((m) => ({ default: m.OnboardingPage })));
+const CandidateDetailPage = lazy(() => import("@/modules/recruitment/candidate-detail-page").then((m) => ({ default: m.CandidateDetailPage })));
+const OffersPage = lazy(() => import("@/modules/recruitment/offers-page").then((m) => ({ default: m.OffersPage })));
+const RecruitmentReportsPage = lazy(() => import("@/modules/recruitment/reports-page").then((m) => ({ default: m.RecruitmentReportsPage })));
+const TalentPoolPage = lazy(() => import("@/modules/recruitment/talent-pool-page").then((m) => ({ default: m.TalentPoolPage })));
+const ReferralsPage = lazy(() => import("@/modules/recruitment/referrals-page").then((m) => ({ default: m.ReferralsPage })));
+const ReferSomeonePage = lazy(() => import("@/modules/recruitment/refer-someone-page").then((m) => ({ default: m.ReferSomeonePage })));
+const ReferenceFormPage = lazy(() => import("@/modules/careers/reference-form-page").then((m) => ({ default: m.ReferenceFormPage })));
+const CandidatePortalPage = lazy(() => import("@/modules/careers/candidate-portal-page").then((m) => ({ default: m.CandidatePortalPage })));
+const CareersPage = lazy(() => import("@/modules/careers/careers-page").then((m) => ({ default: m.CareersPage })));
+const CareersJobPage = lazy(() => import("@/modules/careers/careers-page").then((m) => ({ default: m.CareersJobPage })));
 const LeavesPage = lazy(() => import("@/modules/leaves").then((m) => ({ default: m.LeavesPage })));
 const EmployeeDocumentsPage = lazy(() => import("@/modules/employee-documents").then((m) => ({ default: m.EmployeeDocumentsPage })));
 const DepartmentsPage = lazy(() => import("@/modules/departments").then((m) => ({ default: m.DepartmentsPage })));
@@ -85,10 +95,16 @@ export const appRouter = createBrowserRouter([
       { path: "attendance/biometric-devices/:id/mapping",    element: withPermission(<DeviceMappingPage />,  ["biometric:manage_mapping"]) },
       { path: "payroll",                   element: withPermission(<PayrollPage />,                ["payroll:view", "payroll:manage_settings"]) },
       { path: "recruitment",               element: withPermission(<RecruitmentPage />,            ["recruitment:view"]) },
-      { path: "recruitment/jobs",          element: withPermission(<JobsPage />,                  ["recruitment:view"]) },
+      { path: "recruitment/jobs",          element: withPermission(<JobsPage />,                  ["recruitment:view", "recruitment:request"]) },
       { path: "recruitment/candidates",    element: withPermission(<CandidatesPage />,            ["recruitment:view"]) },
-      { path: "recruitment/interviews",    element: withPermission(<InterviewsPage />,            ["recruitment:view"]) },
-      { path: "recruitment/onboarding",    element: withPermission(<OnboardingPage />,            ["recruitment:view"]) },
+      { path: "recruitment/candidates/:id", element: withPermission(<CandidateDetailPage />,       ["recruitment:view"]) },
+      { path: "recruitment/interviews",    element: withPermission(<InterviewsPage />,            ["recruitment:view", "recruitment:interview"]) },
+      { path: "recruitment/talent-pool",    element: withPermission(<TalentPoolPage />,            ["recruitment:view"]) },
+      { path: "recruitment/referrals",     element: withPermission(<ReferralsPage />,            ["recruitment:view"]) },
+      { path: "recruitment/refer",         element: withPermission(<ReferSomeonePage />,         ["recruitment:refer"]) },
+      { path: "recruitment/offers",        element: withPermission(<OffersPage />,                ["recruitment:view"]) },
+      { path: "recruitment/onboarding",    element: withPermission(<OnboardingPage />,            ["recruitment:view", "recruitment:onboarding_task"]) },
+      { path: "recruitment/reports",       element: withPermission(<RecruitmentReportsPage />,    ["recruitment:view"]) },
       { path: "leaves",                    element: withPermission(<LeavesPage />,                ["leaves:view", "leaves:approve", "leaves:create"]) },
       { path: "approvals",                 element: withPermission(<ApprovalsPage />,             ["approvals:view", "approvals:manage_settings", "approvals:approve"]) },
       { path: "approvals/delegations",     element: withPermission(<DelegationsPage />,           ["approvals:approve"]) },
@@ -128,6 +144,13 @@ export const appRouter = createBrowserRouter([
       { path: "*", element: <NotFoundPage /> },
     ],
   },
+  // Public careers site: no login, no app layout.
+  { path: "/careers/:slug", errorElement: <RouteErrorElement />, element: <CareersPage /> },
+  { path: "/careers/:slug/jobs/:jobId", errorElement: <RouteErrorElement />, element: <CareersJobPage /> },
+  // Private page for an applicant, reached through the secret link in their email.
+  { path: "/candidate-portal/:token", errorElement: <RouteErrorElement />, element: <CandidatePortalPage /> },
+  // Private questionnaire for a referee, reached through the secret link in their email.
+  { path: "/reference/:token", errorElement: <RouteErrorElement />, element: <ReferenceFormPage /> },
   {
     path: "/auth",
     errorElement: <RouteErrorElement />,
