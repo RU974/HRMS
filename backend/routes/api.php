@@ -164,7 +164,7 @@ $registerRoutes = function (): void {
         Route::get('settings/themes/company', [ThemeSettingsController::class, 'company'])->middleware('permission:settings:manage_settings');
         Route::put('settings/themes/current', [ThemeSettingsController::class, 'saveCurrent']);
         Route::delete('settings/themes/current', [ThemeSettingsController::class, 'resetCurrent']);
-        Route::middleware('permission:reports:view')->prefix('reports')->group(function () {
+        Route::middleware('permission:reports:view|reports:view_own')->prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
             Route::get('/attendance', [ReportController::class, 'attendance']);
             Route::get('/leave', [ReportController::class, 'leave']);
@@ -172,7 +172,7 @@ $registerRoutes = function (): void {
             Route::get('/inventory', [ReportController::class, 'inventory']);
             Route::get('/analytics', [ReportController::class, 'analytics']);
         });
-        Route::middleware('permission:reports:view|reports:manage_settings')->apiResource('reports', ReportController::class);
+        Route::middleware('permission:reports:view|reports:manage_settings|reports:view_own')->apiResource('reports', ReportController::class);
         Route::middleware('permission:reports:manage_settings')->put('reports/{id}/schedule', [ReportController::class, 'updateSchedule']);
 
         Route::middleware('permission:settings:manage_settings')->group(function () {
