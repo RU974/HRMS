@@ -11,6 +11,7 @@ import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import {
   type AttendanceItem,
+  type AttendanceMonthlyStats,
   type TeamDailyAttendanceRow,
   checkInAttendance,
   checkOutAttendance,
@@ -542,6 +543,26 @@ export function AttendancePage() {
   const [editing, setEditing]           = useState<AttendanceItem | null>(null);
   const [correctionModal, setCorrectionModal] = useState<AttendanceItem | null>(null);
   const [correctionNote, setCorrectionNote]   = useState("");
+  const [proposedIn, setProposedIn]     = useState("");
+  const [proposedOut, setProposedOut]   = useState("");
+
+  // Records filters (month is "YYYY-MM" or "" for all time)
+  const [monthFilter, setMonthFilter]   = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const listFilters = {
+    month:  monthFilter ? Number(monthFilter.slice(5, 7)) : undefined,
+    year:   monthFilter ? Number(monthFilter.slice(0, 4)) : undefined,
+    status: statusFilter || undefined,
+  };
+
+  // Month shown in the stats card (defaults to the current month)
+  const [statsYear, setStatsYear]   = useState(new Date().getFullYear());
+  const [statsMonth, setStatsMonth] = useState(new Date().getMonth() + 1);
+  function shiftStatsMonth(delta: number) {
+    const d = new Date(statsYear, statsMonth - 1 + delta, 1);
+    setStatsYear(d.getFullYear());
+    setStatsMonth(d.getMonth() + 1);
+  }
 
   const employeeId = user?.employee?.id ?? 0;
 
@@ -559,8 +580,8 @@ export function AttendancePage() {
   }, [searchInput]);
 
   const query = useQuery({
-    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId, search],
-    queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId, search || undefined),
+    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId, search, monthFilter, statusFilter],
+    queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId, search || undefined, listFilters),
     enabled: seesTeam || employeeId > 0,
     placeholderData: (prev) => prev,
   });
@@ -586,8 +607,8 @@ export function AttendancePage() {
 
   // Monthly stats
   const monthlyStats = useQuery({
-    queryKey: ["attendance", "monthly", employeeId, now.getMonth() + 1, now.getFullYear()],
-    queryFn:  () => getAttendanceMonthlyStats(employeeId, now.getMonth() + 1, now.getFullYear()),
+    queryKey: ["attendance", "monthly", employeeId, statsMonth, statsYear],
+    queryFn:  () => getAttendanceMonthlyStats(employeeId, statsMonth, statsYear),
     enabled: !!employeeId,
   });
 
@@ -613,7 +634,7 @@ export function AttendancePage() {
 
   const correctionMutation = useMutation({
     mutationFn: ({ id, note }: { id: number; note: string }) =>
-      requestAttendanceCorrection(id, note),
+      requestAttendanceCorrection(id, note, { check_in: proposedIn, check_out: proposedOut }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
       setCorrectionModal(null);
@@ -625,7 +646,7 @@ export function AttendancePage() {
 
   const importRef = useRef<HTMLInputElement>(null);
   const exportMutation = useMutation({
-    mutationFn: () => exportAttendanceCsv(search || undefined),
+    mutationFn: () => exportAttendanceCsv(search || undefined, listFilters),
     onError: (e: Error) => setGlobalError(e.message),
   });
   const importMutation = useMutation({
@@ -654,15 +675,26 @@ export function AttendancePage() {
 
   function openCreate() { setEditing(null); setModalOpen(true); }
   function openEdit(item: AttendanceItem) { setEditing(item); setModalOpen(true); }
+  function openCorrection(item: AttendanceItem) {
+    setCorrectionNote("");
+    setProposedIn(item.check_in ? item.check_in.slice(11, 16) : "");
+    setProposedOut(item.check_out ? item.check_out.slice(11, 16) : "");
+    setCorrectionModal(item);
+  }
 
   const todayRec  = todayRecord.data;
   const checkedIn  = !!todayRec?.check_in;
   const checkedOut = !!todayRec?.check_out;
-  const stats      = monthlyStats.data as { present?: number; absent?: number; late?: number; leave?: number } | undefined;
+  const stats      = monthlyStats.data as Partial<AttendanceMonthlyStats> | undefined;
+  const showEmployeeCol = seesTeam;
+  const showActions     = canManage || employeeId > 0;
+  const colCount        = 9 + (showEmployeeCol ? 1 : 0) + (showActions ? 1 : 0);
+  const canExport       = canManage || canApprove || employeeId > 0;
   const pageRecords = (query.data as { data?: AttendanceItem[] } | undefined)?.data ?? [];
   const { sorted: records, sort: recSort, toggle: toggleRecSort } = useTableSort(pageRecords, "employee", {
     employee: (r) => r.employee?.name,
     overtime: (r) => r.overtime_hours ?? 0,
+    hours: (r) => r.duration_hours ?? 0,
   });
   const totalPages = (query.data as { last_page?: number } | undefined)?.last_page ?? 1;
   const empOptions = (employees.data?.data ?? []).map(e => ({ id: e.id, name: e.name }));
@@ -675,7 +707,7 @@ export function AttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Attendance" subtitle="Track daily attendance, check in/out, and manage records." />
+      <PageHeader title="Attendance" subtitle={seesTeam ? "Track daily attendance, check in/out, and manage records." : "Check in/out, review your attendance and request corrections."} />
 
       {globalError && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -731,7 +763,7 @@ export function AttendancePage() {
                   </div>
                 )}
                 {todayRec && (
-                  <Button variant="outline" onClick={() => { setCorrectionNote(""); setCorrectionModal(todayRec); }} className="text-sm">
+                  <Button variant="outline" onClick={() => openCorrection(todayRec)} className="text-sm">
                     Request correction
                   </Button>
                 )}
@@ -740,22 +772,33 @@ export function AttendancePage() {
           </Card>
 
           <Card>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">
-              {now.toLocaleString("default", { month: "long" })} {now.getFullYear()}
-            </p>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <Button variant="outline" className="text-xs px-2 py-1" aria-label="Previous month" onClick={() => shiftStatsMonth(-1)}>←</Button>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--muted)]">
+                {new Date(statsYear, statsMonth - 1, 1).toLocaleString("default", { month: "long", year: "numeric" })}
+              </p>
+              <Button variant="outline" className="text-xs px-2 py-1" aria-label="Next month" onClick={() => shiftStatsMonth(1)}
+                disabled={statsYear === now.getFullYear() && statsMonth === now.getMonth() + 1}>→</Button>
+            </div>
             {monthlyStats.isLoading ? (
               <div className="space-y-2">{[1,2,3,4].map(i => <div key={i} className="h-4 animate-pulse rounded bg-[var(--border)]" />)}</div>
+            ) : monthlyStats.isError ? (
+              <p className="text-sm text-red-600">Could not load monthly stats.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: "Present", value: stats?.present ?? 0, color: "text-emerald-600" },
                   { label: "Late",    value: stats?.late    ?? 0, color: "text-amber-600" },
                   { label: "Absent",  value: stats?.absent  ?? 0, color: "text-red-600" },
                   { label: "Leave",   value: stats?.leave   ?? 0, color: "text-blue-600" },
-                ].map(s => (
-                  <div key={s.label} className="rounded-xl border border-[var(--border)]/60 p-3">
-                    <p className="text-xs text-[var(--muted)]">{s.label}</p>
-                    <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                  { label: "WFH",     value: stats?.wfh_days ?? 0, color: "text-violet-600" },
+                  { label: "Off days", value: stats?.off_days ?? 0, color: "text-[var(--muted)]" },
+                  { label: "Hours",   value: `${(stats?.total_hours ?? 0).toFixed(1)}h`, color: "text-[var(--text)]" },
+                  { label: "Overtime", value: `${(stats?.overtime_hours ?? 0).toFixed(1)}h`, color: "text-[var(--primary)]" },
+                ].map(st => (
+                  <div key={st.label} className="rounded-xl border border-[var(--border)]/60 p-3">
+                    <p className="text-xs text-[var(--muted)]">{st.label}</p>
+                    <p className={`text-xl font-bold ${st.color}`}>{st.value}</p>
                   </div>
                 ))}
               </div>
@@ -781,15 +824,40 @@ export function AttendancePage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-base font-semibold">Attendance Records</h3>
             <div className="flex flex-wrap items-center gap-3">
+              {seesTeam && (
+                <FormInput
+                  type="search"
+                  aria-label="Search attendance records"
+                  placeholder="Search by employee name or ID…"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  className="w-64"
+                />
+              )}
               <FormInput
-                type="search"
-                aria-label="Search attendance records"
-                placeholder="Search by employee name or ID…"
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                className="w-64"
+                type="month"
+                aria-label="Filter by month"
+                value={monthFilter}
+                max={today.slice(0, 7)}
+                onChange={e => { setMonthFilter(e.target.value); setPage(1); }}
+                className="w-40"
               />
-              {(canManage || canApprove) && (
+              <select
+                aria-label="Filter by status"
+                className={`${inputClass} w-36`}
+                value={statusFilter}
+                onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">All statuses</option>
+                <option value="present">Present</option>
+                <option value="late">Late</option>
+                <option value="absent">Absent</option>
+                <option value="leave">Leave</option>
+              </select>
+              {(monthFilter || statusFilter) && (
+                <Button variant="outline" onClick={() => { setMonthFilter(""); setStatusFilter(""); setPage(1); }}>Clear</Button>
+              )}
+              {canExport && (
                 <Button variant="outline" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
                   {exportMutation.isPending ? "Exporting..." : "Export"}
                 </Button>
@@ -811,38 +879,46 @@ export function AttendancePage() {
             <table className="rtable w-full text-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wider text-[var(--muted)]">
-                  <SortableTh label="Employee" sortKey="employee" sort={recSort} onSort={toggleRecSort} />
+                  {showEmployeeCol && <SortableTh label="Employee" sortKey="employee" sort={recSort} onSort={toggleRecSort} />}
                   <SortableTh label="Date" sortKey="date" sort={recSort} onSort={toggleRecSort} />
                   <SortableTh label="Status" sortKey="status" sort={recSort} onSort={toggleRecSort} />
                   <SortableTh label="In" sortKey="check_in" sort={recSort} onSort={toggleRecSort} />
                   <SortableTh label="Out" sortKey="check_out" sort={recSort} onSort={toggleRecSort} />
+                  <SortableTh label="Hours" sortKey="hours" sort={recSort} onSort={toggleRecSort} />
                   <th className="p-3">Shift</th>
                   <SortableTh label="OT" sortKey="overtime" sort={recSort} onSort={toggleRecSort} />
                   <th className="p-3">Flags</th>
                   <SortableTh label="Source" sortKey="source" sort={recSort} onSort={toggleRecSort} />
-                  {canManage && <th className="p-3 text-right">Actions</th>}
+                  {showActions && <th className="p-3 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {query.isLoading && [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-[var(--border)]/50">
-                    {[...Array(canManage ? 10 : 9)].map((__, j) => (
+                    {[...Array(colCount)].map((__, j) => (
                       <td key={j} className="p-3"><div className="h-4 animate-pulse rounded bg-[var(--border)]" /></td>
                     ))}
                   </tr>
                 ))}
 
                 {!query.isLoading && records.length === 0 && (
-                  <tr><td colSpan={canManage ? 10 : 9}className="p-10 text-center text-sm text-[var(--muted)]">No attendance records found.</td></tr>
+                  <tr><td colSpan={colCount} className="p-10 text-center text-sm text-[var(--muted)]">
+                    {query.isError ? "Could not load attendance records." : monthFilter || statusFilter ? "No records match these filters." : "No attendance records found."}
+                  </td></tr>
                 )}
 
                 {records.map(item => (
                   <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
-                    <td data-label="Employee" className="p-3 font-medium">{item.employee?.name ?? `Employee #${item.employee_id}`}</td>
+                    {showEmployeeCol && <td data-label="Employee" className="p-3 font-medium">{item.employee?.name ?? `Employee #${item.employee_id}`}</td>}
                     <td data-label="Date" className="p-3">{item.date?.slice(0, 10)}</td>
                     <td data-label="Status" className="p-3"><StatusBadge status={item.status} /></td>
                     <td data-label="In" className="p-3">{item.check_in  ? item.check_in.slice(11,16)  : "—"}</td>
-                    <td data-label="Out" className="p-3">{item.check_out ? item.check_out.slice(11,16) : "—"}</td>
+                    <td data-label="Out" className="p-3">
+                      {item.check_out ? <>{item.check_out.slice(11,16)}{item.check_out.slice(0, 10) > String(item.date).slice(0, 10) && <span className="ml-1 text-xs text-[var(--muted)]">+1d</span>}</> : "—"}
+                    </td>
+                    <td data-label="Hours" className="p-3 tabular-nums">
+                      {item.check_out && (item.duration_hours ?? 0) > 0 ? `${item.duration_hours?.toFixed(1)}h` : "—"}
+                    </td>
                     <td data-label="Shift" className="p-3"><ShiftProgress item={item} now={now} /></td>
                     <td data-label="OT" className="p-3 text-xs font-medium">
                       {(item.overtime_hours ?? 0) > 0
@@ -853,17 +929,31 @@ export function AttendancePage() {
                       <div className="flex flex-wrap gap-1">
                         {item.work_from_home   && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">WFH</span>}
                         {item.correction_status === "pending" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Correction pending</span>}
+                        {item.correction_status === "approved" && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Correction approved</span>}
+                        {item.correction_status === "rejected" && <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Correction rejected</span>}
                       </div>
+                      {item.correction_response_notes && item.correction_status !== "pending" && (
+                        <p className="mt-1 max-w-[200px] truncate text-xs text-[var(--muted)]" title={item.correction_response_notes}>Reply: {item.correction_response_notes}</p>
+                      )}
                     </td>
                     <td data-label="Source" className="p-3"><SourceBadge source={item.source} /></td>
-                    {canManage && (
+                    {showActions && (
                       <td data-label="Actions" className="p-3">
                         <div className="flex justify-end gap-2">
-                          <Button variant="outline" className="text-xs px-2 py-1" onClick={() => openEdit(item)}>Edit</Button>
-                          <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200 hover:bg-red-50"
-                            onClick={() => { if (window.confirm("Delete this record?")) void deleteMutation.mutateAsync(item.id); }}>
-                            Delete
-                          </Button>
+                          {item.employee_id === employeeId && item.correction_status !== "pending" && (
+                            <Button variant="outline" className="text-xs px-2 py-1" onClick={() => openCorrection(item)}>
+                              {item.correction_status ? "Re-request" : "Correct"}
+                            </Button>
+                          )}
+                          {canManage && (
+                            <>
+                              <Button variant="outline" className="text-xs px-2 py-1" onClick={() => openEdit(item)}>Edit</Button>
+                              <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200 hover:bg-red-50"
+                                onClick={() => { if (window.confirm("Delete this record?")) void deleteMutation.mutateAsync(item.id); }}>
+                                Delete
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </td>
                     )}
@@ -918,6 +1008,17 @@ export function AttendancePage() {
             {correctionModal.correction_status === "pending" && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">A correction request is already pending for this record.</p>
             )}
+            {correctionModal.correction_status === "rejected" && correctionModal.correction_response_notes && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">Previously rejected: {correctionModal.correction_response_notes}</p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="Correct check in (optional)">
+                <TimeInput24 clearable value={proposedIn} onChange={setProposedIn} />
+              </FormField>
+              <FormField label="Correct check out (optional)">
+                <TimeInput24 clearable value={proposedOut} onChange={setProposedOut} />
+              </FormField>
+            </div>
             <FormField label="Reason for correction">
               <textarea
                 className="h-24 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"

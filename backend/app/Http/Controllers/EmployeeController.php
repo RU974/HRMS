@@ -553,9 +553,14 @@ class EmployeeController extends Controller
 
         // Run inline so it works without a queue worker; the run row still records done/failed.
         try {
-            ImportEmployeesJob::dispatchSync($run->id, $storedPath, $companyId);
+            ImportEmployeesJob::dispatchSync($run->id, $storedPath, $companyId !== null ? (string) $companyId : null);
         } catch (\Throwable $e) {
             report($e);
+            // Otherwise the run stays "queued" and the UI polls until it times out.
+            $run->update([
+                'status' => BackgroundRun::STATUS_FAILED,
+                'error'  => 'Import failed: ' . $e->getMessage(),
+            ]);
         }
 
         return $this->ok(['background_run_id' => $run->id], 'Employee import has been queued.', 202);

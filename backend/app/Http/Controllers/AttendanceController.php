@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\User;
 use App\Services\AttendanceCalculator;
+use App\Services\AttendanceNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -63,6 +64,8 @@ class AttendanceController extends Controller
                     ->orWhere('employee_number', 'like', $term);
             }));
         }
+        $query->orderByDesc('date')->orderByDesc('id');
+
         return $this->ok($query->paginate((int) $request->input('per_page', 15)));
     }
 
@@ -184,11 +187,19 @@ class AttendanceController extends Controller
     // GET /attendance/export — CSV of the records the caller may see, honouring the list filters.
     public function export(Request $request)
     {
-        $this->authorizePermission($request, 'attendance:manage_settings|attendance:approve');
+        $user = $request->user();
+        $isManager = $user?->can('attendance:manage_settings') || $user?->can('attendance:approve');
 
         $query = Attendance::with('employee');
         $this->scopeToCompany($request, $query, 'employee.user');
-        $this->applyManagedEmployeeScope($request, $query, 'employee');
+        if ($isManager) {
+            $this->applyManagedEmployeeScope($request, $query, 'employee');
+        } else {
+            // Self-service: everyone else exports only their own records.
+            $own = Employee::where('user_id', $user?->id)->value('id');
+            abort_unless($own, 403, 'You are not authorized to export attendance.');
+            $query->where('employee_id', $own);
+        }
 
         if ($request->filled('date')) {
             $query->whereDate('date', $request->date);
@@ -356,7 +367,16 @@ class AttendanceController extends Controller
             ->groupBy('status')
             ->get();
 
+        $records = Attendance::with('employee.shift')
+            ->where('employee_id', $employeeId)
+            ->whereMonth('date', $month)
+            ->whereYear('date', $year)
+            ->get();
+
         return $this->ok([
+            'total_hours' => round($records->sum('duration_hours'), 1),
+            'overtime_hours' => round($records->sum('overtime_hours'), 1),
+            'wfh_days' => $records->where('work_from_home', true)->count(),
             'total_days' => $stats->sum('count'),
             'present' => $stats->where('status', 'present')->sum('count'),
             'absent' => $stats->where('status', 'absent')->sum('count'),
@@ -637,7 +657,9 @@ class AttendanceController extends Controller
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
 
         $validated = $request->validate([
-            'correction_request_notes' => 'required|string',
+            'correction_request_notes' => 'required|string|max:2000',
+            'proposed_check_in'  => 'nullable|date_format:H:i',
+            'proposed_check_out' => 'nullable|date_format:H:i',
         ]);
 
         if ($attendance->correction_status === 'pending') {
@@ -647,10 +669,13 @@ class AttendanceController extends Controller
         $attendance->update([
             'correction_status' => 'pending',
             'correction_request_notes' => $validated['correction_request_notes'],
+            'correction_proposed_check_in' => $validated['proposed_check_in'] ?? null,
+            'correction_proposed_check_out' => $validated['proposed_check_out'] ?? null,
             'correction_requested_at' => Carbon::now(),
             'correction_response_notes' => null,
             'correction_reviewed_at' => null,
         ]);
+        app(AttendanceNotificationService::class)->correctionRequested($attendance);
 
         return $this->ok($attendance, 'Correction request submitted successfully');
     }
@@ -659,7 +684,7 @@ class AttendanceController extends Controller
     {
         $this->authorizePermission($request, 'attendance:approve');
 
-        $attendance = Attendance::findOrFail($id);
+        $attendance = Attendance::with('employee')->findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
 
         $validated = $request->validate([
@@ -667,15 +692,50 @@ class AttendanceController extends Controller
             'correction_response_notes' => 'nullable|string',
         ]);
 
-        if ($attendance->correction_status !== 'pending' && $validated['correction_status'] === 'pending') {
-            return $this->fail('Only pending correction requests can be reopened.', 422);
+        if ($attendance->correction_status !== 'pending') {
+            return $this->fail('Only pending correction requests can be reviewed.', 422);
+        }
+        if ($validated['correction_status'] === 'pending') {
+            return $this->fail('Choose approved or rejected.', 422);
+        }
+        if ($attendance->employee?->user_id === $request->user()?->id) {
+            return $this->fail('You cannot review your own correction request.', 403);
         }
 
-        $attendance->update([
+        $update = [
             'correction_status' => $validated['correction_status'],
             'correction_response_notes' => $validated['correction_response_notes'] ?? $attendance->correction_response_notes,
             'correction_reviewed_at' => Carbon::now(),
-        ]);
+        ];
+
+        // Approving applies the times the employee proposed (if any) to the record.
+        if ($validated['correction_status'] === 'approved'
+            && ($attendance->correction_proposed_check_in || $attendance->correction_proposed_check_out)) {
+            $calc = $this->attendanceCalculator();
+            $date = $attendance->date->toDateString();
+            $in = $attendance->correction_proposed_check_in
+                ? $calc->normalizeCheckTime($date, substr((string) $attendance->correction_proposed_check_in, 0, 5))
+                : $attendance->check_in?->toDateTimeString();
+            $out = $attendance->correction_proposed_check_out
+                ? $calc->resolveCheckOut($date, $in, substr((string) $attendance->correction_proposed_check_out, 0, 5))
+                : $attendance->check_out?->toDateTimeString();
+            if ($in && $out && Carbon::parse($out)->lessThan(Carbon::parse($in))) {
+                return $this->fail('The proposed check-out is earlier than the check-in.', 422);
+            }
+            $update['check_in'] = $in;
+            $update['check_out'] = $out;
+            if ($in) {
+                $update['status'] = $calc->deriveStatusFromCheckIn(
+                    AttendancePolicy::query()->first(),
+                    $attendance->employee?->effectiveShift(),
+                    $in,
+                    $attendance->status === 'absent' ? 'present' : $attendance->status
+                );
+            }
+        }
+
+        $attendance->update($update);
+        app(AttendanceNotificationService::class)->correctionReviewed($attendance, $request->user()?->id);
 
         return $this->ok($attendance, 'Correction request reviewed successfully');
     }

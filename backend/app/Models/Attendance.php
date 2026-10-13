@@ -21,6 +21,8 @@ class Attendance extends Model
         'notes',
         'correction_status',
         'correction_request_notes',
+        'correction_proposed_check_in',
+        'correction_proposed_check_out',
         'correction_requested_at',
         'correction_response_notes',
         'correction_reviewed_at',

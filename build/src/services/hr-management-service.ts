@@ -50,6 +50,8 @@ export interface AttendanceItem {
   shift_end_time?: string | null;
   correction_status?: "pending" | "approved" | "rejected" | null;
   correction_request_notes?: string | null;
+  correction_proposed_check_in?: string | null;
+  correction_proposed_check_out?: string | null;
   correction_response_notes?: string | null;
   correction_requested_at?: string | null;
   correction_reviewed_at?: string | null;
@@ -202,16 +204,26 @@ export interface TeamDailyAttendanceRow {
   monthly_absences: number;
 }
 
-export function listAttendancePaginated(page: number, employeeId?: number, search?: string) {
+export interface AttendanceListFilters { month?: number; year?: number; status?: string }
+
+export function listAttendancePaginated(page: number, employeeId?: number, search?: string, filters: AttendanceListFilters = {}) {
   let url = `/attendance?per_page=20&page=${page}`;
   if (employeeId) url += `&employee_id=${employeeId}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (filters.month) url += `&month=${filters.month}`;
+  if (filters.year) url += `&year=${filters.year}`;
+  if (filters.status) url += `&status=${encodeURIComponent(filters.status)}`;
   return apiClient<PaginatedResponse<AttendanceItem>>(url);
 }
 
-export async function exportAttendanceCsv(search?: string): Promise<void> {
+export async function exportAttendanceCsv(search?: string, filters: AttendanceListFilters = {}): Promise<void> {
   const token = useAuthStore.getState().token;
-  const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+  const q = new URLSearchParams();
+  if (search) q.set("search", search);
+  if (filters.month) q.set("month", String(filters.month));
+  if (filters.year) q.set("year", String(filters.year));
+  if (filters.status) q.set("status", filters.status);
+  const qs = q.toString() ? `?${q.toString()}` : "";
   const res = await fetch(`${API_BASE_URL}/attendance/export${qs}`, {
     headers: { Authorization: `Bearer ${token ?? ""}`, Accept: "text/csv" },
   });
@@ -253,16 +265,32 @@ export function getTeamDailyAttendance(date: string) {
   return apiClient<TeamDailyAttendanceRow[]>(`/attendance/team-daily?date=${date}`);
 }
 
+export interface AttendanceMonthlyStats {
+  present: number;
+  absent: number;
+  late: number;
+  leave: number;
+  total_days: number;
+  off_days: number;
+  wfh_days: number;
+  total_hours: number;
+  overtime_hours: number;
+}
+
 export function getAttendanceMonthlyStats(employeeId: number, month: number, year: number) {
-  return apiClient<{ present: number; absent: number; late: number; leave: number; total: number }>(
+  return apiClient<AttendanceMonthlyStats>(
     `/attendance/monthly-stats/${employeeId}/${month}/${year}`
   );
 }
 
-export function requestAttendanceCorrection(id: number, note: string) {
+export function requestAttendanceCorrection(id: number, note: string, proposed?: { check_in?: string; check_out?: string }) {
   return apiClient(`/attendance/${id}/request-correction`, {
     method: "POST",
-    body: JSON.stringify({ correction_request_notes: note }),
+    body: JSON.stringify({
+      correction_request_notes: note,
+      proposed_check_in: proposed?.check_in || null,
+      proposed_check_out: proposed?.check_out || null,
+    }),
   });
 }
 
