@@ -28,6 +28,7 @@ import {
   listInventoryAssignments,
   createInventoryAssignment,
   returnInventoryAssignment,
+  updateInventoryAssignment,
   type InventoryCategoryItem,
   type InventoryItem,
   type InventoryAssignment,
@@ -934,6 +935,19 @@ function AssignmentsTab() {
     assigned_date: new Date().toISOString().slice(0, 10),
     notes: "",
   });
+  const [editTarget, setEditTarget] = useState<InventoryAssignment | null>(null);
+  const [editForm, setEditForm] = useState({ employee_id: "", quantity: "1", assigned_date: "", returned_date: "", notes: "" });
+
+  const openEdit = (a: InventoryAssignment) => {
+    setEditTarget(a);
+    setEditForm({
+      employee_id: String(a.employee_id),
+      quantity: String(a.quantity),
+      assigned_date: a.assigned_date?.slice(0, 10) ?? "",
+      returned_date: a.returned_date?.slice(0, 10) ?? "",
+      notes: a.notes ?? "",
+    });
+  };
 
   const itemsQ = useQuery({ queryKey: ["inventory", "items", false], queryFn: () => listInventoryItems() });
   const employeesQ = useQuery({ queryKey: ["employees", "all"], queryFn: () => getEmployeesPage({ per_page: 500 }) });
@@ -969,6 +983,26 @@ function AssignmentsTab() {
       setReturnModal(null);
     },
     onError: (e: Error) => toast.error("Return failed", e.message),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: () => {
+      if (!editTarget) throw new Error("No assignment selected");
+      const isReturned = editTarget.status === "returned";
+      return updateInventoryAssignment(editTarget.id, {
+        assigned_date: editForm.assigned_date,
+        notes: editForm.notes || null,
+        ...(isReturned
+          ? { returned_date: editForm.returned_date }
+          : { employee_id: Number(editForm.employee_id), quantity: Number(editForm.quantity) }),
+      });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["inventory"] });
+      toast.success("Updated", "Assignment updated successfully.");
+      setEditTarget(null);
+    },
+    onError: (e: Error) => toast.error("Update failed", e.message),
   });
 
   const { sorted: assignments, sort, toggle: toggleSort } = useTableSort(Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [], "employee", {
@@ -1013,16 +1047,19 @@ function AssignmentsTab() {
                   <td className="p-3" data-label="Status"><StatusBadge status={a.status} /></td>
                   <td className="p-3 text-[var(--muted)] max-w-[150px] truncate" data-label="Notes">{a.notes ?? "—"}</td>
                   <td className="p-3" data-label="Actions">
-                    {a.status === "assigned" && (
-                      <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => openEdit(a)}>
+                        <Edit2 className="mr-1.5 h-3.5 w-3.5" />Edit
+                      </Button>
+                      {a.status === "assigned" && (
                         <Button
                           variant="outline"
                           onClick={() => { setReturnModal({ id: a.id, itemName: a.item?.name ?? "Item" }); setReturnDate(new Date().toISOString().slice(0, 10)); setReturnNotes(""); }}
                         >
                           <CornerDownLeft className="mr-1.5 h-3.5 w-3.5" />Return
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1082,6 +1119,56 @@ function AssignmentsTab() {
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" disabled={assignMutation.isPending}>{assignMutation.isPending ? "Assigning…" : "Assign"}</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Edit Modal */}
+      {editTarget && (
+        <Modal title={`Edit Assignment: ${editTarget.item?.name ?? "Item"}`} onClose={() => setEditTarget(null)}>
+          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void editMutation.mutateAsync(); }}>
+            {editTarget.status === "assigned" && (
+              <>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Employee <span className="text-red-500">*</span></label>
+                  <select
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm"
+                    value={editForm.employee_id}
+                    onChange={(e) => setEditForm((p) => ({ ...p, employee_id: e.target.value }))}
+                    required
+                  >
+                    {!employees.some((emp) => emp.id === editTarget.employee_id) && (
+                      <option value={editTarget.employee_id}>{editTarget.employee?.name ?? "Current employee"}</option>
+                    )}
+                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Quantity <span className="text-red-500">*</span></label>
+                  <FormInput type="number" min={1} value={editForm.quantity} onChange={(e) => setEditForm((p) => ({ ...p, quantity: e.target.value }))} required />
+                </div>
+              </>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Assigned Date <span className="text-red-500">*</span></label>
+                <FormInput type="date" value={editForm.assigned_date} onChange={(e) => setEditForm((p) => ({ ...p, assigned_date: e.target.value }))} required />
+              </div>
+              {editTarget.status === "returned" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Returned Date <span className="text-red-500">*</span></label>
+                  <FormInput type="date" value={editForm.returned_date} onChange={(e) => setEditForm((p) => ({ ...p, returned_date: e.target.value }))} required />
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Notes</label>
+              <textarea className="h-20 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm" value={editForm.notes} onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+              <Button type="submit" disabled={editMutation.isPending}>{editMutation.isPending ? "Saving…" : "Save Changes"}</Button>
             </div>
           </form>
         </Modal>

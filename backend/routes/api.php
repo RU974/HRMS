@@ -602,7 +602,7 @@ $registerRoutes = function (): void {
             Route::post('inventory/items/{id}/restore', [InventoryItemController::class, 'restore']);
             Route::apiResource('inventory/items', InventoryItemController::class)->except(['create', 'edit']);
             Route::post('inventory/assignments/{id}/return', [InventoryAssignmentController::class, 'return']);
-            Route::apiResource('inventory/assignments', InventoryAssignmentController::class)->only(['index', 'store']);
+            Route::apiResource('inventory/assignments', InventoryAssignmentController::class)->only(['index', 'store', 'update']);
         });
 
         // Ticketing routes

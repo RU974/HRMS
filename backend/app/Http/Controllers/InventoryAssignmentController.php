@@ -72,6 +72,52 @@ class InventoryAssignmentController extends Controller
         );
     }
 
+    public function update(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'inventory:edit');
+
+        $assignment = InventoryAssignment::with('item')->findOrFail($id);
+        $this->assertEmployeeInCompany($request, (int) $assignment->employee_id);
+
+        $returned = $assignment->status === 'returned';
+
+        $rules = [
+            'assigned_date' => ['required', 'date'],
+            'notes'         => ['nullable', 'string'],
+        ];
+        if ($returned) {
+            $rules['returned_date'] = ['required', 'date', 'after_or_equal:assigned_date'];
+        } else {
+            $rules['employee_id'] = ['required', 'exists:employees,id'];
+            $rules['quantity']    = ['required', 'integer', 'min:1'];
+        }
+        $validated = $request->validate($rules);
+
+        if (! $returned) {
+            $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
+
+            // Stock only changes while the item is still out with the employee.
+            $diff = (int) $validated['quantity'] - (int) $assignment->quantity;
+            if ($diff > 0 && $assignment->item->quantity_available < $diff) {
+                return $this->fail(
+                    "Only {$assignment->item->quantity_available} additional unit(s) available.",
+                    422,
+                    ['quantity_available' => $assignment->item->quantity_available]
+                );
+            }
+            if ($diff !== 0) {
+                $assignment->item->decrement('quantity_available', $diff);
+            }
+        }
+
+        $assignment->update($validated);
+
+        return $this->ok(
+            $assignment->load(['item:id,name,sku', 'employee:id,name']),
+            'Assignment updated successfully'
+        );
+    }
+
     public function return(Request $request, $id)
     {
         $this->authorizePermission($request, 'inventory:edit');

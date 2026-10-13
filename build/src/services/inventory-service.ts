@@ -156,6 +156,21 @@ export const createInventoryAssignment = (payload: {
     body: JSON.stringify(payload),
   });
 
+export const updateInventoryAssignment = (
+  id: number,
+  payload: {
+    employee_id?: number;
+    quantity?: number;
+    assigned_date: string;
+    returned_date?: string;
+    notes?: string | null;
+  },
+) =>
+  apiClient<InventoryAssignment>(`/inventory/assignments/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
 export const returnInventoryAssignment = (id: number, payload: { returned_date: string; notes?: string }) =>
   apiClient<InventoryAssignment>(`/inventory/assignments/${id}/return`, {
     method: "POST",
