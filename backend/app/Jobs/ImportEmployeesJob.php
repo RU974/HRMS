@@ -157,6 +157,7 @@ class ImportEmployeesJob implements ShouldQueue
                             'email' => $email,
                             'username' => $username,
                             'password' => Hash::make(Str::password(12)),
+                            'must_change_password' => true,
                             'company_id' => $this->companyId,
                         ]);
                     }

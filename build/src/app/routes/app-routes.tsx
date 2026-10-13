@@ -69,6 +69,7 @@ const TicketDetailPage = lazy(() => import("@/modules/tickets/ticket-detail").th
 const LoginPage = lazy(() => import("@/modules/auth/login-page").then((m) => ({ default: m.LoginPage })));
 const RegisterPage = lazy(() => import("@/modules/auth/register-page").then((m) => ({ default: m.RegisterPage })));
 const ForgotPasswordPage = lazy(() => import("@/modules/auth/forgot-password-page").then((m) => ({ default: m.ForgotPasswordPage })));
+const ChangePasswordPage = lazy(() => import("@/modules/auth/change-password-page").then((m) => ({ default: m.ChangePasswordPage })));
 const ResetPasswordPage = lazy(() => import("@/modules/auth/reset-password-page").then((m) => ({ default: m.ResetPasswordPage })));
 
 function withPermission(element: ReactNode, permissions: string[]) {
@@ -160,6 +161,7 @@ export const appRouter = createBrowserRouter([
       { path: "register",        element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
       { path: "reset-password",  element: <ResetPasswordPage /> },
+      { path: "change-password", element: <ChangePasswordPage /> },
     ],
   },
   // ── Top-level 404 ──

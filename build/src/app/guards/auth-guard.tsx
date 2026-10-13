@@ -9,7 +9,7 @@ const SESSION_VERSION = "3";
 const SESSION_VERSION_KEY = "hrms_session_v";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, setUser, logout } = useAuthStore();
+  const { isAuthenticated, user, setUser, logout } = useAuthStore();
   const refreshed = useRef(false);
   // Block render until /auth/me resolves so stale sessionStorage permissions
   // are never briefly visible before the server response arrives.
@@ -70,5 +70,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) return <Navigate to="/auth/login" replace />;
   if (refreshing) return null;
+  // First sign-in with a provisioned password: force a change before any app page.
+  if (user?.must_change_password) return <Navigate to="/auth/change-password" replace />;
   return <>{children}</>;
 }

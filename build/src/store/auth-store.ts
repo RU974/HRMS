@@ -6,6 +6,7 @@ export interface AuthUser {
   name: string;
   email: string;
   profile_image?: string | null;
+  must_change_password?: boolean;
   company_id?: string | null;
   branch_id?: string | null;
   employee?: {

@@ -155,6 +155,7 @@ class EmployeeController extends Controller
                         'email' => $validated['email'],
                         'username' => $validated['username'] ?? explode('@', $validated['email'])[0],
                         'password' => Hash::make($validated['password'] ?? Str::password(12)),
+                        'must_change_password' => true,
                         'company_id' => $companyId,
                 ]);
                 $linkedUserId = $linkedUser->id;

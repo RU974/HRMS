@@ -288,6 +288,7 @@ class AuthController extends Controller
             function (User $user, string $password): void {
                 $user->forceFill([
                     'password' => Hash::make($password),
+                    'must_change_password' => false,
                     'remember_token' => Str::random(60),
                 ])->save();
             }
@@ -345,8 +346,13 @@ class AuthController extends Controller
             return $this->fail('Current password is incorrect', 400);
         }
 
+        if (Hash::check($validated['password'], $user->password)) {
+            return $this->fail('New password must be different from the current password', 422);
+        }
+
         $user->forceFill([
             'password' => Hash::make($validated['password']),
+            'must_change_password' => false,
         ])->save();
 
         $this->auditLogService->recordRequest(

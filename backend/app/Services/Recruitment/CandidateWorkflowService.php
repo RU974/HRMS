@@ -381,6 +381,7 @@ class CandidateWorkflowService
                     'email' => $candidate->email,
                     'username' => Str::slug(explode('@', $candidate->email)[0]) . '-' . Str::lower(Str::random(4)),
                     'password' => Hash::make($tempPassword),
+                    'must_change_password' => true,
                     'company_id' => $companyId,
                 ]);
             }

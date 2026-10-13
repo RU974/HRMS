@@ -41,6 +41,7 @@ class User extends Authenticatable
         'email',
         'username',
         'password',
+        'must_change_password',
         'profile_image',
         'last_seen_at',
     ];
@@ -76,6 +77,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
             'company_id' => 'string',
             'branch_id' => 'string',
         ];

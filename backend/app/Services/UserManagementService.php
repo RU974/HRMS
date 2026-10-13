@@ -21,6 +21,7 @@ class UserManagementService
         $designation = $data['designation'] ?? null;
         unset($data['department_id'], $data['designation']);
         $data['password'] = Hash::make($data['password']);
+        $data['must_change_password'] = true;
         $user = User::create($data);
         $this->syncAssignableRoles($user, $roleIds, $actor);
         $this->syncEmployeeProfile($user, $departmentId, $designation);

@@ -18,7 +18,8 @@ export function LoginPage() {
 
   useEffect(() => {
     if (popup?.type === "success") {
-      const t = setTimeout(() => { window.location.href = "/dashboard"; }, 1800);
+      const target = useAuthStore.getState().user?.must_change_password ? "/auth/change-password" : "/dashboard";
+      const t = setTimeout(() => { window.location.href = target; }, 1800);
       return () => clearTimeout(t);
     }
   }, [popup]);
