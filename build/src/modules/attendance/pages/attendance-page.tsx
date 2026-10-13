@@ -296,9 +296,16 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
   );
 }
 
+// Local calendar date (YYYY-MM-DD). toISOString() is UTC and shows tomorrow for users west of UTC in the evening.
+function localDateString(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 // ── Team view ─────────────────────────────────────────────────────────────────
 function TeamView() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString(new Date());
   const [date, setDate] = useState(today);
 
   const { data, isLoading } = useQuery({
@@ -523,7 +530,7 @@ export function AttendancePage() {
   const isLineManager = useAuthStore(s => s.hasPermission("employees:view") && !s.hasPermission("employees:view_all"));
   const seesTeam    = canManage || canApprove || isLineManager;
   const now         = useLiveClock();
-  const today       = now.toISOString().slice(0, 10);
+  const today       = localDateString(now);
 
   const [tab, setTab]           = useState<Tab>("records");
   const [page, setPage]         = useState(1);

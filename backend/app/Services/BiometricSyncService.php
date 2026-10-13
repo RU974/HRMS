@@ -278,7 +278,11 @@ class BiometricSyncService
     protected function applyPunch(BiometricDevice $device, int $employeeId, array $punch): void
     {
         $timestamp = $punch['timestamp'];
-        $date = $timestamp->copy()->setTimezone($device->timezone)->toDateString();
+        // Device punches are wall-clock times in the device's own timezone (the agent
+        // sends "Y-m-d H:i:s" with no offset), and check_in/check_out are stored as
+        // that same wall-clock. Shifting the timezone here moved evening punches
+        // (e.g. 20:00 on the 12th) onto the next calendar day, so use the date as-is.
+        $date = $timestamp->toDateString();
 
         $type  = $punch['type'] ?? 'in';
         $shift = Employee::find($employeeId)?->shift;
