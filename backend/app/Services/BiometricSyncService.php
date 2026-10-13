@@ -325,7 +325,10 @@ class BiometricSyncService
         }
 
         if ($type === 'out') {
-            $attendance->check_out = $timestamp;
+            // A check-out earlier than the check-in is the previous night's punch, not this day's.
+            if (!$attendance->check_in || $timestamp->gt($attendance->check_in)) {
+                $attendance->check_out = $timestamp;
+            }
         } else {
             if (!$attendance->check_in) {
                 $attendance->check_in = $timestamp;
@@ -340,6 +343,10 @@ class BiometricSyncService
                     'present'
                 );
             }
+        }
+
+        if ($attendance->check_in && $attendance->check_out && $attendance->check_out->lt($attendance->check_in)) {
+            $attendance->check_out = null;
         }
 
         if (!$attendance->status) {

@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { FormInput } from "@/components/forms/form-input";
 import { getEmployeesPage } from "@/services/employee-service";
 import {
+  addDeviceUser,
+  listDeviceCommands,
+  removeDeviceUser,
   bulkImportEmployeeMappings,
   deleteEmployeeMapping,
   getAutoMatchSuggestions,
@@ -63,6 +66,55 @@ export function DeviceMappingPage() {
     queryKey: ["biometric-device-users", deviceId],
     queryFn: () => listDeviceUsers(deviceId),
     enabled: !!deviceId,
+  });
+
+  // Add / remove people on the physical device. The LAN agent applies these, so they are queued.
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addEmployeeId, setAddEmployeeId] = useState("");
+  const [addUserId, setAddUserId] = useState("");
+  const [addName, setAddName] = useState("");
+
+  const commandsQuery = useQuery({
+    queryKey: ["biometric-device-commands", deviceId],
+    queryFn: () => listDeviceCommands(deviceId),
+    enabled: !!deviceId,
+    // Poll while the agent still has work to do
+    refetchInterval: (q) =>
+      q.state.data?.some((c) => c.status === "pending" || c.status === "sent") ? 15000 : false,
+  });
+  const openCommands = (commandsQuery.data ?? []).filter((c) => c.status === "pending" || c.status === "sent");
+  const lastDoneCount = (commandsQuery.data ?? []).filter((c) => c.status === "done").length;
+  useEffect(() => {
+    // When the agent finishes a command, refresh the user and mapping lists
+    queryClient.invalidateQueries({ queryKey: ["biometric-device-users", deviceId] });
+    queryClient.invalidateQueries({ queryKey: ["biometric-mappings", deviceId] });
+  }, [lastDoneCount, deviceId, queryClient]);
+
+  const addUserMutation = useMutation({
+    mutationFn: () =>
+      addDeviceUser(deviceId, {
+        device_user_id: addUserId.trim(),
+        name: addName.trim() || undefined,
+        employee_id: addEmployeeId ? Number(addEmployeeId) : null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["biometric-device-commands", deviceId] });
+      toast.success("Queued", "The agent will add this person to the device on its next run.");
+      setShowAddForm(false);
+      setAddEmployeeId("");
+      setAddUserId("");
+      setAddName("");
+    },
+    onError: (e: Error) => { toast.error("Could not queue", e.message); setError(e.message); },
+  });
+
+  const removeUserMutation = useMutation({
+    mutationFn: (deviceUserId: string) => removeDeviceUser(deviceId, deviceUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["biometric-device-commands", deviceId] });
+      toast.success("Queued", "The agent will remove this person from the device on its next run.");
+    },
+    onError: (e: Error) => { toast.error("Could not queue", e.message); setError(e.message); },
   });
 
   const saveMutation = useMutation({
@@ -272,6 +324,9 @@ export function DeviceMappingPage() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={() => setShowAddForm((v) => !v)}>
+              {showAddForm ? "Close" : "Add Person to Device"}
+            </Button>
             <Button
               variant="outline"
               onClick={() => fetchFromDeviceMutation.mutate()}
@@ -298,6 +353,83 @@ export function DeviceMappingPage() {
           </div>
         </div>
       </Card>
+
+      {showAddForm && (
+        <Card className="mb-4">
+          <p className="mb-3 text-sm font-semibold">Add a person to the device</p>
+          <div className="grid gap-3 md:grid-cols-4">
+            <select
+              className={inputClass}
+              value={addEmployeeId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setAddEmployeeId(id);
+                const emp = employees.find((x) => String(x.id) === id);
+                if (emp) {
+                  setAddName(emp.name);
+                  if (!addUserId && emp.employee_number) setAddUserId(String(emp.employee_number));
+                }
+              }}
+            >
+              <option value="">Link to employee (optional)…</option>
+              {employees
+                .filter((emp) => !mappings.find((m) => m.employee_id === emp.id))
+                .map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} {emp.employee_number ? `(${emp.employee_number})` : ""}
+                  </option>
+                ))}
+            </select>
+            <FormInput
+              className={inputClass}
+              placeholder="Device user ID (e.g. 105)"
+              value={addUserId}
+              onChange={(e) => setAddUserId(e.target.value)}
+            />
+            <FormInput
+              className={inputClass}
+              placeholder="Name on device (max 24 chars)"
+              maxLength={24}
+              value={addName}
+              onChange={(e) => setAddName(e.target.value)}
+            />
+            <Button
+              variant="primary"
+              onClick={() => addUserMutation.mutate()}
+              disabled={!addUserId.trim() || !addName.trim() || addUserMutation.isPending}
+            >
+              {addUserMutation.isPending ? "Queuing..." : "Add to Device"}
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            The agent on the LAN PC adds the person on its next run (every ~15 min). Fingerprints or face must
+            still be enrolled on the device itself.
+          </p>
+        </Card>
+      )}
+
+      {(commandsQuery.data ?? []).length > 0 && (
+        <Card className="mb-4">
+          <p className="mb-2 text-sm font-semibold">
+            Device requests {openCommands.length > 0 && <span className="text-xs font-normal text-[var(--muted)]">· {openCommands.length} waiting for the agent</span>}
+          </p>
+          <ul className="space-y-1 text-xs">
+            {(commandsQuery.data ?? []).slice(0, 8).map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{c.type === "add_user" ? "Add" : "Remove"} {c.payload?.name ?? ""} (ID {c.device_user_id})</span>
+                <span className={
+                  c.status === "done" ? "text-emerald-700"
+                  : c.status === "failed" ? "text-red-700"
+                  : "text-orange-700"
+                }>
+                  {c.status === "pending" || c.status === "sent" ? "waiting for agent" : c.status}
+                </span>
+                {c.result_message && c.status === "failed" && <span className="text-[var(--muted)]">— {c.result_message}</span>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 border-b border-[var(--border)]">
@@ -406,6 +538,17 @@ export function DeviceMappingPage() {
                         {du.employee_name ?? <span className="text-xs text-[var(--muted)]">Not assigned</span>}
                       </td>
                       <td data-label="Action" className="py-3 pr-4 text-right">
+                        <Button
+                          variant="ghost"
+                          disabled={removeUserMutation.isPending || openCommands.some((c) => c.type === "remove_user" && c.device_user_id === du.device_user_id)}
+                          onClick={() => {
+                            if (confirm(`Remove ${du.name ?? du.device_user_id} from the device? Their fingerprints on the device are deleted; past attendance is kept.`)) {
+                              removeUserMutation.mutate(du.device_user_id);
+                            }
+                          }}
+                        >
+                          {openCommands.some((c) => c.type === "remove_user" && c.device_user_id === du.device_user_id) ? "Removal queued" : "Remove from Device"}
+                        </Button>
                         {du.mapped ? (
                           <Button
                             variant="ghost"

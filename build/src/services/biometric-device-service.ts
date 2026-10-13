@@ -192,6 +192,40 @@ export interface DeviceUser {
 export const listDeviceUsers = (deviceId: number) =>
   apiClient<DeviceUser[]>(`/biometric-devices/${deviceId}/device-users`);
 
+export interface AddDeviceUserPayload {
+  device_user_id: string;
+  name?: string;
+  employee_id?: number | null;
+  card_number?: string | null;
+}
+
+export interface DeviceCommand {
+  id: number;
+  device_id: number;
+  type: "add_user" | "remove_user";
+  device_user_id: string;
+  payload?: { name?: string | null } | null;
+  status: "pending" | "sent" | "done" | "failed";
+  result_message?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+export const addDeviceUser = (deviceId: number, payload: AddDeviceUserPayload) =>
+  apiClient<DeviceCommand>(`/biometric-devices/${deviceId}/device-users`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const removeDeviceUser = (deviceId: number, deviceUserId: string) =>
+  apiClient<DeviceCommand>(
+    `/biometric-devices/${deviceId}/device-users/${encodeURIComponent(deviceUserId)}`,
+    { method: "DELETE" }
+  );
+
+export const listDeviceCommands = (deviceId: number) =>
+  apiClient<DeviceCommand[]>(`/biometric-devices/${deviceId}/commands`);
+
 // Auto-discovery
 export interface DiscoveredDevice {
   id: number;

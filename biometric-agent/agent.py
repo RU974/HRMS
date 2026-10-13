@@ -11,6 +11,8 @@ Usage:
     python agent.py                # push attendance logs
     python agent.py --sync-users   # sync enrolled users from device to HRMS
     python agent.py --discover     # scan LAN for ZKTeco devices and register in HRMS
+    python agent.py --process-commands  # apply add/remove-user requests queued in HRMS
+                                        # (also done automatically at the end of a normal run)
 
 Schedule via Windows Task Scheduler or cron to run every 15 minutes.
 """
@@ -290,6 +292,77 @@ def sync_users_to_hrms() -> None:
             log.info("Disconnected.")
 
 
+# ── Commands queued from HRMS (add / remove device user) ──────────────────────
+
+def _run_command(conn, cmd: dict) -> tuple[bool, str]:
+    """Execute one queued command on an open device connection."""
+    user_id = str(cmd["device_user_id"])
+    existing = {str(u.user_id): u for u in conn.get_users()}
+
+    if cmd["type"] == "add_user":
+        if user_id in existing:
+            return False, f"User ID {user_id} already exists on the device."
+        next_uid = max((u.uid for u in existing.values()), default=0) + 1
+        name = (cmd.get("name") or f"User {user_id}")[:24]
+        card = int(cmd["card_number"]) if str(cmd.get("card_number") or "").isdigit() else 0
+        conn.set_user(uid=next_uid, name=name, privilege=0, password="",
+                      group_id="", user_id=user_id, card=card)
+        return True, "User added. Enrol a fingerprint/face/card on the device."
+
+    if cmd["type"] == "remove_user":
+        user = existing.get(user_id)
+        if user is None:
+            return True, "User was already absent from the device."
+        conn.delete_user(uid=user.uid)
+        return True, "User removed."
+
+    return False, f"Unknown command type {cmd['type']!r}."
+
+
+def process_commands() -> None:
+    """Fetch pending add/remove-user commands from HRMS, run them, report results."""
+    base       = API_URL.rsplit("/push", 1)[0]
+    ident      = {"device_ip": DEVICE_IP, "device_port": DEVICE_PORT}
+
+    resp = _post(base + "/commands", json=ident, headers=_agent_headers(), timeout=30)
+    if resp.status_code != 200:
+        log.error("commands API returned HTTP %d: %s", resp.status_code, resp.text[:300])
+        return
+
+    commands = resp.json().get("commands", [])
+    if not commands:
+        return
+
+    log.info("%d queued command(s) from HRMS.", len(commands))
+    zk   = ZK(DEVICE_IP, port=DEVICE_PORT, timeout=TIMEOUT, password=COMM_KEY,
+              force_udp=False, ommit_ping=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        for cmd in commands:
+            try:
+                ok, message = _run_command(conn, cmd)
+            except Exception as exc:
+                ok, message = False, f"Device error: {exc}"
+            log.info("  %s %s -> %s (%s)", cmd["type"], cmd["device_user_id"],
+                     "ok" if ok else "FAILED", message)
+            _post(f"{base}/commands/{cmd['id']}/result",
+                  json={**ident, "success": ok, "message": message},
+                  headers=_agent_headers(), timeout=30)
+    except Exception as e:
+        # Could not reach the device: leave commands as-is; HRMS re-offers them after 10 minutes.
+        log.error("process_commands failed: %s", e)
+        sys.exit(1)
+    finally:
+        if conn:
+            try:
+                conn.enable_device()
+            except Exception:
+                pass
+            conn.disconnect()
+
+
 # ── Main — attendance push ────────────────────────────────────────────────────
 
 def main():
@@ -364,5 +437,8 @@ if __name__ == "__main__":
         discover_devices()
     elif "--sync-users" in sys.argv:
         sync_users_to_hrms()
+    elif "--process-commands" in sys.argv:
+        process_commands()
     else:
         main()
+        process_commands()  # then apply any add/remove-user requests queued in HRMS

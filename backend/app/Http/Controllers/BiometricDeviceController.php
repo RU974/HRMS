@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BiometricDevice;
+use App\Models\BiometricDeviceCommand;
 use App\Models\BiometricSyncLog;
 use App\Models\Employee;
 use App\Models\BiometricDeviceUser;
@@ -361,7 +362,10 @@ class BiometricDeviceController extends Controller
         $matched   = 0;
         $unmatched = 0;
 
-        foreach ($validated['punches'] as $raw) {
+        $punches = $validated['punches'];
+        usort($punches, fn ($a, $b) => strcmp($a['timestamp'], $b['timestamp']));
+
+        foreach ($punches as $raw) {
             $punch = [
                 'device_user_id' => $raw['device_user_id'],
                 'timestamp'      => \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $raw['timestamp']),
@@ -510,6 +514,259 @@ class BiometricDeviceController extends Controller
             });
 
         return $this->ok($deviceUsers);
+    }
+
+    /**
+     * Queue "add this person to the device". The device lives on the company LAN,
+     * so the local agent performs it on its next run and reports back.
+     */
+    public function queueAddDeviceUser(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'biometric:manage_mapping');
+
+        $deviceQuery = BiometricDevice::query()->whereKey($id);
+        $this->scopeToCompany($request, $deviceQuery);
+        $device = $deviceQuery->firstOrFail();
+
+        $validated = $request->validate([
+            'device_user_id' => ['required', 'string', 'max:24', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'name'           => 'nullable|string|max:24',
+            'employee_id'    => 'nullable|integer',
+            'card_number'    => 'nullable|string|max:20',
+        ]);
+
+        $employee = null;
+        if (!empty($validated['employee_id'])) {
+            $employeeQuery = Employee::query()->whereKey($validated['employee_id']);
+            $this->scopeToCompany($request, $employeeQuery);
+            $employee = $employeeQuery->firstOrFail();
+        }
+
+        $name = trim($validated['name'] ?? '');
+        if ($name === '' && $employee) {
+            $name = trim((string) $employee->name);
+        }
+        if ($name === '') {
+            return response()->json(['success' => false, 'message' => 'A name is required.'], 422);
+        }
+        $name = mb_substr($name, 0, 24); // ZKTeco firmware truncates names at 24 chars
+
+        $deviceUserId = $validated['device_user_id'];
+
+        if (BiometricDeviceUser::where('device_id', $device->id)->where('device_user_id', $deviceUserId)->exists()) {
+            return response()->json(['success' => false, 'message' => "Device user ID {$deviceUserId} already exists on this device."], 422);
+        }
+        if ($this->hasOpenCommand($device, $deviceUserId, BiometricDeviceCommand::TYPE_ADD_USER)) {
+            return response()->json(['success' => false, 'message' => "An add request for ID {$deviceUserId} is already waiting for the agent."], 422);
+        }
+        if ($employee && EmployeeDeviceMapping::where('device_id', $device->id)->where('employee_id', $employee->id)->exists()) {
+            return response()->json(['success' => false, 'message' => 'This employee is already mapped to a user on this device.'], 422);
+        }
+
+        $command = BiometricDeviceCommand::create([
+            'device_id'      => $device->id,
+            'company_id'     => $device->company_id,
+            'type'           => BiometricDeviceCommand::TYPE_ADD_USER,
+            'device_user_id' => $deviceUserId,
+            'payload'        => [
+                'name'        => $name,
+                'employee_id' => $employee?->id,
+                'card_number' => $validated['card_number'] ?? null,
+            ],
+            'status'         => 'pending',
+            'requested_by'   => $request->user()?->id,
+        ]);
+
+        return $this->ok($command, 'Queued. The agent will add this person to the device on its next run.', 201);
+    }
+
+    /** Queue "remove this person from the device". */
+    public function queueRemoveDeviceUser(Request $request, $id, $deviceUserId)
+    {
+        $this->authorizePermission($request, 'biometric:manage_mapping');
+
+        $deviceQuery = BiometricDevice::query()->whereKey($id);
+        $this->scopeToCompany($request, $deviceQuery);
+        $device = $deviceQuery->firstOrFail();
+
+        $deviceUser = BiometricDeviceUser::where('device_id', $device->id)
+            ->where('device_user_id', (string) $deviceUserId)
+            ->first();
+        if (!$deviceUser) {
+            return response()->json(['success' => false, 'message' => 'That user is not on this device.'], 404);
+        }
+        if ($this->hasOpenCommand($device, $deviceUser->device_user_id, BiometricDeviceCommand::TYPE_REMOVE_USER)) {
+            return response()->json(['success' => false, 'message' => 'A removal for this user is already waiting for the agent.'], 422);
+        }
+
+        $command = BiometricDeviceCommand::create([
+            'device_id'      => $device->id,
+            'company_id'     => $device->company_id,
+            'type'           => BiometricDeviceCommand::TYPE_REMOVE_USER,
+            'device_user_id' => $deviceUser->device_user_id,
+            'payload'        => ['name' => $deviceUser->name],
+            'status'         => 'pending',
+            'requested_by'   => $request->user()?->id,
+        ]);
+
+        return $this->ok($command, 'Queued. The agent will remove this person from the device on its next run.', 201);
+    }
+
+    public function listDeviceCommands(Request $request, $id)
+    {
+        $this->authorizePermission($request, 'biometric:manage_mapping');
+
+        $deviceQuery = BiometricDevice::query()->whereKey($id);
+        $this->scopeToCompany($request, $deviceQuery);
+        $device = $deviceQuery->firstOrFail();
+
+        return $this->ok(
+            BiometricDeviceCommand::where('device_id', $device->id)->latest('id')->limit(50)->get()
+        );
+    }
+
+    /** Agent polls for work. Commands handed out stay "sent" and are re-offered if no result arrives in 10 minutes. */
+    public function agentCommands(Request $request)
+    {
+        if (!$this->verifyAgentSecret($request)) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $validated = $request->validate([
+            'device_id'   => 'nullable|integer',
+            'device_ip'   => 'nullable|string',
+            'device_port' => 'nullable|integer',
+        ]);
+
+        $device = $this->resolveAgentDevice($validated);
+        if (!$device) {
+            return response()->json(['message' => 'Device not found.'], 422);
+        }
+        if (!$this->verifyDeviceToken($request, $device)) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $commands = BiometricDeviceCommand::where('device_id', $device->id)
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                    ->orWhere(function ($q2) {
+                        $q2->where('status', 'sent')->where('sent_at', '<', now()->subMinutes(10));
+                    });
+            })
+            ->orderBy('id')
+            ->limit(50)
+            ->get();
+
+        foreach ($commands as $command) {
+            $command->update(['status' => 'sent', 'sent_at' => now()]);
+        }
+
+        return response()->json([
+            'commands' => $commands->map(fn ($c) => [
+                'id'             => $c->id,
+                'type'           => $c->type,
+                'device_user_id' => $c->device_user_id,
+                'name'           => $c->payload['name'] ?? null,
+                'card_number'    => $c->payload['card_number'] ?? null,
+            ])->values(),
+        ]);
+    }
+
+    public function agentCommandResult(Request $request, $commandId)
+    {
+        if (!$this->verifyAgentSecret($request)) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $validated = $request->validate([
+            'device_id'   => 'nullable|integer',
+            'device_ip'   => 'nullable|string',
+            'device_port' => 'nullable|integer',
+            'success'     => 'required|boolean',
+            'message'     => 'nullable|string|max:1000',
+        ]);
+
+        $device = $this->resolveAgentDevice($validated);
+        if (!$device) {
+            return response()->json(['message' => 'Device not found.'], 422);
+        }
+        if (!$this->verifyDeviceToken($request, $device)) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $command = BiometricDeviceCommand::where('device_id', $device->id)->whereKey($commandId)->first();
+        if (!$command) {
+            return response()->json(['message' => 'Command not found.'], 404);
+        }
+        if (in_array($command->status, ['done', 'failed'], true)) {
+            return response()->json(['status' => $command->status]);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($command, $device, $validated) {
+            $command->update([
+                'status'         => $validated['success'] ? 'done' : 'failed',
+                'result_message' => $validated['message'] ?? null,
+                'completed_at'   => now(),
+            ]);
+
+            if (!$validated['success']) {
+                return;
+            }
+
+            if ($command->type === BiometricDeviceCommand::TYPE_ADD_USER) {
+                BiometricDeviceUser::updateOrCreate(
+                    ['device_id' => $device->id, 'device_user_id' => $command->device_user_id],
+                    ['name' => $command->payload['name'] ?? null, 'company_id' => $device->company_id]
+                );
+
+                $employeeId = $command->payload['employee_id'] ?? null;
+                if ($employeeId) {
+                    EmployeeDeviceMapping::updateOrCreate(
+                        ['employee_id' => $employeeId, 'device_id' => $device->id],
+                        [
+                            'device_user_id' => $command->device_user_id,
+                            'card_number'    => $command->payload['card_number'] ?? null,
+                            'company_id'     => $device->company_id,
+                        ]
+                    );
+                }
+            } elseif ($command->type === BiometricDeviceCommand::TYPE_REMOVE_USER) {
+                BiometricDeviceUser::where('device_id', $device->id)
+                    ->where('device_user_id', $command->device_user_id)
+                    ->delete();
+                EmployeeDeviceMapping::where('device_id', $device->id)
+                    ->where('device_user_id', $command->device_user_id)
+                    ->delete();
+            }
+        });
+
+        \App\Models\AuditLog::create([
+            'user_id'    => null,
+            'method'     => $request->method(),
+            'user_role'  => 'biometric-agent',
+            'action'     => $command->type . ($validated['success'] ? '' : '_failed'),
+            'module'     => 'biometric',
+            'company_id' => $device->company_id,
+            'ip_address' => $request->ip(),
+            'old_value'  => null,
+            'new_value'  => [
+                'device_id'      => $device->id,
+                'device_user_id' => $command->device_user_id,
+                'requested_by'   => $command->requested_by,
+            ],
+            'immutable'  => true,
+        ]);
+
+        return response()->json(['status' => $command->status]);
+    }
+
+    private function hasOpenCommand(BiometricDevice $device, string $deviceUserId, string $type): bool
+    {
+        return BiometricDeviceCommand::where('device_id', $device->id)
+            ->where('device_user_id', $deviceUserId)
+            ->where('type', $type)
+            ->whereIn('status', ['pending', 'sent'])
+            ->exists();
     }
 
     public function agentDiscoverDevices(Request $request)

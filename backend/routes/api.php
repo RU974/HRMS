@@ -100,6 +100,8 @@ $registerRoutes = function (): void {
             Route::post('/biometric-agent/push', [BiometricDeviceController::class, 'agentPush']);
             Route::post('/biometric-agent/sync-users', [BiometricDeviceController::class, 'agentSyncUsers']);
             Route::post('/biometric-agent/discovered-devices', [BiometricDeviceController::class, 'agentDiscoverDevices']);
+            Route::post('/biometric-agent/commands', [BiometricDeviceController::class, 'agentCommands']);
+            Route::post('/biometric-agent/commands/{commandId}/result', [BiometricDeviceController::class, 'agentCommandResult']);
         });
 
         Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');
@@ -319,6 +321,9 @@ $registerRoutes = function (): void {
         Route::middleware('permission:biometric:manage_mapping')->group(function () {
         Route::get('biometric-devices/{id}/mappings', [BiometricDeviceController::class, 'mappings']);
         Route::get('biometric-devices/{id}/device-users', [BiometricDeviceController::class, 'listDeviceUsers']);
+        Route::post('biometric-devices/{id}/device-users', [BiometricDeviceController::class, 'queueAddDeviceUser']);
+        Route::delete('biometric-devices/{id}/device-users/{deviceUserId}', [BiometricDeviceController::class, 'queueRemoveDeviceUser']);
+        Route::get('biometric-devices/{id}/commands', [BiometricDeviceController::class, 'listDeviceCommands']);
         Route::get('biometric-devices/{id}/mappings/auto-match', [BiometricDeviceController::class, 'autoMatch']);
         Route::post('biometric-devices/{id}/mappings/bulk-import', [BiometricDeviceController::class, 'bulkImportMappings']);
         Route::post('biometric-devices/mappings', [BiometricDeviceController::class, 'saveMapping']);

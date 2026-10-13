@@ -54,6 +54,20 @@ class RepairMisdatedAttendance extends Command
                 }
             });
 
+        // Check-outs that precede their own check-in were copied from the previous night's punch.
+        Attendance::whereNotNull('check_in')->whereNotNull('check_out')
+            ->whereColumn('check_out', '<', 'check_in')
+            ->get()
+            ->each(function (Attendance $row) use ($apply, &$fixed) {
+                $this->line(sprintf('#%d employee %d %s: clear check-out %s (before check-in)',
+                    $row->id, $row->employee_id, $row->date->toDateString(), $row->check_out));
+                $fixed++;
+                if ($apply) {
+                    $row->check_out = null;
+                    $row->save();
+                }
+            });
+
         $this->info(($apply ? 'Repaired' : 'Would repair') . " {$fixed} record(s).");
 
         return self::SUCCESS;
