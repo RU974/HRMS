@@ -12,7 +12,7 @@ import {
   LogIn, LogOut, CheckCircle2, Clock, CalendarRange,
   FileText, MessageSquare, Bell, User, Briefcase,
   TrendingUp, CalendarDays, ArrowRight, AlertCircle,
-  Wallet,
+  Wallet, Lock,
 } from "lucide-react";
 import { TicketStatsWidget } from "@/modules/tickets/ticket-stats-widget";
 
@@ -82,13 +82,13 @@ function CheckInCard({ today, employeeId }: {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {!checkedIn && (
-              <button onClick={() => checkIn.mutate()} disabled={checkIn.isPending}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-60 shadow-sm">
-                <LogIn className="h-4 w-4" />
-                {checkIn.isPending ? "Checking in…" : "Check In"}
-              </button>
-            )}
+            {/* Locked once punched in (web or synced from biometric). */}
+            <button onClick={() => checkIn.mutate()} disabled={checkedIn || checkIn.isPending}
+              title={checkedIn ? "Already checked in" : undefined}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm">
+              {checkedIn ? <Lock className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
+              {checkIn.isPending ? "Checking in…" : "Check In"}
+            </button>
             {checkedIn && !checkedOut && (
               <button onClick={() => checkOut.mutate()} disabled={checkOut.isPending}
                 className="inline-flex items-center gap-2 rounded-xl bg-rose-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-rose-600 disabled:opacity-60 shadow-sm">
@@ -155,6 +155,7 @@ export function EmployeeDashboard() {
     queryKey: ["dashboard", "workspace"],
     queryFn: getWorkspaceDashboard,
     retry: false,
+    refetchInterval: 60_000, // pick up biometric punches synced while the page is open
   });
 
   const totalRemaining  = data?.leave.balances.reduce((a, b) => a + b.remaining_days, 0) ?? 0;
