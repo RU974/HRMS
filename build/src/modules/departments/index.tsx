@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/loaders/loading-spinner";
-import { createDepartment, deleteDepartment, getDepartment, listDepartments, updateDepartment, DepartmentDetailItem } from "@/services/hr-management-service";
+import { createDepartment, deleteDepartment, getDepartment, listDepartments, updateDepartment, DepartmentDetailItem, exportDepartmentsCsv, importDepartmentsCsv } from "@/services/hr-management-service";
 import { toast } from "@/components/notifications/toast";
 import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 
@@ -46,11 +46,46 @@ export function DepartmentsPage() {
     onError: (e: Error) => { toast.error("Delete failed", e.message); setError(e.message); }
   });
 
+  const importRef = useRef<HTMLInputElement>(null);
+  const exportMutation = useMutation({
+    mutationFn: exportDepartmentsCsv,
+    onError: (e: Error) => toast.error("Export failed", e.message),
+  });
+  const importMutation = useMutation({
+    mutationFn: importDepartmentsCsv,
+    onSuccess: async (r) => {
+      await queryClient.invalidateQueries({ queryKey: ["hr", "departments"] });
+      toast.success("Import complete", `Imported ${r.imported}, skipped ${r.skipped}.`);
+      if (r.errors.length) setError(r.errors.slice(0, 5).join(" • ") + (r.errors.length > 5 ? ` …and ${r.errors.length - 5} more` : ""));
+      else setError(null);
+    },
+    onError: (e: Error) => { toast.error("Import failed", e.message); setError(e.message); },
+  });
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) importMutation.mutate(file);
+  }
+  function downloadTemplate() {
+    const url = URL.createObjectURL(new Blob(["name\nEngineering\n"], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "departments-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return <div className="space-y-6">
     <PageHeader title="Departments" subtitle="Create, update, and archive departments." />
     {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <div className="mb-3 flex justify-end"><Button onClick={() => { setEditingId(null); setName(""); setModalOpen(true); }}>New Department</Button></div>
+      <div className="mb-3 flex flex-wrap justify-end gap-2">
+        <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportFile} />
+        <Button variant="outline" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>{exportMutation.isPending ? "Exporting..." : "Export"}</Button>
+        <Button variant="outline" onClick={() => importRef.current?.click()} disabled={importMutation.isPending}>{importMutation.isPending ? "Importing..." : "Import"}</Button>
+        <Button variant="outline" onClick={downloadTemplate} title="Download a sample CSV">Template</Button>
+        <Button onClick={() => { setEditingId(null); setName(""); setModalOpen(true); }}>New Department</Button>
+      </div>
       <table className="w-full text-sm">
         <thead><tr className="border-b border-[var(--border)] text-left text-[var(--muted)]"><SortableTh label="Name" sortKey="name" sort={sort} onSort={toggleSort} /><SortableTh label="Employees" sortKey="employees_count" sort={sort} onSort={toggleSort} /><th className="p-3 text-right">Actions</th></tr></thead>
         <tbody>

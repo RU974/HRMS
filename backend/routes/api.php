@@ -271,9 +271,13 @@ $registerRoutes = function (): void {
         // settings:manage_settings was considered but it grants IT Support access, which is incorrect for this HR action.
         // HR Manager needs this and does not hold settings:manage_settings.
         Route::middleware('permission:employees:manage_settings')->post('departments/{id}/reassign-employees', [DepartmentController::class, 'reassignEmployees']);
+        Route::get('departments/export', [DepartmentController::class, 'export']);
+        Route::post('departments/import', [DepartmentController::class, 'import']);
         Route::apiResource('departments', DepartmentController::class);
 
         // Designation routes
+        Route::get('designations/export', [DesignationController::class, 'export']);
+        Route::post('designations/import', [DesignationController::class, 'import']);
         Route::apiResource('designations', DesignationController::class);
 
         // Attendance routes

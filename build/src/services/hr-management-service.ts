@@ -138,6 +138,34 @@ export const createDesignation = (payload: { name: string }) => apiClient<Design
 export const updateDesignation = (id: number, payload: { name: string }) => apiClient<DesignationItem>(`/designations/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 export const deleteDesignation = (id: number) => apiClient<null>(`/designations/${id}`, { method: "DELETE" });
 
+export interface MasterDataImportResult { imported: number; skipped: number; errors: string[] }
+
+async function exportMasterDataCsv(path: "departments" | "designations"): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const res = await fetch(`${API_BASE_URL}/${path}/export`, {
+    headers: { Authorization: `Bearer ${token ?? ""}`, Accept: "text/csv" },
+  });
+  if (!res.ok) throw new Error(`${path} export failed`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${path}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importMasterDataCsv(path: "departments" | "designations", file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiClient<MasterDataImportResult>(`/${path}/import`, { method: "POST", body: fd });
+}
+
+export const exportDepartmentsCsv = () => exportMasterDataCsv("departments");
+export const importDepartmentsCsv = (file: File) => importMasterDataCsv("departments", file);
+export const exportDesignationsCsv = () => exportMasterDataCsv("designations");
+export const importDesignationsCsv = (file: File) => importMasterDataCsv("designations", file);
+
+
 export const listShifts = () => apiClient<ShiftItem[]>("/shifts");
 export const createShift = (payload: Omit<ShiftItem, "id">) => apiClient<ShiftItem>("/shifts", { method: "POST", body: JSON.stringify(payload) });
 export const updateShift = (id: number, payload: Partial<Omit<ShiftItem, "id">>) => apiClient<ShiftItem>(`/shifts/${id}`, { method: "PUT", body: JSON.stringify(payload) });
