@@ -113,6 +113,8 @@ function StatusBadge({ status }: { status: string }) {
 export function EmployeesPage() {
   const navigate = useNavigate();
   const canManage = useAuthStore((s) => s.hasPermission("employees:edit"));
+  const canExport = useAuthStore((s) => s.hasPermission("employees:export"));
+  const canImport = useAuthStore((s) => s.hasPermission("employees:create"));
   const user = useAuthStore((s) => s.user);
   const isSuperAdmin = isSuperAdminRole(user);
   const queryClient = useQueryClient();
@@ -162,8 +164,8 @@ export function EmployeesPage() {
     setExporting(true);
     try {
       await exportEmployeesCsv();
-    } catch {
-      alert("Export failed. Please try again.");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Export failed. Please try again.");
     } finally {
       setExporting(false);
     }
@@ -233,12 +235,16 @@ export function EmployeesPage() {
           )}
 
           <div className="flex items-center gap-2 ml-auto">
-            <Button variant="outline" onClick={handleExport} disabled={exporting} className="shrink-0">
-              {exporting ? "Exporting..." : "Export CSV"}
-            </Button>
+            {canExport && (
+              <Button variant="outline" onClick={handleExport} disabled={exporting} className="shrink-0">
+                {exporting ? "Exporting..." : "Export CSV"}
+              </Button>
+            )}
+            {canImport && (
+              <Button variant="outline" onClick={() => setImportOpen(true)} className="shrink-0">Import CSV</Button>
+            )}
             {canManage && (
               <>
-                <Button variant="outline" onClick={() => setImportOpen(true)} className="shrink-0">Import CSV</Button>
                 <Link to="/employees/new">
                   <Button className="shrink-0">+ Add Employee</Button>
                 </Link>

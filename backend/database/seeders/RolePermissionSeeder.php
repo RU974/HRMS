@@ -15,7 +15,7 @@ class RolePermissionSeeder extends Seeder
             'Company Admin' => [
                 'dashboard:view',
                 'users:view', 'users:create', 'users:edit', 'users:delete', 'users:assign',
-                'employees:view', 'employees:create', 'employees:edit', 'employees:delete',
+                'employees:view', 'employees:create', 'employees:edit', 'employees:delete', 'employees:export',
                 'leaves:view', 'leaves:approve', 'leaves:manage_settings',
                 'attendance:view', 'attendance:edit', 'attendance:manage_settings',
                 'payroll:view', 'payroll:edit', 'payroll:manage_settings',
@@ -34,7 +34,7 @@ class RolePermissionSeeder extends Seeder
             ],
             'HR Manager' => [
                 'dashboard:view',
-                'employees:view', 'employees:view_all', 'employees:create', 'employees:edit',
+                'employees:view', 'employees:view_all', 'employees:create', 'employees:edit', 'employees:export',
                 'leaves:view', 'leaves:approve', 'leaves:manage_settings',
                 'attendance:view', 'attendance:edit', 'attendance:approve',
                 'payroll:view',

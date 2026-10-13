@@ -466,7 +466,12 @@ class EmployeeController extends Controller
             'requested_by' => $request->user()?->id,
         ]);
 
-        ExportEmployeesJob::dispatch($run->id, $employeeIds);
+        // Run inline so it works without a queue worker; the run row still records done/failed.
+        try {
+            ExportEmployeesJob::dispatchSync($run->id, $employeeIds);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $this->ok(['background_run_id' => $run->id], 'Employee export has been queued.', 202);
     }
@@ -546,7 +551,12 @@ class EmployeeController extends Controller
             'requested_by' => $request->user()?->id,
         ]);
 
-        ImportEmployeesJob::dispatch($run->id, $storedPath, $companyId);
+        // Run inline so it works without a queue worker; the run row still records done/failed.
+        try {
+            ImportEmployeesJob::dispatchSync($run->id, $storedPath, $companyId);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $this->ok(['background_run_id' => $run->id], 'Employee import has been queued.', 202);
     }
