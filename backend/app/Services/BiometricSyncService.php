@@ -316,6 +316,14 @@ class BiometricSyncService
         $attendance->source = 'biometric';
         $attendance->biometric_device_id = $device->id;
 
+        // A record whose check_in falls on an earlier calendar day than its date is a
+        // leftover from the old timezone-shift bug; today's real punch must replace it.
+        if ($attendance->check_in && $attendance->check_in->toDateString() < $date) {
+            $attendance->check_in = null;
+            $attendance->check_out = null;
+            $attendance->status = null;
+        }
+
         if ($type === 'out') {
             $attendance->check_out = $timestamp;
         } else {

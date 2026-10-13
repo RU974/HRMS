@@ -135,19 +135,19 @@ def _post(url: str, **kwargs) -> requests.Response:
 # ── State ─────────────────────────────────────────────────────────────────────
 
 def load_last_sync() -> datetime:
-    """Return last sync time as naive UTC datetime."""
+    """Return last sync time as a naive datetime in the device's local wall-clock time."""
     if STATE_FILE.exists():
         try:
             data = json.loads(STATE_FILE.read_text())
             return datetime.fromisoformat(data["last_sync"]).replace(tzinfo=None)
         except Exception:
             pass
-    return datetime.utcnow() - timedelta(hours=24)
+    return datetime.now() - timedelta(hours=24)
 
 
 def save_last_sync(ts: datetime | None = None) -> None:
     """Write last sync time as naive UTC ISO string."""
-    ts = (ts or datetime.utcnow()).replace(tzinfo=None)
+    ts = (ts or datetime.now()).replace(tzinfo=None)
     STATE_FILE.write_text(json.dumps({"last_sync": ts.isoformat()}))
 
 
