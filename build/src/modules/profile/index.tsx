@@ -9,11 +9,29 @@ import { FormInput } from "@/components/forms/form-input";
 import { useAuthStore, getCurrentPermissionKeys } from "@/store/auth-store";
 import { getUserRoleKeys, isSuperAdminRole } from "@/config/rbac";
 import { me, changePassword, updateProfile } from "@/services/auth-service";
+import { Eye, EyeOff } from "lucide-react";
 import { toast } from "@/components/notifications/toast";
 import { MyPayslipsTab } from "./my-payslips-tab";
 
 const inputClass =
   "h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30";
+
+function PasswordInput(props: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <FormInput {...props} type={visible ? "text" : "password"} className="pr-11" />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Hide password" : "Show password"}
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[var(--muted-foreground,#6b7280)] hover:text-[var(--foreground)]"
+      >
+        {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+  );
+}
 
 type ActiveTab = "profile" | "password" | "payslips" | "permissions";
 
@@ -339,8 +357,7 @@ export function ProfilePage() {
             className="max-w-md space-y-4"
           >
             <FormField label="Current password">
-              <FormInput
-                type="password"
+              <PasswordInput
                 value={pwForm.current_password}
                 onChange={(e) => setPwForm((p) => ({ ...p, current_password: e.target.value }))}
                 placeholder="Enter current password"
@@ -349,8 +366,7 @@ export function ProfilePage() {
             </FormField>
 
             <FormField label="New password">
-              <FormInput
-                type="password"
+              <PasswordInput
                 value={pwForm.password}
                 onChange={(e) => setPwForm((p) => ({ ...p, password: e.target.value }))}
                 placeholder="Min 8 characters"
@@ -359,8 +375,7 @@ export function ProfilePage() {
             </FormField>
 
             <FormField label="Confirm new password">
-              <FormInput
-                type="password"
+              <PasswordInput
                 value={pwForm.password_confirmation}
                 onChange={(e) => setPwForm((p) => ({ ...p, password_confirmation: e.target.value }))}
                 placeholder="Repeat new password"
