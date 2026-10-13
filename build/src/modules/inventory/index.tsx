@@ -925,6 +925,7 @@ function AssignmentsTab() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "assigned" | "returned">("all");
+  const [search, setSearch] = useState("");
   const [returnModal, setReturnModal] = useState<{ id: number; itemName: string } | null>(null);
   const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
   const [returnNotes, setReturnNotes] = useState("");
@@ -1005,14 +1006,20 @@ function AssignmentsTab() {
     onError: (e: Error) => toast.error("Update failed", e.message),
   });
 
-  const { sorted: assignments, sort, toggle: toggleSort } = useTableSort(Array.isArray(assignmentsQ.data) ? assignmentsQ.data : [], "employee", {
+  const assignQuery = search.trim().toLowerCase();
+  const filteredAssignments = (Array.isArray(assignmentsQ.data) ? assignmentsQ.data : []).filter((a) =>
+    !assignQuery ||
+    [a.item?.name, a.item?.sku, a.employee?.name, a.notes, a.status, a.assigned_date, a.returned_date]
+      .some((v) => v?.toLowerCase().includes(assignQuery)),
+  );
+  const { sorted: assignments, sort, toggle: toggleSort } = useTableSort(filteredAssignments, "employee", {
     item: (a) => a.item?.name,
     sku: (a) => a.item?.sku,
     employee: (a) => a.employee?.name,
   });
   const availableItems = (Array.isArray(itemsQ.data) ? itemsQ.data : []).filter((i) => !i.deleted_at);
   const employees = employeesQ.data?.data ?? [];
-  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(assignments, statusFilter);
+  const { page, setPage, pageSize, setPageSize, totalPages, paged, total } = usePagination(assignments, `${statusFilter}|${assignQuery}`);
 
   return (
     <>
@@ -1028,6 +1035,16 @@ function AssignmentsTab() {
                 {s}
               </button>
             ))}
+          </div>
+          <div className="relative min-w-[180px] max-w-xs flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by item, SKU, employee, notes…"
+              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] pl-9 pr-3 text-sm"
+            />
           </div>
           <Button onClick={() => setOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Assign Item</Button>
         </div>
