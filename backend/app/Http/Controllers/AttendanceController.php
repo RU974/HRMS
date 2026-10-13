@@ -181,6 +181,153 @@ class AttendanceController extends Controller
         return $this->ok(null, 'Attendance deleted successfully');
     }
 
+    // GET /attendance/export — CSV of the records the caller may see, honouring the list filters.
+    public function export(Request $request)
+    {
+        $this->authorizePermission($request, 'attendance:manage_settings|attendance:approve');
+
+        $query = Attendance::with('employee');
+        $this->scopeToCompany($request, $query, 'employee.user');
+        $this->applyManagedEmployeeScope($request, $query, 'employee');
+
+        if ($request->filled('date')) {
+            $query->whereDate('date', $request->date);
+        }
+        if ($request->filled('month')) {
+            $query->whereMonth('date', $request->month);
+        }
+        if ($request->filled('year')) {
+            $query->whereYear('date', $request->year);
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('search')) {
+            $term = '%' . trim((string) $request->input('search')) . '%';
+            $query->whereHas('employee', fn ($q) => $q->where(function ($s) use ($term) {
+                $s->where('name', 'like', $term)->orWhere('employee_number', 'like', $term);
+            }));
+        }
+
+        $query->orderBy('date', 'desc')->orderBy('id');
+
+        return response()->streamDownload(function () use ($query): void {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['employee_number', 'employee_name', 'date', 'check_in', 'check_out', 'status', 'work_from_home', 'source', 'notes']);
+            foreach ($query->cursor() as $a) {
+                fputcsv($out, [
+                    $a->employee?->employee_number,
+                    $a->employee?->name,
+                    $a->date?->toDateString(),
+                    $a->check_in?->format('H:i'),
+                    $a->check_out?->format('H:i'),
+                    $a->status,
+                    $a->work_from_home ? 'yes' : 'no',
+                    $a->source ?? 'manual',
+                    $a->notes,
+                ]);
+            }
+            fclose($out);
+        }, 'attendance-' . now()->toDateString() . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    // POST /attendance/import — CSV with employee_number,date,check_in,check_out,status,work_from_home,notes.
+    // Existing employee+date records are skipped, never overwritten.
+    public function import(Request $request)
+    {
+        $this->authorizePermission($request, 'attendance:manage_settings');
+        $request->validate(['file' => 'required|file|mimes:csv,txt|max:2048']);
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        $header = $handle ? fgetcsv($handle) : false;
+        if (!$header) {
+            return $this->fail('The CSV file is empty.', 422);
+        }
+        $header = array_map(fn ($h) => strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h))), $header);
+        foreach (['employee_number', 'date'] as $required) {
+            if (!in_array($required, $header, true)) {
+                return $this->fail("Missing required column: {$required}.", 422);
+            }
+        }
+
+        $employeesQuery = Employee::query();
+        $this->scopeToCompany($request, $employeesQuery);
+        $this->applyManagedEmployeeScope($request, $employeesQuery);
+        $employees = $employeesQuery->get()->keyBy(fn ($e) => strtolower((string) $e->employee_number));
+
+        $policy = AttendancePolicy::query()->first();
+        $calc = $this->attendanceCalculator();
+        $imported = 0;
+        $skipped = 0;
+        $errors = [];
+        $line = 1;
+
+        while (($cols = fgetcsv($handle)) !== false) {
+            $line++;
+            if (count(array_filter($cols, fn ($c) => trim((string) $c) !== '')) === 0) {
+                continue;
+            }
+            $row = array_combine($header, array_pad(array_slice($cols, 0, count($header)), count($header), ''));
+            $row = array_map(fn ($v) => trim((string) $v), $row);
+
+            $employee = $employees->get(strtolower($row['employee_number']));
+            if (!$employee) {
+                $errors[] = "Line {$line}: employee '{$row['employee_number']}' not found.";
+                $skipped++;
+                continue;
+            }
+            try {
+                $date = Carbon::createFromFormat('Y-m-d', $row['date'])->toDateString();
+            } catch (\Throwable) {
+                $errors[] = "Line {$line}: date must be YYYY-MM-DD.";
+                $skipped++;
+                continue;
+            }
+            $status = strtolower($row['status'] ?? '') ?: 'present';
+            if (!in_array($status, ['present', 'absent', 'leave', 'late'], true)) {
+                $errors[] = "Line {$line}: invalid status '{$status}'.";
+                $skipped++;
+                continue;
+            }
+            foreach (['check_in', 'check_out'] as $f) {
+                if (($row[$f] ?? '') !== '' && !preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', $row[$f])) {
+                    $errors[] = "Line {$line}: {$f} must be HH:MM (24h).";
+                    $skipped++;
+                    continue 2;
+                }
+            }
+            if (Attendance::where('employee_id', $employee->id)->whereDate('date', $date)->exists()) {
+                $errors[] = "Line {$line}: record already exists for {$row['employee_number']} on {$date}.";
+                $skipped++;
+                continue;
+            }
+
+            $checkIn = ($row['check_in'] ?? '') !== '' ? $calc->normalizeCheckTime($date, $row['check_in']) : null;
+            $checkOut = ($row['check_out'] ?? '') !== '' ? $calc->resolveCheckOut($date, $checkIn, $row['check_out']) : null;
+            if ($checkIn) {
+                $status = $calc->deriveStatusFromCheckIn($policy, $employee->effectiveShift(), $checkIn, $status);
+            }
+
+            Attendance::create([
+                'employee_id'    => $employee->id,
+                'date'           => $date,
+                'check_in'       => $checkIn,
+                'check_out'      => $checkOut,
+                'status'         => $status,
+                'source'         => 'manual',
+                'work_from_home' => in_array(strtolower($row['work_from_home'] ?? ''), ['1', 'yes', 'true', 'y'], true),
+                'notes'          => ($row['notes'] ?? '') ?: null,
+            ]);
+            $imported++;
+        }
+        fclose($handle);
+
+        return $this->ok(
+            ['imported' => $imported, 'skipped' => $skipped, 'errors' => array_slice($errors, 0, 50)],
+            "Imported {$imported} record(s), skipped {$skipped}."
+        );
+    }
+
     public function getByEmployee($employeeId, Request $request)
     {
         $this->authorizeAttendanceAccess($request, (int) $employeeId);

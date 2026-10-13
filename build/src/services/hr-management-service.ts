@@ -181,6 +181,29 @@ export function listAttendancePaginated(page: number, employeeId?: number, searc
   return apiClient<PaginatedResponse<AttendanceItem>>(url);
 }
 
+export async function exportAttendanceCsv(search?: string): Promise<void> {
+  const token = useAuthStore.getState().token;
+  const qs = search ? `?search=${encodeURIComponent(search)}` : "";
+  const res = await fetch(`${API_BASE_URL}/attendance/export${qs}`, {
+    headers: { Authorization: `Bearer ${token ?? ""}`, Accept: "text/csv" },
+  });
+  if (!res.ok) throw new Error("Attendance export failed");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `attendance-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export interface AttendanceImportResult { imported: number; skipped: number; errors: string[] }
+
+export function importAttendanceCsv(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return apiClient<AttendanceImportResult>("/attendance/import", { method: "POST", body: fd });
+}
+
 export function getEmployeeAttendanceCalendar(employeeId: number, month: number, year: number) {
   return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}?month=${month}&year=${year}&per_page=31`);
 }

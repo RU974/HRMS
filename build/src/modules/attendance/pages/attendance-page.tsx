@@ -1,6 +1,6 @@
 import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { TimeInput24 } from "@/components/forms/time-input-24";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
@@ -24,6 +24,8 @@ import {
   getTeamDailyAttendance,
   getAttendanceMonthlyStats,
   requestAttendanceCorrection,
+  exportAttendanceCsv,
+  importAttendanceCsv,
 } from "@/services/hr-management-service";
 import { getEmployees, getEmployeeOptions } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
@@ -621,6 +623,35 @@ export function AttendancePage() {
     onError: (e: Error) => setGlobalError(e.message),
   });
 
+  const importRef = useRef<HTMLInputElement>(null);
+  const exportMutation = useMutation({
+    mutationFn: () => exportAttendanceCsv(search || undefined),
+    onError: (e: Error) => setGlobalError(e.message),
+  });
+  const importMutation = useMutation({
+    mutationFn: importAttendanceCsv,
+    onSuccess: async (r) => {
+      await queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      showSuccess(`Imported ${r.imported}, skipped ${r.skipped}.`);
+      if (r.errors.length) setGlobalError(r.errors.slice(0, 5).join(" • ") + (r.errors.length > 5 ? ` …and ${r.errors.length - 5} more` : ""));
+    },
+    onError: (e: Error) => setGlobalError(e.message),
+  });
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) importMutation.mutate(file);
+  }
+  function downloadTemplate() {
+    const csv = "employee_number,date,check_in,check_out,status,work_from_home,notes\nEMP001,2026-10-01,09:00,17:30,present,no,\n";
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "attendance-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function openCreate() { setEditing(null); setModalOpen(true); }
   function openEdit(item: AttendanceItem) { setEditing(item); setModalOpen(true); }
 
@@ -758,7 +789,21 @@ export function AttendancePage() {
                 onChange={e => setSearchInput(e.target.value)}
                 className="w-64"
               />
-              {canManage && <Button onClick={openCreate}>+ New Record</Button>}
+              {(canManage || canApprove) && (
+                <Button variant="outline" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
+                  {exportMutation.isPending ? "Exporting..." : "Export"}
+                </Button>
+              )}
+              {canManage && (
+                <>
+                  <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleImportFile} />
+                  <Button variant="outline" onClick={() => importRef.current?.click()} disabled={importMutation.isPending}>
+                    {importMutation.isPending ? "Importing..." : "Import"}
+                  </Button>
+                  <Button variant="outline" onClick={downloadTemplate} title="Download a sample CSV">Template</Button>
+                  <Button onClick={openCreate}>+ New Record</Button>
+                </>
+              )}
             </div>
           </div>
 

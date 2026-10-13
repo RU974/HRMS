@@ -282,7 +282,9 @@ $registerRoutes = function (): void {
             Route::get('attendance/monthly-stats/{employeeId}/{month}/{year}', [AttendanceController::class, 'getMonthlyStats']);
             Route::get('attendance/company-monthly-summary', [AttendanceController::class, 'companyMonthlySummary']);
             Route::get('attendance/team-daily', [AttendanceController::class, 'teamDailyView']);
-            Route::get('attendance/corrections', [AttendanceController::class, 'listCorrections']);
+            Route::get('attendance/export', [AttendanceController::class, 'export']);
+            Route::post('attendance/import', [AttendanceController::class, 'import']);
+            Route::get('attendance/corrections',[AttendanceController::class, 'listCorrections']);
             Route::post('attendance/{attendance}/request-correction', [AttendanceController::class, 'requestCorrection']);
             Route::post('attendance/{attendance}/review-correction', [AttendanceController::class, 'reviewCorrection']);
             Route::apiResource('attendance', AttendanceController::class);
