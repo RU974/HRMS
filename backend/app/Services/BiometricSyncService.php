@@ -290,16 +290,27 @@ class BiometricSyncService
 
         // Night shifts: the record's date is the shift-start date, so a punch after
         // midnight must be attached to the still-open record from the previous evening.
+        // A record whose check_out precedes its check_in (stale data from an older sync that
+        // stored the morning punch on the wrong day) is still effectively open.
         $open = Attendance::where('employee_id', $employeeId)
             ->whereNotNull('check_in')
-            ->whereNull('check_out')
+            ->where(function ($q) {
+                $q->whereNull('check_out')->orWhereColumn('check_out', '<', 'check_in');
+            })
             ->where('check_in', '>=', $timestamp->copy()->subHours(20)->toDateTimeString())
             ->where('check_in', '<', $timestamp->toDateTimeString())
             ->whereDate('date', '<', $date)
             ->orderByDesc('check_in')
             ->first();
 
-        if ($open && ($type === 'out' || ($calculator->isOvernightShift($shift)
+        // With no shift assigned, an evening check-in followed by a morning punch is
+        // still treated as a night shift rather than a new day.
+        $overnight = $calculator->isOvernightShift($shift)
+            || (!$shift && $open
+                && (int) Carbon::parse($open->check_in)->format('G') >= 16
+                && (int) $timestamp->format('G') < 12);
+
+        if ($open && ($type === 'out' || ($overnight
             && $timestamp->getTimestamp() - Carbon::parse($open->check_in)->getTimestamp() >= 3600))) {
             $open->check_out = $timestamp;
             $open->source = 'biometric';
