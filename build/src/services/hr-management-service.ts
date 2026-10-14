@@ -18,6 +18,8 @@ export interface ShiftItem {
   name: string;
   start_time: string;
   end_time: string;
+  /** Night shift: the shift runs past midnight and ends the next calendar day. */
+  continues_after_midnight?: boolean;
   /** ISO weekday numbers, 1 = Monday ... 7 = Sunday. Null on shifts created before this field existed. */
   working_days?: number[] | null;
   grace_minutes: number;

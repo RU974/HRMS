@@ -39,6 +39,10 @@ class AttendanceCalculator
             return false;
         }
 
+        if ($shift->continues_after_midnight) {
+            return true;
+        }
+
         return Carbon::parse($shift->end_time)->lessThanOrEqualTo(Carbon::parse($shift->start_time));
     }
 

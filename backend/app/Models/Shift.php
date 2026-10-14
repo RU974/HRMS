@@ -15,6 +15,7 @@ class Shift extends Model
         'name',
         'start_time',
         'end_time',
+        'continues_after_midnight',
         'working_days',
         'grace_minutes',
         'is_active',
@@ -22,6 +23,7 @@ class Shift extends Model
 
     protected $casts = [
         'is_active'    => 'boolean',
+        'continues_after_midnight' => 'boolean',
         'working_days' => 'array',
     ];
 
