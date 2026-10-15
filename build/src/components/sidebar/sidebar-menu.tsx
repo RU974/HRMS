@@ -3,13 +3,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Bell, CalendarRange, ChevronDown, ChevronRight, ChevronUp,
-  LogIn, LogOut, MessageCircleMore, WalletCards,
+  MessageCircleMore, WalletCards,
   User, Power,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/utils/cn";
 import { logoutRequest } from "@/services/auth-service";
-import { checkInAttendance, checkOutAttendance } from "@/services/hr-management-service";
 import { useAuthStore } from "@/store/auth-store";
 import { getVisibleSidebarSections } from "@/config/sidebar-config";
 import { isSuperAdminRole } from "@/config/rbac";
@@ -232,47 +231,13 @@ function QuickButton({
 function EmployeeShortcuts({ collapsed }: { collapsed: boolean }) {
   const user          = useAuthStore((s) => s.user);
   const hasPermission = useAuthStore((s) => s.hasPermission);
-  const qc            = useQueryClient();
   const employeeId    = user?.employee?.id;
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
-
-  useEffect(() => {
-    if (!feedback) return;
-    const t = setTimeout(() => setFeedback(null), 3000);
-    return () => clearTimeout(t);
-  }, [feedback]);
-
-  const checkIn = useMutation({
-    mutationFn: () => {
-      if (!employeeId) throw new Error("No employee profile.");
-      return checkInAttendance(employeeId);
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
-      setFeedback({ type: "success", msg: "✓ Checked in" });
-    },
-    onError: (e: Error) => setFeedback({ type: "error", msg: e.message }),
-  });
-
-  const checkOut = useMutation({
-    mutationFn: () => {
-      if (!employeeId) throw new Error("No employee profile.");
-      return checkOutAttendance(employeeId);
-    },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
-      setFeedback({ type: "success", msg: "✓ Checked out" });
-    },
-    onError: (e: Error) => setFeedback({ type: "error", msg: e.message }),
-  });
 
   const leaveLinkVisible   = hasPermission("leaves:view") || hasPermission("leaves:approve");
   const payrollLinkVisible = hasPermission("payroll:view") || hasPermission("payroll:manage_settings") || hasPermission("payroll:view_own");
   const showComms          = isSuperAdminRole(user);
 
   if (!employeeId) return null;
-
-  const busy = checkIn.isPending || checkOut.isPending;
 
   return (
     <div className="space-y-0.5 pt-1">
@@ -284,24 +249,6 @@ function EmployeeShortcuts({ collapsed }: { collapsed: boolean }) {
         </p>
       )}
 
-      {feedback && !collapsed && (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          className={cn(
-            "mx-3 mb-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold",
-            feedback.type === "success"
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              : "bg-red-50 text-red-600 border border-red-200"
-          )}
-        >
-          {feedback.msg}
-        </motion.div>
-      )}
-
-      <QuickButton icon={LogIn}              label="Check In"       onClick={() => checkIn.mutate()}  loading={checkIn.isPending}  disabled={busy} accent="#10b981" collapsed={collapsed} />
-      <QuickButton icon={LogOut}             label="Check Out"      onClick={() => checkOut.mutate()} loading={checkOut.isPending} disabled={busy} accent="#f59e0b" collapsed={collapsed} />
       {leaveLinkVisible   && <QuickButton icon={CalendarRange}     label="Request Leave"  path="/leaves"               accent="#6366f1" collapsed={collapsed} />}
       {payrollLinkVisible && <QuickButton icon={WalletCards}       label="My Payslips"    path="/profile?tab=payslips" accent="#0ea5e9" collapsed={collapsed} />}
       {showComms          && <QuickButton icon={Bell}              label="Notifications"  path="/notifications"        accent="#f59e0b" collapsed={collapsed} />}
