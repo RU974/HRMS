@@ -15,21 +15,7 @@ class NotificationSearchService
 
         return NotificationItem::query()
             ->with(['user:id,name,email,company_id', 'creator:id,name,email,company_id'])
-            ->where(function ($builder) use ($user): void {
-                $builder->where('user_id', $user->id);
-
-                if ($this->canView($user)) {
-                    if ($user->company_id) {
-                        if ($this->supportsCompanyScope()) {
-                            $builder->orWhere('company_id', $user->company_id);
-                        }
-
-                        $builder->orWhereHas('creator', function ($creatorQuery) use ($user): void {
-                                $creatorQuery->where('company_id', $user->company_id);
-                            });
-                    }
-                }
-            })
+            ->where('user_id', $user->id)
             ->where(function ($builder) use ($like): void {
                 $builder->where('title', 'like', $like)
                     ->orWhere('message', 'like', $like)
@@ -51,23 +37,7 @@ class NotificationSearchService
 
     private function canSee(User $user, NotificationItem $notification): bool
     {
-        if ($notification->user_id === $user->id) {
-            return true;
-        }
-
-        if (!$this->canView($user)) {
-            return false;
-        }
-
-        if (!$user->company_id) {
-            return false;
-        }
-
-        if ($notification->company_id) {
-            return (string) $notification->company_id === (string) $user->company_id;
-        }
-
-        return (string) ($notification->creator?->company_id ?? '') === (string) $user->company_id;
+        return (int) $notification->user_id === (int) $user->id;
     }
 
     private function canView(User $user): bool

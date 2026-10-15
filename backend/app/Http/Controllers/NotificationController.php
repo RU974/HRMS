@@ -17,21 +17,9 @@ class NotificationController extends Controller
         $user = $request->user()->loadMissing('company');
         $query = NotificationItem::query()->with(['user:id,name,email,company_id', 'creator:id,name,email,company_id']);
 
-        $query->where(function ($builder) use ($user): void {
-            $builder->where('user_id', $user->id);
-
-            if ($this->canViewNotifications($user)) {
-                if ($user->company_id) {
-                    if ($this->tableHasCompanyScope('notifications')) {
-                        $builder->orWhere('company_id', $user->company_id);
-                    }
-
-                    $builder->orWhereHas('creator', function ($creatorQuery) use ($user): void {
-                        $creatorQuery->where('company_id', $user->company_id);
-                    });
-                }
-            }
-        });
+        // Notifications are per-recipient rows: a user only ever sees their own,
+        // never every notification in the company.
+        $query->where('user_id', $user->id);
 
         if ($request->filled('q')) {
             $search = $this->sanitizeQuery((string) $request->query('q'));

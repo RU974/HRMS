@@ -14,8 +14,7 @@ class NotificationPolicy
 
     public function view(User $user, NotificationItem $notification): bool
     {
-        return $this->canView($user) && $this->sameCompany($user, $notification)
-            || $this->isOwnedByUser($user, $notification);
+        return $this->isOwnedByUser($user, $notification);
     }
 
     public function create(User $user): bool

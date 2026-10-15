@@ -29,7 +29,7 @@ class AttendanceNotificationService
             $recipients = $recipients->merge(
                 User::query()
                     ->where('company_id', $companyId)
-                    ->whereHas('roles', fn ($q) => $q->whereIn('name', [User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE]))
+                    ->whereHas('roles', fn ($q) => $q->whereIn('name', [User::ROLE_COMPANY_ADMIN, User::ROLE_HR_MANAGER, User::ROLE_HR_EXECUTIVE]))
                     ->get()
             )->unique('id')->reject(fn (User $u) => $u->id === $employee->user_id);
 
