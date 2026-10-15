@@ -79,6 +79,10 @@ class ShiftController extends Controller
             $this->syncDepartmentGraces($shift, $graces ?? [], $companyId);
         }
 
+        // Grace or timing changed: refresh present/late on the recent records of this shift.
+        app(\App\Services\AttendanceStatusRecalculator::class)
+            ->recalculate(now()->subDays(31)->startOfDay(), null, (int) $shift->id);
+
         return $this->ok($shift->load('departmentGraces'), 'Shift updated successfully');
     }
 

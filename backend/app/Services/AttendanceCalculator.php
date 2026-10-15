@@ -52,7 +52,10 @@ class AttendanceCalculator
             return $fallbackStatus;
         }
 
-        if ($policy->allow_manual_status_override && $fallbackStatus !== 'present') {
+        // Only statuses an admin chooses by hand (absent / leave) survive a recompute.
+        // "late" and the missing-punch flags are derived from the punches, so they are
+        // re-evaluated; otherwise a record could never leave "late" once it had it.
+        if ($policy->allow_manual_status_override && in_array($fallbackStatus, ['absent', 'leave'], true)) {
             return $fallbackStatus;
         }
 
@@ -60,6 +63,38 @@ class AttendanceCalculator
         $threshold = $this->getLateThreshold($checkIn, $policy, $shift);
 
         return $checkIn->greaterThan($threshold) ? 'late' : 'present';
+    }
+
+    /**
+     * Status a record should have from its own punches. Hand-set absent/leave rows with no
+     * punches are kept; everything else is derived, so a corrected or re-graced record
+     * leaves "late" / "missing" as soon as the punches say it should.
+     */
+    public function recomputeStatus(Attendance $attendance, ?AttendancePolicy $policy, ?Shift $shift): string
+    {
+        $current = (string) $attendance->status;
+
+        if (!$attendance->check_in) {
+            if ($attendance->check_out) {
+                return Attendance::STATUS_MISSING_CHECK_IN;
+            }
+
+            return $current ?: 'present';
+        }
+
+        if (!$attendance->check_out && $current === Attendance::STATUS_MISSING_CHECK_OUT) {
+            return $current; // still open past the shift end; the late punch will clear it
+        }
+
+        // A leave row keeps its status; an "absent" row that has punches was clearly wrong.
+        $fallback = $current === 'leave' ? 'leave' : 'present';
+
+        return $this->deriveStatusFromCheckIn(
+            $policy,
+            $shift,
+            Carbon::parse($attendance->check_in)->toDateTimeString(),
+            $fallback
+        );
     }
 
     public function getLateThreshold(Carbon $checkIn, AttendancePolicy $policy, ?Shift $shift): Carbon

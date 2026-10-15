@@ -161,19 +161,6 @@ class AttendanceController extends Controller
 
         $policy = AttendancePolicy::query()->first();
         $shift = $attendance->employee?->effectiveShift();
-        if (!empty($validated['check_in'])) {
-            $currentStatus = $validated['status'] ?? $attendance->status;
-            // A flagged record that now has its punch is a normal day again.
-            if (in_array($currentStatus, Attendance::MISSING_STATUSES, true)) {
-                $currentStatus = 'present';
-            }
-            $validated['status'] = $this->attendanceCalculator()->deriveStatusFromCheckIn(
-                $policy,
-                $shift,
-                $validated['check_in'],
-                $currentStatus
-            );
-        }
 
         if (!empty($validated['check_in']) && !empty($validated['check_out'])) {
             if (Carbon::parse($validated['check_out'])->lessThan(Carbon::parse($validated['check_in']))) {
@@ -181,12 +168,20 @@ class AttendanceController extends Controller
             }
         }
 
-        // Both punches are now on record, so a missing-punch flag no longer applies.
-        $resultingIn  = array_key_exists('check_in', $validated) ? $validated['check_in'] : $attendance->check_in;
-        $resultingOut = array_key_exists('check_out', $validated) ? $validated['check_out'] : $attendance->check_out;
-        $resultingStatus = $validated['status'] ?? $attendance->status;
-        if ($resultingIn && $resultingOut && in_array($resultingStatus, Attendance::MISSING_STATUSES, true)) {
-            $validated['status'] = 'present';
+        // The status follows the punches (late / missing flags clear or appear as the times
+        // change). A status the admin deliberately picked in this request is kept when the
+        // policy allows manual overrides.
+        $explicitStatus = isset($validated['status']) && $validated['status'] !== $attendance->status
+            && ($policy?->allow_manual_status_override ?? true);
+        $preview = $attendance->replicate(['overtime_hours', 'duration_hours']);
+        $preview->status = $attendance->status;
+        foreach (['check_in', 'check_out'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $preview->{$field} = $validated[$field];
+            }
+        }
+        if (!$explicitStatus) {
+            $validated['status'] = $this->attendanceCalculator()->recomputeStatus($preview, $policy, $shift);
         }
 
         $attendance->update($validated);
@@ -752,13 +747,19 @@ class AttendanceController extends Controller
             }
             $update['check_in'] = $in;
             $update['check_out'] = $out;
-            if ($in) {
-                $update['status'] = $calc->deriveStatusFromCheckIn(
-                    AttendancePolicy::query()->first(),
-                    $attendance->employee?->effectiveShift(),
-                    $in,
-                    in_array($attendance->status, ['absent', ...Attendance::MISSING_STATUSES], true) ? 'present' : $attendance->status
-                );
+            $preview = $attendance->replicate(['overtime_hours', 'duration_hours']);
+            $preview->check_in = $in;
+            $preview->check_out = $out;
+            $update['status'] = $calc->recomputeStatus(
+                $preview,
+                AttendancePolicy::query()->first(),
+                $attendance->employee?->effectiveShift()
+            );
+        } elseif ($validated['correction_status'] === 'approved') {
+            // No new times proposed: the reviewer accepted the employee's explanation
+            // (e.g. they were within their grace period), so "late" is cleared.
+            if ($attendance->check_in && $attendance->status === 'late') {
+                $update['status'] = 'present';
             }
         }
 
