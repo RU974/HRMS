@@ -16,6 +16,10 @@ export interface AuthUser {
     email?: string | null;
     status?: string | null;
     joining_date?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    date_of_birth?: string | null;
+    gender?: string | null;
     profile_image?: string | null;
     department?: { id: number; name: string } | null;
     designation?: { id: number; name: string } | null;

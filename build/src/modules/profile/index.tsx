@@ -58,6 +58,20 @@ function Alert({ type, message }: { type: "success" | "error"; message: string }
   );
 }
 
+type AuthUser = ReturnType<typeof useAuthStore.getState>["user"];
+
+// Pre-fill the form from the saved user/employee record.
+function buildProfileForm(user: AuthUser) {
+  const emp = user?.employee;
+  return {
+    name: emp?.name ?? user?.name ?? "",
+    phone: emp?.phone ?? "",
+    address: emp?.address ?? "",
+    date_of_birth: emp?.date_of_birth ? emp.date_of_birth.slice(0, 10) : "",
+    gender: emp?.gender ? emp.gender.toLowerCase() : "",
+  };
+}
+
 export function ProfilePage() {
   const queryClient = useQueryClient();
   const { user, setUser, hasPermission } = useAuthStore();
@@ -91,13 +105,7 @@ export function ProfilePage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [profileForm, setProfileForm] = useState({
-    name: user?.name ?? "",
-    phone: "",
-    address: "",
-    date_of_birth: "",
-    gender: "",
-  });
+  const [profileForm, setProfileForm] = useState(() => buildProfileForm(user));
 
   const [pwForm, setPwForm] = useState({
     current_password: "",
@@ -114,10 +122,7 @@ export function ProfilePage() {
   useEffect(() => {
     if (meData) {
       setUser(meData.user, meData.license);
-      setProfileForm((prev) => ({
-        ...prev,
-        name: meData.user.name ?? prev.name,
-      }));
+      setProfileForm(buildProfileForm(meData.user));
     }
   }, [meData]);
 
@@ -316,7 +321,7 @@ export function ProfilePage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setProfileForm({ name: user?.name ?? "", phone: "", address: "", date_of_birth: "", gender: "" });
+                  setProfileForm(buildProfileForm(user));
                   setPhotoFile(null);
                   setPreviewUrl(null);
                 }}
