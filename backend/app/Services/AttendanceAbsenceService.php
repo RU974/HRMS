@@ -43,6 +43,82 @@ class AttendanceAbsenceService
             $marked += $this->markDay($day, $companyId);
         }
 
+        $marked += $this->markMissingPunches($from, $companyId);
+
+        return $marked;
+    }
+
+    /** Hours after the shift end before an unclosed record is flagged (people punch out late). */
+    public const MISSING_CHECK_OUT_BUFFER_HOURS = 3;
+
+    /**
+     * Flag records with a forgotten punch so they stop looking like clean "present" days:
+     *  - check-out but no check-in           -> missing_check_in
+     *  - check-in, no check-out, shift over  -> missing_check_out
+     * Records an employee later completes (late punch, correction) are re-derived by the
+     * code that completes them. Safe to re-run.
+     *
+     * @return int number of attendance rows updated
+     */
+    public function markMissingPunches(CarbonInterface $from, ?string $companyId = null): int
+    {
+        $from = Carbon::parse($from)->startOfDay();
+        $employeeIds = fn ($q) => $q->when($companyId, fn ($q2) => $q2->where('company_id', $companyId));
+        $calculator = new AttendanceCalculator();
+        $marked = 0;
+
+        $noCheckIn = Attendance::query()
+            ->whereDate('date', '>=', $from->toDateString())
+            ->whereNull('check_in')
+            ->whereNotNull('check_out')
+            ->whereIn('status', ['present', 'late'])
+            ->whereHas('employee', $employeeIds)
+            ->get();
+        foreach ($noCheckIn as $record) {
+            $record->update([
+                'status' => Attendance::STATUS_MISSING_CHECK_IN,
+                'notes'  => ($record->notes && !str_starts_with($record->notes, 'Auto-marked'))
+                    ? $record->notes
+                    : 'Check-in missing: only a check-out punch (' . $record->check_out->format('H:i') . ') was recorded.',
+            ]);
+            $marked++;
+        }
+
+        $noCheckOut = Attendance::query()
+            ->with('employee.shift')
+            ->whereDate('date', '>=', $from->toDateString())
+            ->whereNotNull('check_in')
+            ->whereNull('check_out')
+            ->whereIn('status', ['present', 'late'])
+            ->whereHas('employee', $employeeIds)
+            ->get();
+        foreach ($noCheckOut as $record) {
+            $shift = $record->employee?->shift;
+            $date  = Carbon::parse($record->date)->toDateString();
+
+            if ($shift && $shift->end_time) {
+                $shiftEnd = Carbon::parse($date . ' ' . $shift->end_time);
+                if ($calculator->isOvernightShift($shift)) {
+                    $shiftEnd->addDay();
+                }
+                $due = $shiftEnd->addHours(self::MISSING_CHECK_OUT_BUFFER_HOURS);
+            } else {
+                // No shift: the day itself has to be over.
+                $due = Carbon::parse($date)->addDay()->endOfDay();
+            }
+
+            if (now()->lt($due)) {
+                continue;
+            }
+
+            $record->update([
+                'status' => Attendance::STATUS_MISSING_CHECK_OUT,
+                'notes'  => $record->notes
+                    ?: 'Check-out missing: no check-out punch was recorded after the check-in at ' . $record->check_in->format('H:i') . '.',
+            ]);
+            $marked++;
+        }
+
         return $marked;
     }
 

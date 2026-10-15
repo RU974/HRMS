@@ -40,7 +40,7 @@ export interface AttendanceItem {
   date: string;
   check_in?: string | null;
   check_out?: string | null;
-  status: "present" | "absent" | "leave" | "late";
+  status: "present" | "absent" | "leave" | "late" | "missing_check_in" | "missing_check_out";
   notes?: string | null;
   employee?: { id: number; name: string } | null;
   source?: "biometric" | "manual" | "mobile" | "web";
@@ -275,6 +275,8 @@ export interface AttendanceMonthlyStats {
   present: number;
   absent: number;
   late: number;
+  missing_check_in?: number;
+  missing_check_out?: number;
   leave: number;
   total_days: number;
   off_days: number;

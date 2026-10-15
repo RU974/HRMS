@@ -227,7 +227,7 @@ class DashboardController extends Controller
         $activeEmployees = (clone $employeeQuery)->where('status', 'active')->count();
         $employees = $activeEmployees;
         $todayAttendance = (clone $attendanceQuery)->whereDate('date', $today)->count();
-        $todayPresent = (clone $attendanceQuery)->whereDate('date', $today)->whereIn('status', ['present', 'late'])->count();
+        $todayPresent = (clone $attendanceQuery)->whereDate('date', $today)->whereIn('status', ['present', 'late', 'missing_check_in', 'missing_check_out'])->count();
         $pendingLeaves = (clone $leaveQuery)->where('status', 'pending')->count();
         $pendingPayrolls = (clone $payrollQuery)->where('status', 'pending')->count();
 
@@ -256,7 +256,7 @@ class DashboardController extends Controller
             abort(403, 'Your account is not associated with a company.');
         }
 
-        $attendanceRows = Attendance::select('date', DB::raw('COUNT(*) as total'), DB::raw("SUM(CASE WHEN status IN ('present', 'late') THEN 1 ELSE 0 END) as present_count"));
+        $attendanceRows = Attendance::select('date', DB::raw('COUNT(*) as total'), DB::raw("SUM(CASE WHEN status IN ('present', 'late', 'missing_check_in', 'missing_check_out') THEN 1 ELSE 0 END) as present_count"));
         $this->scopeToCompany($request, $attendanceRows, 'employee.user');
         $this->applyManagedEmployeeScope($request, $attendanceRows, 'employee');
 

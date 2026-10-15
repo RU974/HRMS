@@ -313,16 +313,48 @@ class BiometricSyncService
         if ($open && ($type === 'out' || ($overnight
             && $timestamp->getTimestamp() - Carbon::parse($open->check_in)->getTimestamp() >= 3600))) {
             $open->check_out = $timestamp;
+            // A late check-out completes a record that was already flagged as missing it.
+            if ($open->status === Attendance::STATUS_MISSING_CHECK_OUT) {
+                $open->status = $calculator->deriveStatusFromCheckIn(
+                    AttendancePolicy::query()->first(),
+                    Employee::find($employeeId)?->effectiveShift(),
+                    Carbon::parse($open->check_in)->toDateTimeString(),
+                    'present'
+                );
+            }
             $open->source = 'biometric';
             $open->biometric_device_id = $device->id;
             $open->save();
             return;
         }
 
-        $attendance = Attendance::firstOrNew([
-            'employee_id' => $employeeId,
-            'date' => $date,
-        ]);
+        // A night-shift check-out with no check-in on record (the person forgot to punch in
+        // the evening) belongs to the shift that started the previous evening, so it is
+        // filed under that date instead of polluting today's record.
+        // With no shift assigned, the person counts as a night worker when a recent check-in
+        // was in the evening.
+        $nightWorker = $shift?->start_time
+            ? $overnight
+            : Attendance::where('employee_id', $employeeId)
+                ->whereNotNull('check_in')
+                ->where('check_in', '>=', $timestamp->copy()->subDays(7)->toDateTimeString())
+                ->get(['check_in'])
+                ->contains(fn ($row) => (int) Carbon::parse($row->check_in)->format('G') >= 16);
+        $morningCutoff = $shift?->start_time ? (int) Carbon::parse($shift->start_time)->format('G') : 12;
+
+        if ($type === 'out' && $nightWorker && (int) $timestamp->format('G') < $morningCutoff) {
+            $previous = $timestamp->copy()->subDay()->toDateString();
+            $hasPreviousCheckIn = Attendance::where('employee_id', $employeeId)
+                ->whereDate('date', $previous)
+                ->whereNotNull('check_in')
+                ->exists();
+            if (!$hasPreviousCheckIn) {
+                $date = $previous;
+            }
+        }
+
+        $attendance = Attendance::where('employee_id', $employeeId)->whereDate('date', $date)->first()
+            ?? new Attendance(['employee_id' => $employeeId, 'date' => $date]);
 
         $attendance->source = 'biometric';
         $attendance->biometric_device_id = $device->id;
@@ -360,7 +392,13 @@ class BiometricSyncService
             $attendance->check_out = null;
         }
 
-        if (!$attendance->status) {
+        if (!$attendance->check_in && $attendance->check_out) {
+            // Only a check-out was punched: flag it rather than counting a clean "present" day.
+            $attendance->status = Attendance::STATUS_MISSING_CHECK_IN;
+            $attendance->notes = ($attendance->notes && !str_starts_with($attendance->notes, 'Auto-marked'))
+                ? $attendance->notes
+                : 'Check-in missing: only a check-out punch (' . $attendance->check_out->format('H:i') . ') was recorded.';
+        } elseif (!$attendance->status) {
             $attendance->status = 'present';
         }
 

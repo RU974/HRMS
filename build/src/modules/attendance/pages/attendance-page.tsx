@@ -49,10 +49,16 @@ function StatusBadge({ status }: { status: string }) {
     late:    "bg-amber-50 text-amber-700",
     absent:  "bg-red-50 text-red-700",
     leave:   "bg-blue-50 text-blue-700",
+    missing_check_in:  "bg-orange-50 text-orange-700",
+    missing_check_out: "bg-orange-50 text-orange-700",
+  };
+  const labels: Record<string, string> = {
+    missing_check_in:  "Check-in missing",
+    missing_check_out: "Check-out missing",
   };
   return (
     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${map[status] ?? "bg-gray-50 text-gray-700"}`}>
-      {status}
+      {labels[status] ?? status}
     </span>
   );
 }
@@ -170,6 +176,8 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
   const statusStyle: Record<string, string> = {
     present: "bg-emerald-100 text-emerald-800 border-emerald-200",
     late:    "bg-amber-100 text-amber-800 border-amber-200",
+    missing_check_in:  "bg-orange-100 text-orange-800 border-orange-200",
+    missing_check_out: "bg-orange-100 text-orange-800 border-orange-200",
     absent:  "bg-red-100 text-red-800 border-red-200",
     leave:   "bg-blue-100 text-blue-800 border-blue-200",
     halfday: "bg-orange-100 text-orange-800 border-orange-200",
@@ -208,7 +216,7 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
 
       {/* Legend */}
       <div className="mb-3 flex flex-wrap gap-3">
-        {[["present","bg-emerald-100 text-emerald-800"],["late","bg-amber-100 text-amber-800"],["absent","bg-red-100 text-red-800"],["leave","bg-blue-100 text-blue-800"],["halfday","bg-orange-100 text-orange-800"]].map(([s, cls]) => (
+        {[["present","bg-emerald-100 text-emerald-800"],["late","bg-amber-100 text-amber-800"],["absent","bg-red-100 text-red-800"],["leave","bg-blue-100 text-blue-800"],["halfday","bg-orange-100 text-orange-800"],["missing_check_in","bg-orange-100 text-orange-800"],["missing_check_out","bg-orange-100 text-orange-800"]].map(([s, cls]) => (
           <span key={s} className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls}`}>{s === "halfday" ? "half day" : s}</span>
         ))}
         <span className="rounded-full border border-[var(--border)] bg-[var(--background)] px-2.5 py-0.5 text-xs font-medium text-[var(--muted)]">no record</span>
@@ -489,6 +497,8 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
               <option value="late">Late</option>
               <option value="absent">Absent</option>
               <option value="leave">Leave</option>
+              <option value="missing_check_in">Check-in missing</option>
+              <option value="missing_check_out">Check-out missing</option>
             </select>
           </FormField>
           <FormField label="Check in">
@@ -792,6 +802,7 @@ export function AttendancePage() {
                   { label: "Late",    value: stats?.late    ?? 0, color: "text-amber-600" },
                   { label: "Absent",  value: stats?.absent  ?? 0, color: "text-red-600" },
                   { label: "Leave",   value: stats?.leave   ?? 0, color: "text-blue-600" },
+                  { label: "Missing punch", value: (stats?.missing_check_in ?? 0) + (stats?.missing_check_out ?? 0), color: "text-orange-600" },
                   { label: "WFH",     value: stats?.wfh_days ?? 0, color: "text-violet-600" },
                   { label: "Off days", value: stats?.off_days ?? 0, color: "text-[var(--muted)]" },
                   { label: "Hours",   value: `${(stats?.total_hours ?? 0).toFixed(1)}h`, color: "text-[var(--text)]" },
@@ -865,6 +876,8 @@ export function AttendancePage() {
                 <option value="late">Late</option>
                 <option value="absent">Absent</option>
                 <option value="leave">Leave</option>
+                <option value="missing_check_in">Check-in missing</option>
+                <option value="missing_check_out">Check-out missing</option>
               </select>
               {(dateFrom || dateTo || statusFilter) && (
                 <Button variant="outline" onClick={() => { setDateFrom(""); setDateTo(""); setStatusFilter(""); setPage(1); }}>Clear</Button>

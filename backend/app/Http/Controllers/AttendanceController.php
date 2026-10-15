@@ -91,7 +91,7 @@ class AttendanceController extends Controller
             'date'           => 'required|date',
             'check_in'       => 'nullable|date_format:H:i',
             'check_out'      => 'nullable|date_format:H:i',
-            'status'         => 'nullable|in:present,absent,leave,late',
+            'status'         => 'nullable|in:'.implode(',', Attendance::ALL_STATUSES),
             'work_from_home' => 'nullable|boolean',
             'notes'          => 'nullable|string',
         ]);
@@ -141,7 +141,7 @@ class AttendanceController extends Controller
             'date'           => 'sometimes|date',
             'check_in'       => 'nullable|date_format:H:i',
             'check_out'      => 'nullable|date_format:H:i',
-            'status'         => 'sometimes|in:present,absent,leave,late',
+            'status'         => 'sometimes|in:'.implode(',', Attendance::ALL_STATUSES),
             'work_from_home' => 'nullable|boolean',
             'notes'          => 'nullable|string',
         ]);
@@ -163,6 +163,10 @@ class AttendanceController extends Controller
         $shift = $attendance->employee?->effectiveShift();
         if (!empty($validated['check_in'])) {
             $currentStatus = $validated['status'] ?? $attendance->status;
+            // A flagged record that now has its punch is a normal day again.
+            if (in_array($currentStatus, Attendance::MISSING_STATUSES, true)) {
+                $currentStatus = 'present';
+            }
             $validated['status'] = $this->attendanceCalculator()->deriveStatusFromCheckIn(
                 $policy,
                 $shift,
@@ -175,6 +179,14 @@ class AttendanceController extends Controller
             if (Carbon::parse($validated['check_out'])->lessThan(Carbon::parse($validated['check_in']))) {
                 return $this->fail('Check-out cannot be earlier than check-in.', 422);
             }
+        }
+
+        // Both punches are now on record, so a missing-punch flag no longer applies.
+        $resultingIn  = array_key_exists('check_in', $validated) ? $validated['check_in'] : $attendance->check_in;
+        $resultingOut = array_key_exists('check_out', $validated) ? $validated['check_out'] : $attendance->check_out;
+        $resultingStatus = $validated['status'] ?? $attendance->status;
+        if ($resultingIn && $resultingOut && in_array($resultingStatus, Attendance::MISSING_STATUSES, true)) {
+            $validated['status'] = 'present';
         }
 
         $attendance->update($validated);
@@ -307,7 +319,7 @@ class AttendanceController extends Controller
                 continue;
             }
             $status = strtolower($row['status'] ?? '') ?: 'present';
-            if (!in_array($status, ['present', 'absent', 'leave', 'late'], true)) {
+            if (!in_array($status, Attendance::ALL_STATUSES, true)) {
                 $errors[] = "Line {$line}: invalid status '{$status}'.";
                 $skipped++;
                 continue;
@@ -394,6 +406,8 @@ class AttendanceController extends Controller
             'absent' => $stats->where('status', 'absent')->sum('count'),
             'leave' => $stats->where('status', 'leave')->sum('count'),
             'late' => $stats->where('status', 'late')->sum('count'),
+            'missing_check_in' => $stats->where('status', 'missing_check_in')->sum('count'),
+            'missing_check_out' => $stats->where('status', 'missing_check_out')->sum('count'),
             'off_days' => $this->countWeeklyOffDays((int) $employeeId, (int) $month, (int) $year),
         ]);
     }
@@ -589,6 +603,8 @@ class AttendanceController extends Controller
             'absent' => (int) $rows->where('status', 'absent')->sum('count'),
             'leave' => (int) $rows->where('status', 'leave')->sum('count'),
             'late' => (int) $rows->where('status', 'late')->sum('count'),
+            'missing_check_in' => (int) $rows->where('status', 'missing_check_in')->sum('count'),
+            'missing_check_out' => (int) $rows->where('status', 'missing_check_out')->sum('count'),
         ]);
     }
 
@@ -741,7 +757,7 @@ class AttendanceController extends Controller
                     AttendancePolicy::query()->first(),
                     $attendance->employee?->effectiveShift(),
                     $in,
-                    $attendance->status === 'absent' ? 'present' : $attendance->status
+                    in_array($attendance->status, ['absent', ...Attendance::MISSING_STATUSES], true) ? 'present' : $attendance->status
                 );
             }
         }

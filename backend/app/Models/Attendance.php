@@ -9,6 +9,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class Attendance extends Model
 {
+    public const STATUS_MISSING_CHECK_IN  = 'missing_check_in';
+    public const STATUS_MISSING_CHECK_OUT = 'missing_check_out';
+    public const MISSING_STATUSES = [self::STATUS_MISSING_CHECK_IN, self::STATUS_MISSING_CHECK_OUT];
+    public const ALL_STATUSES = ['present', 'absent', 'leave', 'late', self::STATUS_MISSING_CHECK_IN, self::STATUS_MISSING_CHECK_OUT];
+
     protected $fillable = [
         'employee_id',
         'check_in',

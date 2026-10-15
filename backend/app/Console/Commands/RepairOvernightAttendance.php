@@ -52,6 +52,8 @@ class RepairOvernightAttendance extends Command
                     ->first();
 
                 if (!$target) {
+                    $this->moveOrphanToShiftDay($orphan, $out, $apply, $fixed);
+
                     return;
                 }
 
@@ -73,5 +75,40 @@ class RepairOvernightAttendance extends Command
         $this->info(($apply ? 'Repaired' : 'Would repair') . " {$fixed} record(s).");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * A morning check-out with no evening check-in anywhere: file it on the shift's start date
+     * (the day before) and flag it, instead of leaving a "present" row on the wrong day.
+     */
+    private function moveOrphanToShiftDay(Attendance $orphan, Carbon $out, bool $apply, int &$fixed): void
+    {
+        if ((int) $out->format('G') >= 12 || $orphan->status === Attendance::STATUS_MISSING_CHECK_IN && $orphan->date->toDateString() < $out->toDateString()) {
+            return; // not a morning punch, or already filed on the previous day
+        }
+
+        $previousDate = $out->copy()->subDay()->toDateString();
+        $previous = Attendance::where('employee_id', $orphan->employee_id)
+            ->whereDate('date', $previousDate)
+            ->first();
+
+        // The previous day may only hold an empty (e.g. auto-marked absent) row; anything real is left alone.
+        if ($previous && ($previous->check_in || $previous->check_out)) {
+            return;
+        }
+
+        $note = 'Check-in missing: only a check-out punch (' . $out->format('H:i') . ') was recorded.';
+        $this->line(sprintf('#%d employee %d: out-only %s -> %s as missing check-in%s', $orphan->id,
+            $orphan->employee_id, $out, $previousDate, $previous ? " (replacing empty #{$previous->id})" : ''));
+        $fixed++;
+        if (!$apply) {
+            return;
+        }
+
+        $previous?->delete();
+        $orphan->date = $previousDate;
+        $orphan->status = Attendance::STATUS_MISSING_CHECK_IN;
+        $orphan->notes = $note;
+        $orphan->save();
     }
 }
