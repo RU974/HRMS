@@ -226,7 +226,7 @@ export function ProfilePage() {
         <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
           <InfoBox label="Employee #" value={user?.employee?.employee_number ?? "—"} />
           <InfoBox label="Department" value={user?.employee?.department?.name ?? "—"} />
-          <InfoBox label="Designation" value={user?.employee?.designation?.name ?? "—"} />
+          <InfoBox label="Designation" value={user?.employee?.designationRef?.name ?? user?.employee?.designation ?? "—"} />
           <InfoBox label="Status" value={user?.employee?.status ?? "—"} />
         </div>
       </Card>

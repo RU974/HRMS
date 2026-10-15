@@ -22,7 +22,8 @@ export interface AuthUser {
     gender?: string | null;
     profile_image?: string | null;
     department?: { id: number; name: string } | null;
-    designation?: { id: number; name: string } | null;
+    designation?: string | null;
+    designationRef?: { id: number; name: string } | null;
     shift?: { id: number; name: string } | null;
     manager?: { id: number; name: string } | null;
   } | null;

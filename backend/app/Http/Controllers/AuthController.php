@@ -86,7 +86,7 @@ class AuthController extends Controller
             return $this->fail('Invalid credentials', 401);
         }
 
-        $user->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager', 'company']);
+        $user->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.designationRef', 'employee.shift', 'employee.manager', 'company']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $this->auditLogService->recordRequest(
@@ -127,7 +127,7 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        $user = $request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager', 'company']);
+        $user = $request->user()?->loadMissing(['roles.permissions', 'permissions', 'employee.department', 'employee.designationRef', 'employee.shift', 'employee.manager', 'company']);
 
         // Attach a lightweight license snapshot so the frontend can render
         // expiry banners and seat warnings without a separate API call.
@@ -206,7 +206,7 @@ class AuthController extends Controller
         }
 
         return $this->ok(
-            $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.shift', 'employee.manager']),
+            $user->fresh(['roles.permissions', 'permissions', 'employee.department', 'employee.designationRef', 'employee.shift', 'employee.manager']),
             'Profile updated successfully'
         );
     }
