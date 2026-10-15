@@ -206,7 +206,7 @@ export interface TeamDailyAttendanceRow {
   monthly_absences: number;
 }
 
-export interface AttendanceListFilters { month?: number; year?: number; status?: string }
+export interface AttendanceListFilters { month?: number; year?: number; status?: string; dateFrom?: string; dateTo?: string }
 
 export function listAttendancePaginated(page: number, employeeId?: number, search?: string, filters: AttendanceListFilters = {}) {
   let url = `/attendance?per_page=20&page=${page}`;
@@ -214,6 +214,8 @@ export function listAttendancePaginated(page: number, employeeId?: number, searc
   if (search) url += `&search=${encodeURIComponent(search)}`;
   if (filters.month) url += `&month=${filters.month}`;
   if (filters.year) url += `&year=${filters.year}`;
+  if (filters.dateFrom) url += `&date_from=${filters.dateFrom}`;
+  if (filters.dateTo) url += `&date_to=${filters.dateTo}`;
   if (filters.status) url += `&status=${encodeURIComponent(filters.status)}`;
   return apiClient<PaginatedResponse<AttendanceItem>>(url);
 }
@@ -224,6 +226,8 @@ export async function exportAttendanceCsv(search?: string, filters: AttendanceLi
   if (search) q.set("search", search);
   if (filters.month) q.set("month", String(filters.month));
   if (filters.year) q.set("year", String(filters.year));
+  if (filters.dateFrom) q.set("date_from", filters.dateFrom);
+  if (filters.dateTo) q.set("date_to", filters.dateTo);
   if (filters.status) q.set("status", filters.status);
   const qs = q.toString() ? `?${q.toString()}` : "";
   const res = await fetch(`${API_BASE_URL}/attendance/export${qs}`, {

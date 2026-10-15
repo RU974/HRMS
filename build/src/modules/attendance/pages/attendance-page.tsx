@@ -546,13 +546,14 @@ export function AttendancePage() {
   const [proposedIn, setProposedIn]     = useState("");
   const [proposedOut, setProposedOut]   = useState("");
 
-  // Records filters (month is "YYYY-MM" or "" for all time)
-  const [monthFilter, setMonthFilter]   = useState("");
+  // Records filters (dates are "YYYY-MM-DD" or "" for unbounded)
+  const [dateFrom, setDateFrom]         = useState("");
+  const [dateTo, setDateTo]             = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const listFilters = {
-    month:  monthFilter ? Number(monthFilter.slice(5, 7)) : undefined,
-    year:   monthFilter ? Number(monthFilter.slice(0, 4)) : undefined,
-    status: statusFilter || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo:   dateTo || undefined,
+    status:   statusFilter || undefined,
   };
 
   // Month shown in the stats card (defaults to the current month)
@@ -580,7 +581,7 @@ export function AttendancePage() {
   }, [searchInput]);
 
   const query = useQuery({
-    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId, search, monthFilter, statusFilter],
+    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId, search, dateFrom, dateTo, statusFilter],
     queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId, search || undefined, listFilters),
     enabled: seesTeam || employeeId > 0,
     placeholderData: (prev) => prev,
@@ -834,14 +835,25 @@ export function AttendancePage() {
                   className="w-64"
                 />
               )}
-              <FormInput
-                type="month"
-                aria-label="Filter by month"
-                value={monthFilter}
-                max={today.slice(0, 7)}
-                onChange={e => { setMonthFilter(e.target.value); setPage(1); }}
-                className="w-40"
-              />
+              <div className="flex items-center gap-2">
+                <FormInput
+                  type="date"
+                  aria-label="From date"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+                  className="w-40"
+                />
+                <span className="text-xs text-[var(--muted)]">to</span>
+                <FormInput
+                  type="date"
+                  aria-label="To date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={e => { setDateTo(e.target.value); setPage(1); }}
+                  className="w-40"
+                />
+              </div>
               <select
                 aria-label="Filter by status"
                 className={`${inputClass} w-36`}
@@ -854,8 +866,8 @@ export function AttendancePage() {
                 <option value="absent">Absent</option>
                 <option value="leave">Leave</option>
               </select>
-              {(monthFilter || statusFilter) && (
-                <Button variant="outline" onClick={() => { setMonthFilter(""); setStatusFilter(""); setPage(1); }}>Clear</Button>
+              {(dateFrom || dateTo || statusFilter) && (
+                <Button variant="outline" onClick={() => { setDateFrom(""); setDateTo(""); setStatusFilter(""); setPage(1); }}>Clear</Button>
               )}
               {canExport && (
                 <Button variant="outline" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
@@ -903,7 +915,7 @@ export function AttendancePage() {
 
                 {!query.isLoading && records.length === 0 && (
                   <tr><td colSpan={colCount} className="p-10 text-center text-sm text-[var(--muted)]">
-                    {query.isError ? "Could not load attendance records." : monthFilter || statusFilter ? "No records match these filters." : "No attendance records found."}
+                    {query.isError ? "Could not load attendance records." : dateFrom || dateTo || statusFilter ? "No records match these filters." : "No attendance records found."}
                   </td></tr>
                 )}
 

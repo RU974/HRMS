@@ -54,6 +54,12 @@ class AttendanceController extends Controller
         if ($request->has('year')) {
             $query->whereYear('date', $request->year);
         }
+        if ($request->filled('date_from')) {
+            $query->whereDate('date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('date', '<=', $request->date_to);
+        }
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -209,6 +215,12 @@ class AttendanceController extends Controller
         }
         if ($request->filled('year')) {
             $query->whereYear('date', $request->year);
+        }
+        if ($request->filled('date_from')) {
+            $query->whereDate('date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('date', '<=', $request->date_to);
         }
         if ($request->filled('status')) {
             $query->where('status', $request->status);
