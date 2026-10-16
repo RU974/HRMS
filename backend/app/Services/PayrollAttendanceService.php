@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\Leave;
@@ -22,7 +23,9 @@ use Illuminate\Support\Collection;
  *  - no punches and marked absent, or no attendance row at all (the absence job simply
  *    has not run) -> absent
  *  - half day without a leave covering it -> half-day deduction
- *  - late arrivals are counted; every N of them cost a configured number of days
+ *  - late arrivals are counted (early leaves too, when the attendance policy says so); with
+ *    "N lates = 1 absent" every N of them cost one absent day, otherwise the payroll late rule applies
+ *  - a day the policy judged absent from its punches (too late / too few hours) is an absence
  * Days that are not over yet (today and later) are never judged. Someone who punched in on
  * a day they also had leave is treated as having worked.
  */
@@ -53,6 +56,13 @@ class PayrollAttendanceService
     {
         $companyId = $employee->company_id ? (string) $employee->company_id : null;
         $policy = PayrollAttendancePolicy::settingsFor($companyId);
+        // The company's attendance policy decides what counts as absent / late; the payroll policy only prices it.
+        $rules = AttendancePolicy::forCompany($companyId);
+        $earlyLeaveCountsAsLate = (bool) ($rules?->early_leave_enabled && $rules->early_leave_counts_as_late);
+        $missingAsAbsent = (bool) $rules?->missing_punch_as_absent;
+        $autoAbsent = $rules?->auto_mark_absent !== false;
+        $calculator = $earlyLeaveCountsAsLate ? new AttendanceCalculator() : null;
+        $shift = $earlyLeaveCountsAsLate ? $employee->effectiveShift() : null;
 
         $monthStart = Carbon::create($year, $month, 1)->startOfDay();
         $monthEnd = $monthStart->copy()->endOfMonth()->startOfDay();
@@ -120,7 +130,7 @@ class PayrollAttendanceService
                 } else {
                     $unpaidLeave += 0.5;
                 }
-                if ($hasPunch && $row->status === 'late') {
+                if ($hasPunch && ($row->status === 'late' || ($calculator && $calculator->isEarlyLeave($row, $rules, $shift)))) {
                     $lates++;
                 }
                 continue;
@@ -129,10 +139,17 @@ class PayrollAttendanceService
             if ($hasPunch) {
                 if ($row->status === Attendance::STATUS_HALF_DAY) {
                     $halfDays++;
-                } elseif ($row->status === 'late') {
-                    $lates++;
+                } elseif ($row->status === 'absent') {
+                    $absent++; // the policy judged the punches too short / too late to count as a day
                 } elseif (in_array($row->status, Attendance::MISSING_STATUSES, true)) {
                     $missingPunch++;
+                    if ($missingAsAbsent) {
+                        $absent++;
+                    }
+                } else {
+                    if ($row->status === 'late' || ($calculator && $row->check_out && $calculator->isEarlyLeave($row, $rules, $shift))) {
+                        $lates++;
+                    }
                 }
                 continue;
             }
@@ -142,19 +159,28 @@ class PayrollAttendanceService
                 $paidLeave++; // set by hand with no leave request behind it: nothing says it is unpaid
             } elseif ($status === Attendance::STATUS_HALF_DAY) {
                 $halfDays++;
-            } elseif ($status === 'absent' || ($status === null && $tracked)) {
+            } elseif ($status === 'absent' || ($status === null && $tracked && $autoAbsent)) {
                 $absent++;
             }
             // present / late / missing punch with no times were set by hand: paid as recorded
         }
 
-        $lateBlocks = $policy['lates_per_deduction'] > 0 ? intdiv($lates, $policy['lates_per_deduction']) : 0;
+        // "N lates = 1 absent" in the attendance policy wins over the payroll late rule: each block
+        // costs what an absent day costs. Without it, the payroll late rule (every N lates cost X days) applies.
+        $latesPerAbsent = (int) ($rules?->lates_per_absent ?? 0);
+        if ($latesPerAbsent > 0) {
+            $lateBlocks = intdiv($lates, $latesPerAbsent);
+            $lateBlockDays = $policy['absent_deduction_days'];
+        } else {
+            $lateBlocks = $policy['lates_per_deduction'] > 0 ? intdiv($lates, $policy['lates_per_deduction']) : 0;
+            $lateBlockDays = $policy['late_deduction_days'];
+        }
 
         $deductionDays = $policy['enabled']
             ? $absent * $policy['absent_deduction_days']
                 + $halfDays * $policy['half_day_deduction_days']
                 + $unpaidLeave
-                + $lateBlocks * $policy['late_deduction_days']
+                + $lateBlocks * $lateBlockDays
                 + $preJoining
             : 0.0;
         $deductionDays = $scheduled > 0 ? round(min($deductionDays, (float) $scheduled), 2) : 0.0;
@@ -167,6 +193,7 @@ class PayrollAttendanceService
             'half_days' => $halfDays,
             'late_count' => $lates,
             'late_blocks' => $lateBlocks,
+            'lates_per_absent' => $latesPerAbsent,
             'paid_leave_days' => $paidLeave,
             'unpaid_leave_days' => $unpaidLeave,
             'pre_joining_days' => $preJoining,

@@ -29,6 +29,7 @@ import {
 } from "@/services/hr-management-service";
 import { getEmployees, getEmployeeOptions } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
+import { AttendancePolicyPanel } from "../components/attendance-policy-panel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function useLiveClock() {
@@ -374,7 +375,8 @@ function TeamView() {
                   const att = row.attendance;
                   const noRecord = !att;
                   const isAbsent = noRecord || att?.status === "absent";
-                  const highAbsence = row.monthly_absences >= 3;
+                  const totalAbsences = row.monthly_absences + (row.absent_from_lates ?? 0);
+                  const highAbsence = totalAbsences >= 3;
 
                   return (
                     <tr key={row.employee_id}
@@ -404,7 +406,8 @@ function TeamView() {
                       </td>
                       <td data-label="Monthly Abs." className="p-3">
                         <span className={`font-semibold ${highAbsence ? "text-red-600" : "text-[var(--muted)]"}`}>
-                          {row.monthly_absences}
+                          {totalAbsences}
+                          {(row.absent_from_lates ?? 0) > 0 && <span className="ml-1 text-xs font-normal" title="Includes absences from the late rule">({row.absent_from_lates} from lates)</span>}
                           {highAbsence && <span className="ml-1 text-xs">⚠</span>}
                         </span>
                       </td>
@@ -416,7 +419,7 @@ function TeamView() {
           </div>
         )}
 
-        {rows.some(r => r.monthly_absences >= 3) && (
+        {rows.some(r => r.monthly_absences + (r.absent_from_lates ?? 0) >= 3) && (
           <p className="mt-3 text-xs text-red-600">⚠ Employees with 3+ absences this month are highlighted as at-risk.</p>
         )}
       </Card>
@@ -524,7 +527,7 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-type Tab = "records" | "calendar" | "team";
+type Tab = "records" | "calendar" | "team" | "policy";
 
 export function AttendancePage() {
   const queryClient = useQueryClient();
@@ -706,6 +709,7 @@ export function AttendancePage() {
     { key: "records",  label: "Records" },
     { key: "calendar", label: "Calendar", show: employeeId > 0 || seesTeam },
     { key: "team",     label: "Team View", show: seesTeam },
+    { key: "policy",   label: "Policy",    show: canManage },
   ];
 
   return (
@@ -796,6 +800,8 @@ export function AttendancePage() {
                   { label: "Leave",   value: stats?.leave_days ?? stats?.leave ?? 0, color: "text-blue-600" },
                   { label: "Half day", value: stats?.half_day ?? 0, color: "text-orange-600" },
                   { label: "Missing punch", value: (stats?.missing_check_in ?? 0) + (stats?.missing_check_out ?? 0), color: "text-orange-600" },
+                  ...((stats?.early_leave ?? 0) > 0 ? [{ label: "Early leave", value: stats?.early_leave ?? 0, color: "text-amber-600" }] : []),
+                  ...((stats?.lates_per_absent ?? 0) > 0 ? [{ label: `Absent from lates (${stats?.lates_per_absent} = 1)`, value: stats?.absent_from_lates ?? 0, color: "text-red-600" }] : []),
                   { label: "WFH",     value: stats?.wfh_days ?? 0, color: "text-violet-600" },
                   { label: "Off days", value: stats?.off_days ?? 0, color: "text-[var(--muted)]" },
                   { label: "Hours",   value: `${(stats?.total_hours ?? 0).toFixed(1)}h`, color: "text-[var(--text)]" },
@@ -930,7 +936,14 @@ export function AttendancePage() {
                   <tr key={item.id} className="border-b border-[var(--border)]/50 hover:bg-[var(--border)]/10">
                     {showEmployeeCol && <td data-label="Employee" className="p-3 font-medium">{item.employee?.name ?? `Employee #${item.employee_id}`}</td>}
                     <td data-label="Date" className="p-3">{item.date?.slice(0, 10)}</td>
-                    <td data-label="Status" className="p-3"><StatusBadge status={item.status} /></td>
+                    <td data-label="Status" className="p-3">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <StatusBadge status={item.status} />
+                        {item.status_reason === "policy" && <span title="Set by the attendance policy from the punches" className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Policy</span>}
+                        {item.is_early_leave && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Left early</span>}
+                        {item.is_short_hours && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">Short hours</span>}
+                      </div>
+                    </td>
                     <td data-label="In" className="p-3">{item.check_in  ? item.check_in.slice(11,16)  : "—"}</td>
                     <td data-label="Out" className="p-3">
                       {item.check_out ? <>{item.check_out.slice(11,16)}{item.check_out.slice(0, 10) > String(item.date).slice(0, 10) && <span className="ml-1 text-xs text-[var(--muted)]">+1d</span>}</> : "—"}
@@ -999,6 +1012,7 @@ export function AttendancePage() {
 
       {/* Team tab */}
       {tab === "team" && seesTeam && <TeamView />}
+      {tab === "policy" && canManage && <AttendancePolicyPanel />}
 
       {/* CRUD modal */}
       {modalOpen && (

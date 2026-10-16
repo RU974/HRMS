@@ -333,6 +333,7 @@ class BiometricSyncService
                 $closed->check_out = $timestamp;
                 $closed->source = 'biometric';
                 $closed->biometric_device_id = $device->id;
+                $this->refreshClosedStatus($closed, $employeeId);
                 $closed->save();
             }
             return;
@@ -341,15 +342,9 @@ class BiometricSyncService
         if ($open && ($type === 'out' || ($overnight
             && $timestamp->getTimestamp() - Carbon::parse($open->check_in)->getTimestamp() >= 3600))) {
             $open->check_out = $timestamp;
-            // A late check-out completes a record that was already flagged as missing it.
-            if ($open->status === Attendance::STATUS_MISSING_CHECK_OUT) {
-                $open->status = $calculator->deriveStatusFromCheckIn(
-                    AttendancePolicy::forEmployee(Employee::find($employeeId)),
-                    Employee::find($employeeId)?->effectiveShift(),
-                    Carbon::parse($open->check_in)->toDateTimeString(),
-                    'present'
-                );
-            }
+            // A check-out completes the day: it clears a missing-check-out flag and lets the
+            // minimum-hours rules judge the hours worked.
+            $this->refreshClosedStatus($open, $employeeId);
             $open->source = 'biometric';
             $open->biometric_device_id = $device->id;
             $open->save();
@@ -431,6 +426,31 @@ class BiometricSyncService
             $attendance->status = 'present';
         }
 
+        if ($attendance->check_in && $attendance->check_out) {
+            $this->refreshClosedStatus($attendance, $employeeId);
+        }
+
         $attendance->save();
+    }
+
+    /**
+     * Re-judge a record that has both punches: late / present from the check-in, then the policy's
+     * half-day and minimum-hours rules, and clear a missing-check-out flag. Statuses an admin set by
+     * hand (and leave days) are left alone.
+     */
+    private function refreshClosedStatus(Attendance $attendance, int $employeeId): void
+    {
+        $derivable = in_array($attendance->status, ['present', 'late', Attendance::STATUS_MISSING_CHECK_OUT], true)
+            || $attendance->status_reason === Attendance::REASON_POLICY;
+        if (!$derivable || !$attendance->check_in || !$attendance->check_out) {
+            return;
+        }
+
+        $employee = Employee::find($employeeId);
+        $attendance->status = (new AttendanceCalculator())->recomputeStatus(
+            $attendance,
+            AttendancePolicy::forEmployee($employee),
+            $employee?->effectiveShift()
+        );
     }
 }

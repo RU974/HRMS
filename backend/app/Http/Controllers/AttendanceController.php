@@ -8,6 +8,9 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\User;
 use App\Services\AttendanceCalculator;
+use App\Services\AttendancePolicyResolver;
+use App\Services\AttendanceStatusRecalculator;
+use App\Http\Requests\UpdateAttendancePolicyRequest;
 use App\Services\AttendanceNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -126,6 +129,10 @@ class AttendanceController extends Controller
             );
         }
 
+        if (!empty($validated['check_in']) && !empty($validated['check_out'])) {
+            $status = $this->closedDayStatus($status, $validated['check_in'], $validated['check_out'], $policy, $shift);
+        }
+
         // Only a check-out was given: flag it, as the biometric sync and the recompute do,
         // instead of recording a clean "present" day (unless a status was chosen on purpose).
         if (empty($validated['check_in']) && !empty($validated['check_out']) && empty($request->input('status'))) {
@@ -198,6 +205,9 @@ class AttendanceController extends Controller
         }
         if (!$explicitStatus) {
             $validated['status'] = $this->attendanceCalculator()->recomputeStatus($preview, $policy, $shift);
+        } else {
+            // A person overrode the status: later edits of the punches do not re-judge it.
+            $validated['status_reason'] = Attendance::REASON_MANUAL;
         }
 
         $attendance->update($validated);
@@ -368,7 +378,12 @@ class AttendanceController extends Controller
             $checkIn = ($row['check_in'] ?? '') !== '' ? $calc->normalizeCheckTime($date, $row['check_in']) : null;
             $checkOut = ($row['check_out'] ?? '') !== '' ? $calc->resolveCheckOut($date, $checkIn, $row['check_out']) : null;
             if ($checkIn) {
-                $status = $calc->deriveStatusFromCheckIn(AttendancePolicy::forEmployee($employee), $employee->effectiveShift(), $checkIn, $status);
+                $policy = AttendancePolicy::forEmployee($employee);
+                $shift = $employee->effectiveShift();
+                $status = $calc->deriveStatusFromCheckIn($policy, $shift, $checkIn, $status);
+                if ($checkOut) {
+                    $status = $this->closedDayStatus($status, $checkIn, $checkOut, $policy, $shift);
+                }
             }
 
             Attendance::create([
@@ -426,7 +441,22 @@ class AttendanceController extends Controller
             ->whereYear('date', $year)
             ->get();
 
+        // "N lates = 1 absent": late arrivals (and early leaves, when the policy counts them) add up to absences.
+        $policy = AttendancePolicy::forEmployee($records->first()?->employee ?? Employee::find($employeeId));
+        $lateCount = (int) $stats->where('status', 'late')->sum('count');
+        $earlyLeaves = $records->where('is_early_leave', true)->count();
+        // A day that is already "late" is not counted twice.
+        $earlyNotLate = $records->where('is_early_leave', true)->where('status', '!=', 'late')->count();
+        $countedLates = $lateCount + ($policy?->early_leave_counts_as_late ? $earlyNotLate : 0);
+        $latesPerAbsent = (int) ($policy?->lates_per_absent ?? 0);
+        $absentFromLates = $latesPerAbsent > 0 ? intdiv($countedLates, $latesPerAbsent) : 0;
+
         return $this->ok([
+            'early_leave' => $earlyLeaves,
+            'short_hours' => $records->where('is_short_hours', true)->count(),
+            'lates_per_absent' => $latesPerAbsent,
+            'absent_from_lates' => $absentFromLates,
+            'effective_absent' => (int) $stats->where('status', 'absent')->sum('count') + $absentFromLates,
             'total_hours' => round($records->sum('duration_hours'), 1),
             'overtime_hours' => round($records->sum('overtime_hours'), 1),
             'wfh_days' => $records->where('work_from_home', true)->count(),
@@ -554,8 +584,34 @@ class AttendanceController extends Controller
             $update['notes'] = trim((string) ($attendance->notes ? $attendance->notes . ' ' : '') . 'Recorded check-out without prior check-in.');
         }
 
+        // Hours worked are only known now, so the minimum-hours rules are judged at check-out.
+        if ($attendance->check_in && in_array($attendance->status, ['present', 'late', Attendance::STATUS_MISSING_CHECK_OUT], true)) {
+            $update['status'] = $this->closedDayStatus(
+                'present',
+                $attendance->check_in->toDateTimeString(),
+                $update['check_out'],
+                AttendancePolicy::forEmployee($attendance->employee),
+                $attendance->employee?->effectiveShift()
+            );
+        }
+
         $attendance->update($update);
         return $this->ok($attendance, 'Check-out successful');
+    }
+
+    /**
+     * Status of a day that has both punches: late / present from the check-in, then the
+     * policy's half-day and minimum-hours rules. A status picked by hand is kept as is.
+     */
+    private function closedDayStatus(string $status, string $checkIn, string $checkOut, ?AttendancePolicy $policy, ?Shift $shift): string
+    {
+        if (in_array($status, Attendance::MANUAL_STATUSES, true)) {
+            return $status;
+        }
+
+        $preview = new Attendance(['check_in' => $checkIn, 'check_out' => $checkOut, 'status' => $status]);
+
+        return $this->attendanceCalculator()->recomputeStatus($preview, $policy, $shift);
     }
 
     /**
@@ -628,6 +684,13 @@ class AttendanceController extends Controller
 
         $halfDayLeaves = (clone $rows)->where('status', 'half_day')->whereNotNull('leave_id')->count();
 
+        $policy = AttendancePolicy::forCompany($request->user()?->company_id ? (string) $request->user()->company_id : null);
+        $employeeIds = (clone $rows)->distinct()->pluck('employee_id')->all();
+        $fromLates = array_sum($this->absencesFromLates($employeeIds, (int) $validated['month'], (int) $validated['year'], $policy));
+        $earlyLeaves = $policy?->early_leave_enabled
+            ? $this->earlyLeaveRows($employeeIds, (int) $validated['month'], (int) $validated['year'], $policy)->count()
+            : 0;
+
         $rows = $rows
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
@@ -645,7 +708,54 @@ class AttendanceController extends Controller
             'late' => (int) $rows->where('status', 'late')->sum('count'),
             'missing_check_in' => (int) $rows->where('status', 'missing_check_in')->sum('count'),
             'missing_check_out' => (int) $rows->where('status', 'missing_check_out')->sum('count'),
+            'early_leave' => $earlyLeaves,
+            'lates_per_absent' => (int) ($policy?->lates_per_absent ?? 0),
+            'absent_from_lates' => $fromLates,
         ]);
+    }
+
+    /** Closed-day rows of these employees in the month that count as an early leave. */
+    private function earlyLeaveRows(array $employeeIds, int $month, int $year, ?AttendancePolicy $policy)
+    {
+        if (!$policy?->early_leave_enabled || $employeeIds === []) {
+            return collect();
+        }
+
+        return Attendance::with('employee.shift')
+            ->whereIn('employee_id', $employeeIds)
+            ->whereMonth('date', $month)->whereYear('date', $year)
+            ->whereNotNull('check_in')->whereNotNull('check_out')
+            ->get()
+            ->filter(fn (Attendance $a) => $a->is_early_leave);
+    }
+
+    /**
+     * Absences created by "N lates = 1 absent", per employee id, for one month. Lates are the
+     * "late" records, plus early leaves when the policy counts them as lates.
+     *
+     * @param  array<int>  $employeeIds
+     * @return array<int, int>
+     */
+    private function absencesFromLates(array $employeeIds, int $month, int $year, ?AttendancePolicy $policy): array
+    {
+        $n = (int) ($policy?->lates_per_absent ?? 0);
+        if ($n <= 0 || $employeeIds === []) {
+            return [];
+        }
+
+        $lates = Attendance::whereIn('employee_id', $employeeIds)
+            ->whereMonth('date', $month)->whereYear('date', $year)
+            ->where('status', 'late')
+            ->selectRaw('employee_id, COUNT(*) as count')->groupBy('employee_id')
+            ->pluck('count', 'employee_id')->map(fn ($c) => (int) $c)->all();
+
+        if ($policy->early_leave_counts_as_late) {
+            foreach ($this->earlyLeaveRows($employeeIds, $month, $year, $policy)->where('status', '!=', 'late') as $row) {
+                $lates[$row->employee_id] = ($lates[$row->employee_id] ?? 0) + 1;
+            }
+        }
+
+        return array_map(fn ($count) => intdiv($count, $n), $lates);
     }
 
     public function teamDailyView(Request $request)
@@ -683,6 +793,10 @@ class AttendanceController extends Controller
             ->groupBy('employee_id')
             ->pluck('count', 'employee_id');
 
+        // "N lates = 1 absent": absences created by the policy's late rule, per person for the month.
+        $policy = AttendancePolicy::forCompany($user?->company_id ? (string) $user->company_id : null);
+        $fromLates = $this->absencesFromLates($ids->all(), (int) $month, (int) $year, $policy);
+
         $result = $employees->map(fn ($emp) => [
             'employee_id'      => $emp->id,
             'name'             => $emp->name,
@@ -690,6 +804,7 @@ class AttendanceController extends Controller
             'designation'      => $emp->designation,
             'attendance'       => $attendances->get($emp->id),
             'monthly_absences' => (int) ($monthlyAbsences->get($emp->id) ?? 0),
+            'absent_from_lates' => (int) ($fromLates[$emp->id] ?? 0),
         ]);
 
         return $this->ok($result);
@@ -699,29 +814,59 @@ class AttendanceController extends Controller
     {
         $this->authorizePermission($request, 'attendance:manage_settings');
         // The caller's own company policy (or the default it inherits until it saves one).
-        return $this->ok(AttendancePolicy::forCompany($request->user()?->company_id));
+        $companyId = $request->user()?->company_id ? (string) $request->user()->company_id : null;
+        $policy = AttendancePolicy::forCompany($companyId);
+
+        return $this->ok($this->policyPayload($policy, $companyId));
     }
 
-    public function updatePolicy(Request $request)
+    public function updatePolicy(UpdateAttendancePolicyRequest $request)
     {
         $this->authorizePermission($request, 'attendance:manage_settings');
-        $validated = $request->validate([
-            'late_after_time' => 'required|date_format:H:i',
-            'allow_manual_status_override' => 'required|boolean',
-        ]);
+        $validated = $request->validated();
 
         // Each company owns its policy; a super admin without a company edits the global default.
-        $companyId = $request->user()?->company_id;
+        $companyId = $request->user()?->company_id ? (string) $request->user()->company_id : null;
         $policy = AttendancePolicy::query()
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId), fn ($q) => $q->whereNull('company_id'))
-            ->first() ?? new AttendancePolicy(['company_id' => $companyId, 'name' => 'Default']);
-        $policy->fill([
-            'late_after_time' => $validated['late_after_time'] . ':00',
-            'allow_manual_status_override' => $validated['allow_manual_status_override'],
-        ])->save();
-        app(\App\Services\AttendancePolicyResolver::class)->forget();
+            ->first();
 
-        return $this->ok($policy, 'Attendance policy updated successfully');
+        if (!$policy) {
+            // First save for this company: start from what it was inheriting so unsent rules keep their value.
+            $inherited = AttendancePolicy::forCompany($companyId);
+            $policy = new AttendancePolicy(['name' => 'Default']);
+            $policy->company_id = $companyId;
+            $policy->fill($inherited ? $inherited->only(AttendancePolicy::RULE_FIELDS) : AttendancePolicy::defaults());
+        }
+
+        $rules = array_intersect_key($validated, array_flip(AttendancePolicy::RULE_FIELDS));
+        $rules['late_after_time'] = $validated['late_after_time'] . ':00';
+        if (!empty($rules['early_leave_before_time'])) {
+            $rules['early_leave_before_time'] .= ':00';
+        }
+        $policy->fill($rules)->save();
+        app(AttendancePolicyResolver::class)->forget();
+
+        $recalculated = null;
+        if (!empty($validated['apply_from'])) {
+            $recalculated = app(AttendanceStatusRecalculator::class)
+                ->recalculate(Carbon::parse($validated['apply_from']), null, null, true, null, $companyId);
+        }
+
+        return $this->ok(
+            $this->policyPayload($policy->fresh(), $companyId) + ['recalculated_records' => $recalculated],
+            'Attendance policy updated successfully'
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function policyPayload(?AttendancePolicy $policy, ?string $companyId): array
+    {
+        $values = $policy ? $policy->only(AttendancePolicy::RULE_FIELDS) : AttendancePolicy::defaults();
+
+        return ['id' => $policy?->id, 'company_id' => $policy?->company_id, 'name' => $policy?->name ?? 'Default']
+            + $values
+            + ['inherited' => !AttendancePolicy::ownedBy($companyId)];
     }
 
     public function requestCorrection(Request $request, $id)
@@ -799,8 +944,10 @@ class AttendanceController extends Controller
             $update['check_in'] = $in;
             $update['check_out'] = $out;
             $preview = $attendance->replicate(['overtime_hours', 'duration_hours']);
+            $preview->status_reason = null; // new times: the policy judges them afresh
             $preview->check_in = $in;
             $preview->check_out = $out;
+            $update['status_reason'] = null;
             $update['status'] = $calc->recomputeStatus(
                 $preview,
                 AttendancePolicy::forEmployee($attendance->employee),
@@ -809,7 +956,7 @@ class AttendanceController extends Controller
         } elseif ($validated['correction_status'] === 'approved') {
             // No new times proposed: the reviewer accepted the employee's explanation
             // (e.g. they were within their grace period), so "late" is cleared.
-            if ($attendance->check_in && $attendance->status === 'late') {
+            if ($attendance->check_in && ($attendance->status === 'late' || $attendance->status_reason === Attendance::REASON_POLICY)) {
                 $update['status'] = 'present';
             }
         }

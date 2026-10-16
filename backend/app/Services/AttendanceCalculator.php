@@ -62,10 +62,14 @@ class AttendanceCalculator
             }
         }
 
-        return $this->deriveStatusFromCheckIn($policy, $shift, $checkInDateTime, $fallbackStatus);
+        return $this->deriveStatusFromCheckIn($policy, $shift, $checkInDateTime, $fallbackStatus, !$attendance->isLeaveLinked());
     }
 
-    public function deriveStatusFromCheckIn(?AttendancePolicy $policy, ?Shift $shift, string $checkInDateTime, string $fallbackStatus = 'present'): string
+    /**
+     * @param  bool  $applyRules  false for a day that belongs to an approved leave: the late-arrival
+     *                            half-day / absent rules do not apply to it.
+     */
+    public function deriveStatusFromCheckIn(?AttendancePolicy $policy, ?Shift $shift, string $checkInDateTime, string $fallbackStatus = 'present', bool $applyRules = true): string
     {
         if (!$policy) {
             return $fallbackStatus;
@@ -81,7 +85,115 @@ class AttendanceCalculator
         $checkIn = Carbon::parse($checkInDateTime);
         $threshold = $this->getLateThreshold($checkIn, $policy, $shift);
 
-        return $checkIn->greaterThan($threshold) ? 'late' : 'present';
+        if (!$checkIn->greaterThan($threshold)) {
+            return 'present';
+        }
+
+        return ($applyRules ? $this->lateArrivalRuleStatus($checkIn, $threshold, $policy) : null) ?? 'late';
+    }
+
+    /** Half day / absent because the person arrived too long after the late cut-off. */
+    private function lateArrivalRuleStatus(Carbon $checkIn, Carbon $threshold, AttendancePolicy $policy): ?string
+    {
+        $beyond = fn (?int $minutes) => $minutes !== null && $checkIn->greaterThan($threshold->copy()->addMinutes($minutes));
+
+        if ($beyond($policy->absent_after_late_minutes)) {
+            return 'absent';
+        }
+
+        return $beyond($policy->half_day_after_late_minutes) ? Attendance::STATUS_HALF_DAY : null;
+    }
+
+    private const SEVERITY = ['present' => 0, 'late' => 1, Attendance::STATUS_HALF_DAY => 2, 'absent' => 3];
+
+    /**
+     * The half day / absent status the policy gives a record from its own punches (late arrival
+     * and, once checked out, hours worked), or null when the policy has no objection.
+     */
+    public function ruleStatus(Attendance $attendance, ?AttendancePolicy $policy, ?Shift $shift): ?string
+    {
+        if (!$policy || !$attendance->check_in || $attendance->isLeaveLinked()) {
+            return null;
+        }
+
+        try {
+            $checkIn = Carbon::parse($attendance->check_in);
+            $threshold = $this->getLateThreshold($checkIn, $policy, $shift);
+            $late = $checkIn->greaterThan($threshold) ? $this->lateArrivalRuleStatus($checkIn, $threshold, $policy) : null;
+        } catch (\Exception $e) {
+            $late = null;
+        }
+
+        return $this->worse($late, $this->hoursRuleStatus($attendance, $policy));
+    }
+
+    /** The more severe of two statuses (null counts as nothing). */
+    private function worse(?string $a, ?string $b): ?string
+    {
+        return (self::SEVERITY[$a ?? 'present'] ?? 0) >= (self::SEVERITY[$b ?? 'present'] ?? 0) ? $a : $b;
+    }
+
+    /**
+     * Minimum-hours ladder for a closed day: at least the full-day hours is a normal day; below it
+     * is a half day, and below the half-day mark an absence when the company counts short days
+     * as absent. With only the full-day hours set, a short day is flagged but keeps its status.
+     */
+    private function hoursRuleStatus(Attendance $attendance, AttendancePolicy $policy): ?string
+    {
+        if ($policy->full_day_hours === null || $policy->half_day_hours === null
+            || !$attendance->check_in || !$attendance->check_out) {
+            return null;
+        }
+
+        $hours = $this->getDurationHours($attendance);
+        if ($hours >= (float) $policy->full_day_hours) {
+            return null;
+        }
+
+        return ($hours < (float) $policy->half_day_hours && $policy->count_short_as_absent)
+            ? 'absent'
+            : Attendance::STATUS_HALF_DAY;
+    }
+
+    /** Worked fewer hours than a full day requires (flag only; see hoursRuleStatus for the status effect). */
+    public function isShortHours(Attendance $attendance, ?AttendancePolicy $policy): bool
+    {
+        if (!$policy || $policy->full_day_hours === null || !$attendance->check_in || !$attendance->check_out
+            || $attendance->isLeaveLinked() || in_array($attendance->status, ['absent', 'leave'], true)) {
+            return false;
+        }
+
+        return $this->getDurationHours($attendance) < (float) $policy->full_day_hours;
+    }
+
+    /** Left before the shift end (less the grace), or before the fixed cut-off when there is no shift. */
+    public function isEarlyLeave(Attendance $attendance, ?AttendancePolicy $policy, ?Shift $shift): bool
+    {
+        if (!$policy || !$policy->early_leave_enabled || !$attendance->check_in || !$attendance->check_out
+            || $attendance->isLeaveLinked() || in_array($attendance->status, ['absent', 'leave'], true)) {
+            return false;
+        }
+
+        try {
+            $out = Carbon::parse($attendance->check_out);
+
+            if ($shift && $shift->end_time) {
+                $end = Carbon::parse($this->dateString($attendance) . ' ' . $shift->end_time);
+                if ($shift->start_time && $end->lessThanOrEqualTo(Carbon::parse($this->dateString($attendance) . ' ' . $shift->start_time))) {
+                    $end->addDay();
+                }
+
+                return $out->lessThan($end->subMinutes((int) $policy->early_leave_grace_minutes));
+            }
+
+            if ($policy->early_leave_before_time) {
+                return $out->lessThan(Carbon::parse($out->toDateString() . ' ' . $policy->early_leave_before_time));
+            }
+        } catch (\Exception $e) {
+            return false;
+        }
+
+        return false;
     }
 
     /**
@@ -92,6 +204,10 @@ class AttendanceCalculator
     public function recomputeStatus(Attendance $attendance, ?AttendancePolicy $policy, ?Shift $shift): string
     {
         $current = (string) $attendance->status;
+
+        if ($attendance->status_reason === Attendance::REASON_MANUAL && $attendance->check_in && ($policy?->allow_manual_status_override ?? true)) {
+            return $current;
+        }
 
         if (!$attendance->check_in) {
             if ($attendance->check_out) {
@@ -105,8 +221,10 @@ class AttendanceCalculator
             return $current; // still open past the shift end; the late punch will clear it
         }
 
-        // Leave and half-day rows keep their status; an "absent" row that has punches was clearly wrong.
-        $fallback = in_array($current, ['leave', Attendance::STATUS_HALF_DAY], true) ? $current : 'present';
+        // Leave and hand-picked half-day rows keep their status; an "absent" row that has punches
+        // was clearly wrong. A half day / absence the policy worked out itself is re-evaluated.
+        $derivedByPolicy = $attendance->status_reason === Attendance::REASON_POLICY;
+        $fallback = (!$derivedByPolicy && in_array($current, ['leave', Attendance::STATUS_HALF_DAY], true)) ? $current : 'present';
 
         if ($attendance->isLeaveLinked()) {
             return $this->statusForPunch(
@@ -118,12 +236,21 @@ class AttendanceCalculator
             );
         }
 
-        return $this->deriveStatusFromCheckIn(
+        $status = $this->deriveStatusFromCheckIn(
             $policy,
             $shift,
             Carbon::parse($attendance->check_in)->toDateTimeString(),
             $fallback
         );
+
+        // A status kept because an admin chose it is not second-guessed by the hours rule.
+        $keptByHand = $status === $fallback && $fallback !== 'present';
+        if (!$keptByHand) {
+            $hours = $this->hoursRuleStatus($attendance, $policy);
+            $status = $this->worse($status, $hours) ?? $status;
+        }
+
+        return $status;
     }
 
     public function getLateThreshold(Carbon $checkIn, AttendancePolicy $policy, ?Shift $shift): Carbon

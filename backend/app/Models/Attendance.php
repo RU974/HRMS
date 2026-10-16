@@ -18,6 +18,12 @@ class Attendance extends Model
     /** Statuses an admin picks by hand; they are never recomputed from the punches. */
     public const MANUAL_STATUSES = ['absent', 'leave', self::STATUS_HALF_DAY];
 
+    /** status_reason value for a half day / absence the attendance policy worked out from the punches. */
+    public const REASON_POLICY = 'policy';
+
+    /** status_reason value for a status a person chose over what the policy would give; it is not re-judged. */
+    public const REASON_MANUAL = 'manual';
+
     protected $fillable = [
         'employee_id',
         'leave_id',
@@ -25,6 +31,7 @@ class Attendance extends Model
         'check_out',
         'date',
         'status',
+        'status_reason',
         'source',
         'biometric_device_id',
         'work_from_home',
@@ -52,9 +59,38 @@ class Attendance extends Model
         'duration_hours',
         'is_early_arrival',
         'is_late_arrival',
+        'is_early_leave',
+        'is_short_hours',
         'shift_start_time',
         'shift_end_time',
     ];
+
+    protected static function booted(): void
+    {
+        // Remember whether a half day / absence came from the policy or from a person, so a
+        // later correction of the punches re-evaluates the first kind and keeps the second.
+        static::saving(function (Attendance $attendance) {
+            // A person's override stays until they (or a correction) change the status again.
+            if ($attendance->status_reason === self::REASON_MANUAL
+                && ($attendance->isDirty('status_reason') || !$attendance->isDirty('status'))) {
+                return;
+            }
+
+            if (!in_array($attendance->status, ['half_day', 'absent'], true) || !$attendance->check_in || $attendance->isLeaveLinked()) {
+                $attendance->status_reason = null;
+
+                return;
+            }
+
+            $employee = $attendance->employee;
+            $derived = (new AttendanceCalculator())->ruleStatus(
+                $attendance,
+                AttendancePolicy::forEmployee($employee),
+                $employee?->effectiveShift()
+            );
+            $attendance->status_reason = $derived === $attendance->status ? self::REASON_POLICY : null;
+        });
+    }
 
     public function employee(): BelongsTo
     {
@@ -104,5 +140,15 @@ class Attendance extends Model
     public function getIsLateArrivalAttribute(): bool
     {
         return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::forEmployee($this->employee), $this->employee?->effectiveShift());
+    }
+
+    public function getIsEarlyLeaveAttribute(): bool
+    {
+        return (new AttendanceCalculator())->isEarlyLeave($this, AttendancePolicy::forEmployee($this->employee), $this->employee?->effectiveShift());
+    }
+
+    public function getIsShortHoursAttribute(): bool
+    {
+        return (new AttendanceCalculator())->isShortHours($this, AttendancePolicy::forEmployee($this->employee));
     }
 }

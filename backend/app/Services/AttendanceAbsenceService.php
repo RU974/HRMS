@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\Leave;
@@ -13,7 +14,8 @@ use Carbon\CarbonInterface;
 /**
  * Marks employees absent for a finished working day when they neither have an
  * approved leave nor any check-in / check-out. Weekly off days (anything not in
- * the shift's working_days) and company holidays are never marked.
+ * the shift's working_days) and company holidays are never marked. A company whose attendance
+ * policy has auto_mark_absent off is skipped entirely.
  */
 class AttendanceAbsenceService
 {
@@ -162,6 +164,10 @@ class AttendanceAbsenceService
             if (in_array($employee->company_id, $holidayCompanies, true)
                 || !$this->isWorkingDay($employee, $day)
                 || $onLeave->has($employee->id)) {
+                continue;
+            }
+            // A company can turn the automatic "no punch = absent" marking off in its policy.
+            if (AttendancePolicy::forEmployee($employee)?->auto_mark_absent === false) {
                 continue;
             }
 

@@ -48,6 +48,10 @@ export interface AttendanceItem {
   overtime_hours?: number;
   duration_hours?: number;
   is_late_arrival?: boolean;
+  is_early_leave?: boolean;
+  is_short_hours?: boolean;
+  /** "policy" when a half day / absence was worked out by the attendance policy rather than set by hand. */
+  status_reason?: "policy" | null;
   shift_start_time?: string | null;
   shift_end_time?: string | null;
   correction_status?: "pending" | "approved" | "rejected" | null;
@@ -204,6 +208,8 @@ export interface TeamDailyAttendanceRow {
   designation?: string | null;
   attendance?: AttendanceItem | null;
   monthly_absences: number;
+  /** Absences created by the policy's "N lates = 1 absent" rule this month. */
+  absent_from_lates?: number;
 }
 
 export interface AttendanceListFilters { month?: number; year?: number; status?: string; dateFrom?: string; dateTo?: string }
@@ -272,6 +278,13 @@ export interface AttendanceMonthlyStats {
   leave: number;
   /** Leave in days; a half-day leave counts 0.5. */
   leave_days?: number;
+  early_leave?: number;
+  short_hours?: number;
+  lates_per_absent?: number;
+  /** Absences created by the "N lates = 1 absent" rule. */
+  absent_from_lates?: number;
+  /** Recorded absences plus absent_from_lates. */
+  effective_absent?: number;
   total_days: number;
   off_days: number;
   wfh_days: number;
@@ -448,3 +461,38 @@ export const downloadEmployeeDocument = async (id: number) => {
   anchor.click();
   URL.revokeObjectURL(url);
 };
+
+export interface AttendancePolicy {
+  id: number | null;
+  name: string;
+  /** True until the company saves its own policy; it is then reading the default. */
+  inherited: boolean;
+  late_after_time: string;
+  allow_manual_status_override: boolean;
+  early_leave_enabled: boolean;
+  early_leave_grace_minutes: number;
+  early_leave_before_time: string | null;
+  early_leave_counts_as_late: boolean;
+  full_day_hours: number | null;
+  half_day_hours: number | null;
+  count_short_as_absent: boolean;
+  half_day_after_late_minutes: number | null;
+  absent_after_late_minutes: number | null;
+  lates_per_absent: number;
+  auto_mark_absent: boolean;
+  missing_punch_as_absent: boolean;
+  recalculated_records?: number | null;
+}
+
+export type AttendancePolicyInput = Omit<AttendancePolicy, "id" | "name" | "inherited" | "recalculated_records"> & {
+  /** Re-judge existing records from this date (YYYY-MM-DD) after saving. */
+  apply_from?: string | null;
+};
+
+export function getAttendancePolicy() {
+  return apiClient<AttendancePolicy>("/attendance/policy");
+}
+
+export function updateAttendancePolicy(payload: AttendancePolicyInput) {
+  return apiClient<AttendancePolicy>("/attendance/policy", { method: "PUT", body: JSON.stringify(payload) });
+}
