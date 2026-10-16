@@ -11,6 +11,16 @@ use App\Models\Shift;
 
 class Employee extends Model
 {
+    protected static function booted(): void
+    {
+        // A new shift (working days) or joining date changes which leave days count.
+        static::updated(function (Employee $employee): void {
+            if ($employee->wasChanged(['shift_id', 'joining_date'])) {
+                app(\App\Services\LeaveAttendanceSync::class)->syncEmployee($employee);
+            }
+        });
+    }
+
     protected $fillable = [
         'user_id',
         'company_id',

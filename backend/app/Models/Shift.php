@@ -27,6 +27,16 @@ class Shift extends Model
         'working_days' => 'array',
     ];
 
+    protected static function booted(): void
+    {
+        // Changing a shift's working days changes which leave days are real working days.
+        static::updated(function (Shift $shift): void {
+            if ($shift->wasChanged('working_days')) {
+                app(\App\Services\LeaveAttendanceSync::class)->syncShift((int) $shift->id);
+            }
+        });
+    }
+
     public function departmentGraces(): HasMany
     {
         return $this->hasMany(ShiftDepartmentGrace::class);

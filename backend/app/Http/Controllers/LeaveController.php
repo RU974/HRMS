@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Leave;
 use App\Models\LeaveType;
 use App\Models\User;
+use App\Services\LeaveAttendanceSync;
 use App\Services\LeavePolicyService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -72,6 +73,11 @@ class LeaveController extends Controller
         $this->authorizeCreate($request, (int) $validated['employee_id']);
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
+        // A half day is half of one day.
+        if (!empty($validated['half_day'])) {
+            $validated['to_date'] = $validated['from_date'];
+        }
+
         // Non-approvers (regular employees) cannot set an arbitrary status.
         // Force every employee-created request to 'pending' regardless of what was submitted.
         if (!$request->user()?->can('leaves:approve')) {
@@ -96,6 +102,9 @@ class LeaveController extends Controller
                 if ($leave->status === 'approved') {
                     $policyService->finalizeLeaveApproval($leave);
                 }
+
+                // Only a fully approved leave (every approval level done) reaches attendance.
+                app(LeaveAttendanceSync::class)->sync($leave->refresh());
 
                 return $leave;
             });
@@ -125,6 +134,7 @@ class LeaveController extends Controller
         $originalType = $leave->type;
         $originalFromDate = $leave->from_date;
         $originalToDate = $leave->to_date;
+        $originalHalfDay = (bool) $leave->half_day;
 
         $validated = $request->validate([
             'type'      => 'sometimes|string|max:100',
@@ -140,30 +150,46 @@ class LeaveController extends Controller
         }
 
         $leave->fill($validated);
+        if ($leave->half_day) {
+            $leave->to_date = $leave->from_date;
+        }
         $policyService = new LeavePolicyService();
+        $shapeChanged = $leave->isDirty(['type', 'from_date', 'to_date', 'half_day']);
 
         try {
-            DB::transaction(function () use ($leave, $validated, $originalStatus, $originalType, $originalFromDate, $originalToDate, $policyService) {
+            DB::transaction(function () use ($leave, $validated, $originalStatus, $originalType, $originalFromDate, $originalToDate, $originalHalfDay, $policyService, $shapeChanged) {
                 $pendingReservationUpdated = false;
+                // What the leave held in the balance before this edit (original type / dates / half day).
+                $originalSegments = $policyService->segmentsForRange($leave->employee, $originalType, $originalFromDate, $originalToDate, $originalHalfDay);
                 $leave->save();
 
-                if ($originalStatus === 'pending' && $leave->status === 'pending' && (
-                    array_key_exists('type', $validated)
-                    || array_key_exists('from_date', $validated)
-                    || array_key_exists('to_date', $validated)
-                )) {
-                    $originalSegments = $policyService->segmentsForRange($leave->employee, $originalType, $originalFromDate, $originalToDate);
+                if ($originalStatus === 'pending' && in_array($leave->status, ['pending', 'approved'], true) && $shapeChanged) {
                     $policyService->adjustPendingReservation($leave, $originalSegments);
                     $pendingReservationUpdated = true;
                 }
 
                 if ($originalStatus !== $leave->status) {
-                    if ($leave->status === 'approved') {
+                    $wasClosed = in_array($originalStatus, ['rejected', 'cancelled'], true);
+                    if ($leave->status === 'approved' && $wasClosed) {
+                        // Re-opened straight to approved: nothing is held, so take the usage now.
+                        $policyService->applyApprovedUsage($leave);
+                    } elseif ($leave->status === 'approved') {
                         $policyService->finalizeLeaveApproval($leave);
                     } elseif (in_array($leave->status, ['rejected', 'cancelled'], true)) {
-                        $policyService->releaseLeaveReservation($leave, $originalStatus);
+                        // Release what the leave held *before* this edit, not what the edit changed it to.
+                        $policyService->releaseSegments($leave, $originalSegments, $originalStatus === 'approved' ? 'used' : 'pending');
+                    } elseif ($leave->status === 'pending' && $originalStatus === 'approved') {
+                        $policyService->releaseSegments($leave, $originalSegments, 'used');
+                        $policyService->reservePendingLeave($leave);
+                    } elseif ($leave->status === 'pending' && $wasClosed) {
+                        $policyService->reservePendingLeave($leave);
                     }
+                } elseif ($leave->status === 'approved' && $shapeChanged) {
+                    $policyService->adjustApprovedUsage($leave, $originalSegments);
                 }
+
+                // Approve / reject / cancel / re-date / half-day change: attendance follows.
+                app(LeaveAttendanceSync::class)->sync($leave->refresh());
             });
         } catch (\RuntimeException $exception) {
             return $this->fail($exception->getMessage(), 422);
@@ -190,6 +216,7 @@ class LeaveController extends Controller
             $policyService = new LeavePolicyService();
             DB::transaction(function () use ($leave, $policyService) {
                 $policyService->releaseLeaveReservation($leave, $leave->status);
+                app(LeaveAttendanceSync::class)->release($leave);
                 $leave->delete();
             });
 
@@ -204,6 +231,7 @@ class LeaveController extends Controller
         $policyService = new LeavePolicyService();
         DB::transaction(function () use ($leave, $policyService) {
             $policyService->releaseLeaveReservation($leave, $leave->status);
+                app(LeaveAttendanceSync::class)->release($leave);
             $leave->delete();
         });
 

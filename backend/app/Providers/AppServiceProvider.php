@@ -37,6 +37,9 @@ class AppServiceProvider extends ServiceProvider
         // Holds the company's exchange rates for the length of a request.
         $this->app->singleton(\App\Services\Recruitment\CurrencyService::class);
 
+        // Policies are looked up per company; scoped so each request/job reads them once.
+        $this->app->scoped(\App\Services\AttendancePolicyResolver::class);
+
         //
     }
 

@@ -23,8 +23,8 @@ class LeaveBalance extends Model
         'period_start' => 'date',
         'period_end' => 'date',
         'accrued_days' => 'integer',
-        'used_days' => 'integer',
-        'pending_days' => 'integer',
+        'used_days' => 'float',
+        'pending_days' => 'float',
         'carried_forward_days' => 'integer',
     ];
 
@@ -42,7 +42,7 @@ class LeaveBalance extends Model
         return $this->belongsTo(LeaveType::class);
     }
 
-    public function getRemainingDaysAttribute(): int
+    public function getRemainingDaysAttribute(): float
     {
         return max(
             ($this->accrued_days + $this->carried_forward_days) - ($this->used_days + $this->pending_days),

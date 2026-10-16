@@ -283,6 +283,11 @@ $registerRoutes = function (): void {
         Route::apiResource('designations', DesignationController::class);
 
         // Attendance routes
+        // Registered before the attendance resource below, otherwise "policy" is read as an attendance id.
+        Route::middleware('permission:attendance:manage_settings')->group(function () {
+            Route::get('attendance/policy', [AttendanceController::class, 'getPolicy']);
+            Route::put('attendance/policy', [AttendanceController::class, 'updatePolicy']);
+        });
         Route::group([], function () {
             Route::get('attendance/employee/{employeeId}', [AttendanceController::class, 'getByEmployee']);
             Route::get('attendance/monthly-stats/{employeeId}/{month}/{year}', [AttendanceController::class, 'getMonthlyStats']);
@@ -294,10 +299,6 @@ $registerRoutes = function (): void {
             Route::post('attendance/{attendance}/request-correction', [AttendanceController::class, 'requestCorrection']);
             Route::post('attendance/{attendance}/review-correction', [AttendanceController::class, 'reviewCorrection']);
             Route::apiResource('attendance', AttendanceController::class);
-        });
-        Route::middleware('permission:attendance:manage_settings')->group(function () {
-            Route::get('attendance/policy', [AttendanceController::class, 'getPolicy']);
-            Route::put('attendance/policy', [AttendanceController::class, 'updatePolicy']);
         });
         Route::post('attendance/check-in', [AttendanceController::class, 'checkIn']);
         Route::post('attendance/check-out', [AttendanceController::class, 'checkOut']);

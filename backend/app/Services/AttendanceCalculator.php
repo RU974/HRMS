@@ -46,16 +46,35 @@ class AttendanceCalculator
         return Carbon::parse($shift->end_time)->lessThanOrEqualTo(Carbon::parse($shift->start_time));
     }
 
+    /**
+     * Status for a record that just got a check-in. A half-day leave keeps its half_day
+     * status (the other half is leave); someone who turns up on a full approved leave day
+     * is simply present / late, the leave link is cleaned up by the leave sync.
+     */
+    public function statusForPunch(Attendance $attendance, ?AttendancePolicy $policy, ?Shift $shift, string $checkInDateTime, string $fallbackStatus = 'present'): string
+    {
+        if ($attendance->isLeaveLinked()) {
+            if ($attendance->status === Attendance::STATUS_HALF_DAY) {
+                return Attendance::STATUS_HALF_DAY;
+            }
+            if ($attendance->status === 'leave') {
+                $fallbackStatus = 'present';
+            }
+        }
+
+        return $this->deriveStatusFromCheckIn($policy, $shift, $checkInDateTime, $fallbackStatus);
+    }
+
     public function deriveStatusFromCheckIn(?AttendancePolicy $policy, ?Shift $shift, string $checkInDateTime, string $fallbackStatus = 'present'): string
     {
         if (!$policy) {
             return $fallbackStatus;
         }
 
-        // Only statuses an admin chooses by hand (absent / leave) survive a recompute.
+        // Only statuses an admin chooses by hand (absent / leave / half day) survive a recompute.
         // "late" and the missing-punch flags are derived from the punches, so they are
         // re-evaluated; otherwise a record could never leave "late" once it had it.
-        if ($policy->allow_manual_status_override && in_array($fallbackStatus, ['absent', 'leave'], true)) {
+        if ($policy->allow_manual_status_override && in_array($fallbackStatus, Attendance::MANUAL_STATUSES, true)) {
             return $fallbackStatus;
         }
 
@@ -86,8 +105,18 @@ class AttendanceCalculator
             return $current; // still open past the shift end; the late punch will clear it
         }
 
-        // A leave row keeps its status; an "absent" row that has punches was clearly wrong.
-        $fallback = $current === 'leave' ? 'leave' : 'present';
+        // Leave and half-day rows keep their status; an "absent" row that has punches was clearly wrong.
+        $fallback = in_array($current, ['leave', Attendance::STATUS_HALF_DAY], true) ? $current : 'present';
+
+        if ($attendance->isLeaveLinked()) {
+            return $this->statusForPunch(
+                $attendance,
+                $policy,
+                $shift,
+                Carbon::parse($attendance->check_in)->toDateTimeString(),
+                $fallback
+            );
+        }
 
         return $this->deriveStatusFromCheckIn(
             $policy,

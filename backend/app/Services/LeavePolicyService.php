@@ -14,18 +14,26 @@ use RuntimeException;
 
 class LeavePolicyService
 {
-    public function calculateRequestedDays(string $fromDate, string $toDate): int
+    public function calculateRequestedDays(string $fromDate, string $toDate, ?Employee $employee = null): int
     {
-        return $this->countWorkingDays(Carbon::parse($fromDate), Carbon::parse($toDate));
+        return $this->countWorkingDays(Carbon::parse($fromDate), Carbon::parse($toDate), $employee);
     }
 
-    private function countWorkingDays(Carbon $start, Carbon $end): int
+    /**
+     * Working days in [start, end]. With an employee, "working" follows that person's
+     * shift (the same rule attendance uses) and their company's holidays; without one it
+     * falls back to Monday-Friday.
+     */
+    private function countWorkingDays(Carbon $start, Carbon $end, ?Employee $employee = null): int
     {
         if ($end->lt($start)) {
             return 0;
         }
 
-        $mandatoryHolidays = Holiday::query()
+        $holidayQuery = $employee
+            ? Holiday::withoutGlobalScopes()->where('company_id', $employee->company_id)
+            : Holiday::query();
+        $mandatoryHolidays = $holidayQuery
             ->where('is_optional', false)
             ->whereBetween('holiday_date', [$start->toDateString(), $end->toDateString()])
             ->pluck('holiday_date')
@@ -37,8 +45,10 @@ class LeavePolicyService
         $current = $start->copy()->startOfDay();
         $endDay = $end->copy()->startOfDay();
 
+        $absence = $employee ? app(AttendanceAbsenceService::class) : null;
         while ($current->lte($endDay)) {
-            if (!$current->isWeekend() && !isset($holidaySet[$current->toDateString()])) {
+            $isWorkingDay = $absence ? $absence->isWorkingDay($employee, $current) : !$current->isWeekend();
+            if ($isWorkingDay && !isset($holidaySet[$current->toDateString()])) {
                 $count++;
             }
             $current->addDay();
@@ -97,7 +107,7 @@ class LeavePolicyService
         return $this->calculateAccruedDays($leaveType) + (int) $leaveType->carry_forward_days;
     }
 
-    public function calculateDaysInSegment(string $rangeStart, string $rangeEnd, Carbon $segmentStart, Carbon $segmentEnd): int
+    public function calculateDaysInSegment(string $rangeStart, string $rangeEnd, Carbon $segmentStart, Carbon $segmentEnd, bool $halfDay = false, ?Employee $employee = null): float
     {
         $fromDate = Carbon::parse($rangeStart)->max($segmentStart);
         $toDate = Carbon::parse($rangeEnd)->min($segmentEnd);
@@ -106,7 +116,17 @@ class LeavePolicyService
             return 0;
         }
 
-        return $this->countWorkingDays($fromDate, $toDate);
+        // A half-day leave is one half of its first day, and only if that day is a working day.
+        if ($halfDay) {
+            $first = Carbon::parse($rangeStart)->startOfDay();
+            if ($first->lt($segmentStart) || $first->gt($segmentEnd)) {
+                return 0;
+            }
+
+            return $this->countWorkingDays($first, $first, $employee) > 0 ? 0.5 : 0;
+        }
+
+        return $this->countWorkingDays($fromDate, $toDate, $employee);
     }
 
     public function segmentsForLeave(Leave $leave): array
@@ -119,18 +139,23 @@ class LeavePolicyService
         $fromDate = Carbon::parse($leave->from_date);
         $toDate = Carbon::parse($leave->to_date);
         $segments = [];
+        $employee = $leave->employee ?? Employee::query()->find($leave->employee_id);
         $current = $fromDate->copy();
 
         while ($current->lte($toDate)) {
             $periodStart = $this->resolvePeriodStart($leaveType, $current);
             $periodEnd = $this->resolvePeriodEnd($leaveType, $periodStart);
-            $segmentEnd = $current->copy()->min($periodEnd);
+            // One segment per accrual period the leave touches (not one per day), so a request is
+            // checked against the balance as a whole.
+            $segmentEnd = $toDate->copy()->min($periodEnd);
             $segments[] = [
                 'leave_type' => $leaveType,
                 'period_type' => $this->resolveAccrualFrequency($leaveType),
                 'period_start' => $periodStart,
                 'period_end' => $periodEnd,
-                'days' => $this->countWorkingDays($current, $segmentEnd),
+                'days' => $leave->half_day
+                    ? $this->calculateDaysInSegment($leave->from_date, $leave->from_date, $current, $segmentEnd, true, $employee)
+                    : $this->countWorkingDays($current, $segmentEnd, $employee),
             ];
             $current = $segmentEnd->copy()->addDay();
         }
@@ -138,7 +163,7 @@ class LeavePolicyService
         return $segments;
     }
 
-    public function segmentsForRange(Employee $employee, string $type, string $fromDate, string $toDate): array
+    public function segmentsForRange(Employee $employee, string $type, string $fromDate, string $toDate, bool $halfDay = false): array
     {
         $leaveType = $this->findLeaveTypeByName($type);
         if (!$leaveType) {
@@ -150,6 +175,7 @@ class LeavePolicyService
             'type' => $type,
             'from_date' => $fromDate,
             'to_date' => $toDate,
+            'half_day' => $halfDay,
         ]);
 
         return $this->segmentsForLeave($leave);
@@ -237,7 +263,7 @@ class LeavePolicyService
         return min((int) $leaveType->carry_forward_days, $previousBalance->remaining_days);
     }
 
-    public function sumLeaveDays(Employee $employee, LeaveType $leaveType, Carbon $periodStart, Carbon $periodEnd, string $status, ?Leave $excludeLeave = null): int
+    public function sumLeaveDays(Employee $employee, LeaveType $leaveType, Carbon $periodStart, Carbon $periodEnd, string $status, ?Leave $excludeLeave = null): float
     {
         $query = Leave::query()
             ->where('employee_id', $employee->id)
@@ -251,8 +277,8 @@ class LeavePolicyService
         }
 
         return $query->get()
-            ->sum(function (Leave $leave) use ($periodStart, $periodEnd): int {
-                return $this->calculateDaysInSegment($leave->from_date, $leave->to_date, $periodStart, $periodEnd);
+            ->sum(function (Leave $leave) use ($periodStart, $periodEnd, $employee): float {
+                return $this->calculateDaysInSegment($leave->from_date, $leave->to_date, $periodStart, $periodEnd, (bool) $leave->half_day, $employee);
             });
     }
 
@@ -268,7 +294,7 @@ class LeavePolicyService
             throw new RuntimeException(sprintf('Half-day leave is not allowed for %s.', $leaveType->name));
         }
 
-        $requestedDays = $leave->half_day ? 0.5 : $this->calculateRequestedDays($leave->from_date, $leave->to_date);
+        $requestedDays = $leave->half_day ? 0.5 : $this->calculateRequestedDays($leave->from_date, $leave->to_date, $leave->employee);
 
         if (!$leave->half_day && (int) $leaveType->min_request_days > 0 && $requestedDays < $leaveType->min_request_days) {
             throw new RuntimeException(sprintf('Leave requests for %s must be at least %d day(s).', $leaveType->name, $leaveType->min_request_days));
@@ -383,7 +409,7 @@ class LeavePolicyService
         }
 
         foreach ($this->segmentsForLeave($leave) as $segment) {
-            $balance = $this->getBalance($leave->employee, $segment['leave_type'], $segment['period_start']);
+            $balance = $this->getBalance($leave->employee, $segment['leave_type'], $segment['period_start'], $leave);
             $balance->pending_days = max(0, $balance->pending_days - $segment['days']);
             $balance->used_days += $segment['days'];
             $balance->save();
@@ -407,6 +433,50 @@ class LeavePolicyService
         }
 
         $this->reservePendingLeave($leave);
+    }
+
+    /**
+     * Give back the days in $segments from the balance: "used" for a previously approved
+     * leave, "pending" for one that was only requested.
+     */
+    public function releaseSegments(Leave $leave, array $segments, string $kind): void
+    {
+        foreach ($segments as $segment) {
+            $balance = $this->getBalance($leave->employee, $segment['leave_type'], $segment['period_start'], $leave);
+            $column = $kind === 'used' ? 'used_days' : 'pending_days';
+            $balance->{$column} = max(0, $balance->{$column} - $segment['days']);
+            $balance->save();
+        }
+    }
+
+    /** Take the leave's current days from the balance as approved usage, refusing if they do not fit. */
+    public function applyApprovedUsage(Leave $leave): void
+    {
+        if (!$this->findLeaveTypeByName($leave->type)) {
+            return;
+        }
+
+        $segments = $this->segmentsForLeave($leave);
+        foreach ($segments as $segment) {
+            $balance = $this->getBalance($leave->employee, $segment['leave_type'], $segment['period_start'], $leave);
+            $available = ($balance->accrued_days + $balance->carried_forward_days) - ($balance->used_days + $balance->pending_days);
+            if ($available < $segment['days']) {
+                throw new RuntimeException(sprintf('Insufficient %s leave balance for %s period starting %s.', $segment['leave_type']->name, $segment['period_type'], $segment['period_start']->toDateString()));
+            }
+        }
+
+        foreach ($segments as $segment) {
+            $balance = $this->getBalance($leave->employee, $segment['leave_type'], $segment['period_start'], $leave);
+            $balance->used_days += $segment['days'];
+            $balance->save();
+        }
+    }
+
+    /** An approved leave had its type / dates / half-day changed: swap old usage for new. */
+    public function adjustApprovedUsage(Leave $leave, array $originalSegments): void
+    {
+        $this->releaseSegments($leave, $originalSegments, 'used');
+        $this->applyApprovedUsage($leave);
     }
 
     public function buildBalanceSummary(Employee $employee, LeaveType $leaveType, Carbon $date): LeaveBalance

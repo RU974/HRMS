@@ -54,6 +54,8 @@ Schedule::command('tickets:auto-close')->daily();
 Schedule::command('biometric:sync-scheduled')->everyFiveMinutes();
 
 // Mark employees absent on finished working days with no punches and no approved leave.
+// Keep leave rows in step with leave (covers anything that slipped past the live hooks).
+Schedule::command('attendance:sync-leaves --apply --days=35')->dailyAt('00:15');
 Schedule::command('attendance:mark-absent')->dailyAt('00:30');
 
 // ─── Calls ────────────────────────────────────────────────────────────────

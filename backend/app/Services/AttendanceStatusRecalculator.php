@@ -20,7 +20,6 @@ class AttendanceStatusRecalculator
     public function recalculate(CarbonInterface $from, ?CarbonInterface $to = null, ?int $shiftId = null, bool $apply = true, ?callable $onChange = null): int
     {
         $calculator = new AttendanceCalculator();
-        $policy = AttendancePolicy::query()->first();
         $changed = 0;
 
         Attendance::query()
@@ -30,9 +29,9 @@ class AttendanceStatusRecalculator
             ->whereNotNull('check_in')
             ->whereIn('status', ['present', 'late'])
             ->when($shiftId, fn ($q) => $q->whereHas('employee', fn ($e) => $e->where('shift_id', $shiftId)))
-            ->chunkById(200, function ($records) use ($calculator, $policy, $apply, $onChange, &$changed) {
+            ->chunkById(200, function ($records) use ($calculator, $apply, $onChange, &$changed) {
                 foreach ($records as $record) {
-                    $status = $calculator->recomputeStatus($record, $policy, $record->employee?->effectiveShift());
+                    $status = $calculator->recomputeStatus($record, AttendancePolicy::forEmployee($record->employee), $record->employee?->effectiveShift());
                     if ($status === $record->status) {
                         continue;
                     }

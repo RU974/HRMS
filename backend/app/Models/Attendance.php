@@ -11,11 +11,16 @@ class Attendance extends Model
 {
     public const STATUS_MISSING_CHECK_IN  = 'missing_check_in';
     public const STATUS_MISSING_CHECK_OUT = 'missing_check_out';
+    public const STATUS_HALF_DAY = 'half_day';
     public const MISSING_STATUSES = [self::STATUS_MISSING_CHECK_IN, self::STATUS_MISSING_CHECK_OUT];
-    public const ALL_STATUSES = ['present', 'absent', 'leave', 'late', self::STATUS_MISSING_CHECK_IN, self::STATUS_MISSING_CHECK_OUT];
+    public const ALL_STATUSES = ['present', 'absent', 'leave', 'late', self::STATUS_HALF_DAY, self::STATUS_MISSING_CHECK_IN, self::STATUS_MISSING_CHECK_OUT];
+
+    /** Statuses an admin picks by hand; they are never recomputed from the punches. */
+    public const MANUAL_STATUSES = ['absent', 'leave', self::STATUS_HALF_DAY];
 
     protected $fillable = [
         'employee_id',
+        'leave_id',
         'check_in',
         'check_out',
         'date',
@@ -56,6 +61,17 @@ class Attendance extends Model
         return $this->belongsTo(Employee::class);
     }
 
+    public function leave(): BelongsTo
+    {
+        return $this->belongsTo(Leave::class);
+    }
+
+    /** True for a row written because of an approved leave (full day or half day). */
+    public function isLeaveLinked(): bool
+    {
+        return $this->leave_id !== null;
+    }
+
     public function getOvertimeHoursAttribute(): float
     {
         return (new AttendanceCalculator())->calculateOvertimeHours($this, $this->employee?->shift);
@@ -87,6 +103,6 @@ class Attendance extends Model
 
     public function getIsLateArrivalAttribute(): bool
     {
-        return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::query()->first(), $this->employee?->effectiveShift());
+        return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::forEmployee($this->employee), $this->employee?->effectiveShift());
     }
 }

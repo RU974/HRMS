@@ -40,7 +40,7 @@ export interface AttendanceItem {
   date: string;
   check_in?: string | null;
   check_out?: string | null;
-  status: "present" | "absent" | "leave" | "late" | "missing_check_in" | "missing_check_out";
+  status: "present" | "absent" | "leave" | "late" | "half_day" | "missing_check_in" | "missing_check_out";
   notes?: string | null;
   employee?: { id: number; name: string } | null;
   source?: "biometric" | "manual" | "mobile" | "web";
@@ -254,15 +254,6 @@ export function getEmployeeAttendanceCalendar(employeeId: number, month: number,
   return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}?month=${month}&year=${year}&per_page=31`);
 }
 
-/** Approved/pending leaves overlapping a month, used to flag half-day leaves on the calendar. */
-export function getEmployeeLeavesForMonth(employeeId: number, month: number, year: number) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const last = new Date(year, month, 0).getDate();
-  return apiClient<PaginatedResponse<LeaveItem>>(
-    `/leaves?employee_id=${employeeId}&from_date=${year}-${pad(month)}-01&to_date=${year}-${pad(month)}-${pad(last)}&per_page=100`,
-  );
-}
-
 export function getEmployeeAttendance(employeeId: number) {
   return apiClient<{ data: AttendanceItem[] }>(`/attendance/employee/${employeeId}`);
 }
@@ -277,7 +268,10 @@ export interface AttendanceMonthlyStats {
   late: number;
   missing_check_in?: number;
   missing_check_out?: number;
+  half_day?: number;
   leave: number;
+  /** Leave in days; a half-day leave counts 0.5. */
+  leave_days?: number;
   total_days: number;
   off_days: number;
   wfh_days: number;

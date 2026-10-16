@@ -13,6 +13,9 @@ use Carbon\Carbon;
 
 class BiometricSyncService
 {
+    /** A punch this soon after a night shift's check-in still belongs to that shift. */
+    private const CLOSED_SHIFT_WINDOW_HOURS = 14;
+
     public function testConnection(BiometricDevice $device): array
     {
         try {
@@ -303,12 +306,37 @@ class BiometricSyncService
             ->orderByDesc('check_in')
             ->first();
 
+        // The same night's record once it already has its check-out. A later (or repeated)
+        // punch inside this window belongs to that record, never to a new next-day row.
+        $closed = $open ? null : Attendance::where('employee_id', $employeeId)
+            ->whereNotNull('check_in')
+            ->whereNotNull('check_out')
+            ->whereColumn('check_out', '>=', 'check_in')
+            ->where('check_in', '>=', $timestamp->copy()->subHours(self::CLOSED_SHIFT_WINDOW_HOURS)->toDateTimeString())
+            ->where('check_in', '<', $timestamp->toDateTimeString())
+            ->whereDate('date', '<', $date)
+            ->orderByDesc('check_in')
+            ->first();
+
         // With no shift assigned, an evening check-in followed by a morning punch is
         // still treated as a night shift rather than a new day.
+        $anchor = $open ?? $closed;
         $overnight = $calculator->isOvernightShift($shift)
-            || (!$shift && $open
-                && (int) Carbon::parse($open->check_in)->format('G') >= 16
+            || (!$shift && $anchor
+                && (int) Carbon::parse($anchor->check_in)->format('G') >= 16
                 && (int) $timestamp->format('G') < 12);
+
+        if ($closed && $overnight) {
+            // Last punch wins; an older or identical one (re-delivered by the agent, or
+            // arriving out of order) changes nothing.
+            if ($timestamp->gt($closed->check_out)) {
+                $closed->check_out = $timestamp;
+                $closed->source = 'biometric';
+                $closed->biometric_device_id = $device->id;
+                $closed->save();
+            }
+            return;
+        }
 
         if ($open && ($type === 'out' || ($overnight
             && $timestamp->getTimestamp() - Carbon::parse($open->check_in)->getTimestamp() >= 3600))) {
@@ -316,7 +344,7 @@ class BiometricSyncService
             // A late check-out completes a record that was already flagged as missing it.
             if ($open->status === Attendance::STATUS_MISSING_CHECK_OUT) {
                 $open->status = $calculator->deriveStatusFromCheckIn(
-                    AttendancePolicy::query()->first(),
+                    AttendancePolicy::forEmployee(Employee::find($employeeId)),
                     Employee::find($employeeId)?->effectiveShift(),
                     Carbon::parse($open->check_in)->toDateTimeString(),
                     'present'
@@ -377,9 +405,10 @@ class BiometricSyncService
                 $attendance->check_in = $timestamp;
 
                 // Derive late/present status from shift + policy
-                $policy = AttendancePolicy::query()->first();
+                $policy = AttendancePolicy::forEmployee(Employee::find($employeeId));
                 $shift  = Employee::find($employeeId)?->effectiveShift();
-                $attendance->status = (new AttendanceCalculator())->deriveStatusFromCheckIn(
+                $attendance->status = (new AttendanceCalculator())->statusForPunch(
+                    $attendance,
                     $policy,
                     $shift,
                     $timestamp->toDateTimeString(),

@@ -58,8 +58,24 @@ class RepairOvernightAttendance extends Command
                 }
 
                 $existing = $target->check_out ? Carbon::parse($target->check_out) : null;
-                if ($existing && !($existing->toDateString() === $out->toDateString() && $existing->ne($out))) {
-                    return; // already has a check-out that is not a same-morning copy
+                if ($existing && $existing->gte($target->check_in) && $existing->toDateString() !== $orphan->date->toDateString()) {
+                    return; // closed on another day: a different shift's check-out, leave it alone
+                }
+                if ($existing && $existing->gte($target->check_in)) {
+                    // The shift is already closed: the out-only row is a repeated or later punch of the
+                    // same morning. Keep the latest as the check-out and drop the duplicate row.
+                    $this->line(sprintf('#%d employee %d: duplicate out-only %s -> folded into #%d (%s, check-out %s)', $orphan->id,
+                        $orphan->employee_id, $out, $target->id, $target->date->toDateString(), $existing->max($out)));
+                    $fixed++;
+                    if ($apply) {
+                        if ($out->gt($existing)) {
+                            $target->check_out = $out;
+                            $target->save();
+                        }
+                        $orphan->delete();
+                    }
+
+                    return;
                 }
 
                 $this->line(sprintf('#%d employee %d: out-only %s -> check-out of #%d (%s, was %s)', $orphan->id,

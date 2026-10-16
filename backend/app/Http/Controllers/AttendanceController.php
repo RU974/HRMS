@@ -25,7 +25,7 @@ class AttendanceController extends Controller
             $this->applyManagedEmployeeScope($request, $query, 'employee');
         }
 
-        if ($request->has('employee_id')) {
+        if ($request->filled('employee_id')) {
             $employeeId = (int) $request->employee_id;
             if (!$user?->can('attendance:manage_settings')) {
                 $this->authorizeAttendanceAccess($request, $employeeId);
@@ -45,13 +45,13 @@ class AttendanceController extends Controller
             $query->where('employee_id', $employee->id);
         }
 
-        if ($request->has('date')) {
+        if ($request->filled('date')) {
             $query->whereDate('date', $request->date);
         }
-        if ($request->has('month')) {
+        if ($request->filled('month')) {
             $query->whereMonth('date', $request->month);
         }
-        if ($request->has('year')) {
+        if ($request->filled('year')) {
             $query->whereYear('date', $request->year);
         }
         if ($request->filled('date_from')) {
@@ -104,7 +104,7 @@ class AttendanceController extends Controller
             return $this->fail('Attendance already exists for this employee on this date.', 422);
         }
 
-        $policy = AttendancePolicy::query()->first();
+        $policy = AttendancePolicy::forEmployee(Employee::find($validated['employee_id']));
         $shift = $this->getEmployeeShift((int) $validated['employee_id']);
         $status = $validated['status'] ?? 'present';
 
@@ -124,6 +124,14 @@ class AttendanceController extends Controller
                 $validated['check_in'] ?? null,
                 $validated['check_out']
             );
+        }
+
+        // Only a check-out was given: flag it, as the biometric sync and the recompute do,
+        // instead of recording a clean "present" day (unless a status was chosen on purpose).
+        if (empty($validated['check_in']) && !empty($validated['check_out']) && empty($request->input('status'))) {
+            $status = Attendance::STATUS_MISSING_CHECK_IN;
+            $validated['notes'] = $validated['notes']
+                ?? 'Check-in missing: only a check-out punch (' . Carbon::parse($validated['check_out'])->format('H:i') . ') was recorded.';
         }
 
         $validated['status'] = $status;
@@ -159,11 +167,19 @@ class AttendanceController extends Controller
             );
         }
 
-        $policy = AttendancePolicy::query()->first();
+        $policy = AttendancePolicy::forEmployee($attendance->employee);
         $shift = $attendance->employee?->effectiveShift();
 
-        if (!empty($validated['check_in']) && !empty($validated['check_out'])) {
-            if (Carbon::parse($validated['check_out'])->lessThan(Carbon::parse($validated['check_in']))) {
+        // Judge the times the record will end up with, not just the ones in this request:
+        // moving only the check-in past the stored check-out is just as invalid.
+        if (array_key_exists('check_in', $validated) || array_key_exists('check_out', $validated)) {
+            $finalIn = array_key_exists('check_in', $validated)
+                ? ($validated['check_in'] ?: null)
+                : $attendance->check_in?->toDateTimeString();
+            $finalOut = array_key_exists('check_out', $validated)
+                ? ($validated['check_out'] ?: null)
+                : $attendance->check_out?->toDateTimeString();
+            if ($finalIn && $finalOut && Carbon::parse($finalOut)->lessThan(Carbon::parse($finalIn))) {
                 return $this->fail('Check-out cannot be earlier than check-in.', 422);
             }
         }
@@ -193,6 +209,10 @@ class AttendanceController extends Controller
         $this->authorizePermission($request, 'attendance:manage_settings');
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
+        // Leave rows belong to the leave; deleting one by hand would only be undone by the next sync.
+        if ($attendance->leave_id && in_array($attendance->status, ['leave', Attendance::STATUS_HALF_DAY], true)) {
+            return $this->fail('This day comes from an approved leave. Cancel or edit the leave instead.', 422);
+        }
         $attendance->delete();
         return $this->ok(null, 'Attendance deleted successfully');
     }
@@ -274,18 +294,23 @@ class AttendanceController extends Controller
             return $this->fail('The CSV file is empty.', 422);
         }
         $header = array_map(fn ($h) => strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $h))), $header);
-        foreach (['employee_number', 'date'] as $required) {
-            if (!in_array($required, $header, true)) {
-                return $this->fail("Missing required column: {$required}.", 422);
-            }
+        if (!in_array('date', $header, true)) {
+            return $this->fail('Missing required column: date.', 422);
+        }
+        // An export leaves employee_number blank for people without one, so the name identifies them.
+        if (!in_array('employee_number', $header, true) && !in_array('employee_name', $header, true)) {
+            return $this->fail('Missing required column: employee_number (or employee_name).', 422);
         }
 
         $employeesQuery = Employee::query();
         $this->scopeToCompany($request, $employeesQuery);
         $this->applyManagedEmployeeScope($request, $employeesQuery);
-        $employees = $employeesQuery->get()->keyBy(fn ($e) => strtolower((string) $e->employee_number));
+        $allEmployees = $employeesQuery->get();
+        $employees = $allEmployees->filter(fn ($e) => trim((string) $e->employee_number) !== '')
+            ->keyBy(fn ($e) => strtolower((string) $e->employee_number));
+        $nameCounts = $allEmployees->countBy(fn ($e) => strtolower(trim((string) $e->name)));
+        $employeesByName = $allEmployees->keyBy(fn ($e) => strtolower(trim((string) $e->name)));
 
-        $policy = AttendancePolicy::query()->first();
         $calc = $this->attendanceCalculator();
         $imported = 0;
         $skipped = 0;
@@ -300,9 +325,17 @@ class AttendanceController extends Controller
             $row = array_combine($header, array_pad(array_slice($cols, 0, count($header)), count($header), ''));
             $row = array_map(fn ($v) => trim((string) $v), $row);
 
-            $employee = $employees->get(strtolower($row['employee_number']));
+            $number = $row['employee_number'] ?? '';
+            $name = strtolower($row['employee_name'] ?? '');
+            $label = $number !== '' ? $number : ($row['employee_name'] ?? '');
+            if ($number === '' && $name !== '' && ($nameCounts[$name] ?? 0) > 1) {
+                $errors[] = "Line {$line}: more than one employee is named '{$row['employee_name']}'; use employee_number.";
+                $skipped++;
+                continue;
+            }
+            $employee = $number !== '' ? $employees->get(strtolower($number)) : ($name !== '' ? $employeesByName->get($name) : null);
             if (!$employee) {
-                $errors[] = "Line {$line}: employee '{$row['employee_number']}' not found.";
+                $errors[] = "Line {$line}: employee '{$label}' not found.";
                 $skipped++;
                 continue;
             }
@@ -327,7 +360,7 @@ class AttendanceController extends Controller
                 }
             }
             if (Attendance::where('employee_id', $employee->id)->whereDate('date', $date)->exists()) {
-                $errors[] = "Line {$line}: record already exists for {$row['employee_number']} on {$date}.";
+                $errors[] = "Line {$line}: record already exists for {$label} on {$date}.";
                 $skipped++;
                 continue;
             }
@@ -335,7 +368,7 @@ class AttendanceController extends Controller
             $checkIn = ($row['check_in'] ?? '') !== '' ? $calc->normalizeCheckTime($date, $row['check_in']) : null;
             $checkOut = ($row['check_out'] ?? '') !== '' ? $calc->resolveCheckOut($date, $checkIn, $row['check_out']) : null;
             if ($checkIn) {
-                $status = $calc->deriveStatusFromCheckIn($policy, $employee->effectiveShift(), $checkIn, $status);
+                $status = $calc->deriveStatusFromCheckIn(AttendancePolicy::forEmployee($employee), $employee->effectiveShift(), $checkIn, $status);
             }
 
             Attendance::create([
@@ -344,7 +377,8 @@ class AttendanceController extends Controller
                 'check_in'       => $checkIn,
                 'check_out'      => $checkOut,
                 'status'         => $status,
-                'source'         => 'manual',
+                'source'         => in_array(strtolower($row['source'] ?? ''), ['biometric', 'manual', 'mobile', 'web'], true)
+                    ? strtolower($row['source']) : 'manual',
                 'work_from_home' => in_array(strtolower($row['work_from_home'] ?? ''), ['1', 'yes', 'true', 'y'], true),
                 'notes'          => ($row['notes'] ?? '') ?: null,
             ]);
@@ -365,10 +399,10 @@ class AttendanceController extends Controller
 
         $query = Attendance::where('employee_id', $employeeId);
         $this->applyManagedEmployeeScope($request, $query, 'employee');
-        if ($request->has('month')) {
+        if ($request->filled('month')) {
             $query->whereMonth('date', $request->month);
         }
-        if ($request->has('year')) {
+        if ($request->filled('year')) {
             $query->whereYear('date', $request->year);
         }
         return $this->ok($query->orderBy('date', 'desc')->paginate(31));
@@ -400,6 +434,11 @@ class AttendanceController extends Controller
             'present' => $stats->where('status', 'present')->sum('count'),
             'absent' => $stats->where('status', 'absent')->sum('count'),
             'leave' => $stats->where('status', 'leave')->sum('count'),
+            // Leave measured in days: a half-day leave counts as 0.5.
+            'leave_days' => $stats->where('status', 'leave')->sum('count') + 0.5 * Attendance::where('employee_id', $employeeId)
+                ->whereMonth('date', $month)->whereYear('date', $year)
+                ->where('status', 'half_day')->whereNotNull('leave_id')->count(),
+            'half_day' => $stats->where('status', 'half_day')->sum('count'),
             'late' => $stats->where('status', 'late')->sum('count'),
             'missing_check_in' => $stats->where('status', 'missing_check_in')->sum('count'),
             'missing_check_out' => $stats->where('status', 'missing_check_out')->sum('count'),
@@ -437,8 +476,9 @@ class AttendanceController extends Controller
 
         $today = Carbon::today();
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', $today)->first();
-        $policy = AttendancePolicy::query()->first();
-        $shift = Employee::find($validated['employee_id'])?->effectiveShift();
+        $employee = Employee::find($validated['employee_id']);
+        $policy = AttendancePolicy::forEmployee($employee);
+        $shift = $employee?->effectiveShift();
         $now = Carbon::now();
 
         if (!$attendance && $this->attendanceCalculator()->isOvernightShift($shift)) {
@@ -475,7 +515,8 @@ class AttendanceController extends Controller
 
         $attendance->update([
             'check_in' => $now->toDateTimeString(),
-            'status' => $this->attendanceCalculator()->deriveStatusFromCheckIn(
+            'status' => $this->attendanceCalculator()->statusForPunch(
+                $attendance,
                 $policy,
                 $shift,
                 $now->toDateTimeString(),
@@ -536,7 +577,7 @@ class AttendanceController extends Controller
         $user = $request->user();
         $query = Attendance::with('employee')->whereNotNull('correction_status');
 
-        if ($request->has('employee_id')) {
+        if ($request->filled('employee_id')) {
             $employeeId = (int) $request->employee_id;
             if (!$user?->can('attendance:manage_settings') && !$user?->can('attendance:approve')) {
                 $this->authorizeAttendanceAccess($request, $employeeId);
@@ -553,14 +594,14 @@ class AttendanceController extends Controller
             $query->where('employee_id', $employee->id);
         }
 
-        if ($request->has('status')) {
+        if ($request->filled('status')) {
             $query->where('correction_status', $request->status);
         }
 
-        if ($request->has('month')) {
+        if ($request->filled('month')) {
             $query->whereMonth('date', $request->month);
         }
-        if ($request->has('year')) {
+        if ($request->filled('year')) {
             $query->whereYear('date', $request->year);
         }
 
@@ -585,6 +626,8 @@ class AttendanceController extends Controller
 
         $this->applyManagedEmployeeScope($request, $rows, 'employee');
 
+        $halfDayLeaves = (clone $rows)->where('status', 'half_day')->whereNotNull('leave_id')->count();
+
         $rows = $rows
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
@@ -597,6 +640,8 @@ class AttendanceController extends Controller
             'present' => (int) $rows->where('status', 'present')->sum('count'),
             'absent' => (int) $rows->where('status', 'absent')->sum('count'),
             'leave' => (int) $rows->where('status', 'leave')->sum('count'),
+            'leave_days' => (float) ($rows->where('status', 'leave')->sum('count') + 0.5 * $halfDayLeaves),
+            'half_day' => (int) $rows->where('status', 'half_day')->sum('count'),
             'late' => (int) $rows->where('status', 'late')->sum('count'),
             'missing_check_in' => (int) $rows->where('status', 'missing_check_in')->sum('count'),
             'missing_check_out' => (int) $rows->where('status', 'missing_check_out')->sum('count'),
@@ -653,7 +698,8 @@ class AttendanceController extends Controller
     public function getPolicy(Request $request)
     {
         $this->authorizePermission($request, 'attendance:manage_settings');
-        return $this->ok(AttendancePolicy::query()->first());
+        // The caller's own company policy (or the default it inherits until it saves one).
+        return $this->ok(AttendancePolicy::forCompany($request->user()?->company_id));
     }
 
     public function updatePolicy(Request $request)
@@ -664,11 +710,16 @@ class AttendanceController extends Controller
             'allow_manual_status_override' => 'required|boolean',
         ]);
 
-        $policy = AttendancePolicy::query()->firstOrCreate(['name' => 'Default']);
-        $policy->update([
+        // Each company owns its policy; a super admin without a company edits the global default.
+        $companyId = $request->user()?->company_id;
+        $policy = AttendancePolicy::query()
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId), fn ($q) => $q->whereNull('company_id'))
+            ->first() ?? new AttendancePolicy(['company_id' => $companyId, 'name' => 'Default']);
+        $policy->fill([
             'late_after_time' => $validated['late_after_time'] . ':00',
             'allow_manual_status_override' => $validated['allow_manual_status_override'],
-        ]);
+        ])->save();
+        app(\App\Services\AttendancePolicyResolver::class)->forget();
 
         return $this->ok($policy, 'Attendance policy updated successfully');
     }
@@ -752,7 +803,7 @@ class AttendanceController extends Controller
             $preview->check_out = $out;
             $update['status'] = $calc->recomputeStatus(
                 $preview,
-                AttendancePolicy::query()->first(),
+                AttendancePolicy::forEmployee($attendance->employee),
                 $attendance->employee?->effectiveShift()
             );
         } elseif ($validated['correction_status'] === 'approved') {

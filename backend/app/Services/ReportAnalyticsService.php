@@ -187,6 +187,7 @@ class ReportAnalyticsService
              SUM(CASE WHEN status = "late" THEN 1 ELSE 0 END) as late_count,
              SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_count,
              SUM(CASE WHEN status = "leave" THEN 1 ELSE 0 END) as leave_count,
+             SUM(CASE WHEN status = "half_day" THEN 1 ELSE 0 END) as half_day_count,
              COUNT(*) as total_attendance'
         )->first();
 
@@ -239,6 +240,7 @@ class ReportAnalyticsService
             'attendance_late'          => (int) ($attendance?->late_count ?? 0),
             'attendance_absent'        => (int) ($attendance?->absent_count ?? 0),
             'attendance_leave'         => (int) ($attendance?->leave_count ?? 0),
+            'attendance_half_day'      => (int) ($attendance?->half_day_count ?? 0),
             'attendance_total'         => $totalAttendance,
             'attendance_rate'          => $attendanceRate,
             'payroll_paid'             => (int) ($payrollMetrics?->paid_count ?? 0),

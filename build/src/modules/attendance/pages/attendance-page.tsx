@@ -20,7 +20,6 @@ import {
   updateAttendance,
   listAttendancePaginated,
   getEmployeeAttendanceCalendar,
-  getEmployeeLeavesForMonth,
   getEmployeeAttendance,
   getTeamDailyAttendance,
   getAttendanceMonthlyStats,
@@ -49,10 +48,12 @@ function StatusBadge({ status }: { status: string }) {
     late:    "bg-amber-50 text-amber-700",
     absent:  "bg-red-50 text-red-700",
     leave:   "bg-blue-50 text-blue-700",
+    half_day: "bg-orange-50 text-orange-700",
     missing_check_in:  "bg-orange-50 text-orange-700",
     missing_check_out: "bg-orange-50 text-orange-700",
   };
   const labels: Record<string, string> = {
+    half_day:          "Half day",
     missing_check_in:  "Check-in missing",
     missing_check_out: "Check-out missing",
   };
@@ -137,24 +138,14 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
     enabled: employeeId > 0,
   });
 
-  const leavesQuery = useQuery({
-    queryKey: ["attendance", "calendar-leaves", employeeId, month, year],
-    queryFn:  () => getEmployeeLeavesForMonth(employeeId, month, year),
-    enabled: employeeId > 0,
-  });
-
   const records: AttendanceItem[] = (data as { data?: AttendanceItem[] } | undefined)?.data ?? [];
   const byDate = Object.fromEntries(records.map(r => [r.date?.slice(0, 10), r]));
 
-  // Dates covered by an approved half-day leave
-  const halfDayLeaveDates = new Set<string>();
-  for (const l of leavesQuery.data?.data ?? []) {
-    if (l.half_day && l.status === "approved") halfDayLeaveDates.add(l.from_date.slice(0, 10));
-  }
-
-  function dayKind(rec: AttendanceItem | undefined, dateStr: string): string {
-    if (!rec) return halfDayLeaveDates.has(dateStr) ? "halfday" : "";
-    if (rec.status === "leave" && halfDayLeaveDates.has(dateStr)) return "halfday";
+  // Approved leave is written into attendance by the backend (leave / half_day rows),
+  // so the calendar needs nothing but the attendance records.
+  function dayKind(rec: AttendanceItem | undefined): string {
+    if (!rec) return "";
+    if (rec.status === "half_day") return "halfday";
     if ((rec.status === "present" || rec.status === "late") && rec.check_out
       && rec.duration_hours != null && rec.duration_hours > 0 && rec.duration_hours < HALF_DAY_MAX_HOURS) return "halfday";
     return rec.status;
@@ -240,7 +231,7 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
             const day    = i + 1;
             const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const rec    = byDate[dateStr];
-            const kind   = dayKind(rec, dateStr);
+            const kind   = dayKind(rec);
             const dow    = new Date(year, month - 1, day).getDay();
             const isWeekend = (dow === 0 || dow === 6) && !rec;
             const isToday = dateStr === todayStr;
@@ -286,7 +277,7 @@ function CalendarView({ ownEmployeeId, canPickEmployee }: { ownEmployeeId: numbe
           {[
             { label: "Present", value: records.filter(r => r.status === "present").length, color: "text-emerald-600" },
             { label: "Late",    value: records.filter(r => r.status === "late").length,    color: "text-amber-600" },
-            { label: "Half day", value: records.filter(r => dayKind(r, r.date.slice(0, 10)) === "halfday").length + [...halfDayLeaveDates].filter(d => !byDate[d]).length, color: "text-orange-600" },
+            { label: "Half day", value: records.filter(r => dayKind(r) === "halfday").length, color: "text-orange-600" },
             { label: "Absent",  value: records.filter(r => r.status === "absent").length,  color: "text-red-600" },
             { label: "Leave",   value: records.filter(r => r.status === "leave").length,   color: "text-blue-600" },
             { label: "WFH",     value: records.filter(r => r.work_from_home).length,       color: "text-violet-600" },
@@ -497,6 +488,7 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
               <option value="late">Late</option>
               <option value="absent">Absent</option>
               <option value="leave">Leave</option>
+              <option value="half_day">Half day</option>
               <option value="missing_check_in">Check-in missing</option>
               <option value="missing_check_out">Check-out missing</option>
             </select>
@@ -675,7 +667,7 @@ export function AttendancePage() {
     if (file) importMutation.mutate(file);
   }
   function downloadTemplate() {
-    const csv = "employee_number,date,check_in,check_out,status,work_from_home,notes\nEMP001,2026-10-01,09:00,17:30,present,no,\n";
+    const csv = "employee_number,employee_name,date,check_in,check_out,status,work_from_home,source,notes\nEMP001,Jane Doe,2026-10-01,09:00,17:30,present,no,manual,\n";
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
     a.href = url;
@@ -801,7 +793,8 @@ export function AttendancePage() {
                   { label: "Present", value: stats?.present ?? 0, color: "text-emerald-600" },
                   { label: "Late",    value: stats?.late    ?? 0, color: "text-amber-600" },
                   { label: "Absent",  value: stats?.absent  ?? 0, color: "text-red-600" },
-                  { label: "Leave",   value: stats?.leave   ?? 0, color: "text-blue-600" },
+                  { label: "Leave",   value: stats?.leave_days ?? stats?.leave ?? 0, color: "text-blue-600" },
+                  { label: "Half day", value: stats?.half_day ?? 0, color: "text-orange-600" },
                   { label: "Missing punch", value: (stats?.missing_check_in ?? 0) + (stats?.missing_check_out ?? 0), color: "text-orange-600" },
                   { label: "WFH",     value: stats?.wfh_days ?? 0, color: "text-violet-600" },
                   { label: "Off days", value: stats?.off_days ?? 0, color: "text-[var(--muted)]" },
@@ -876,6 +869,7 @@ export function AttendancePage() {
                 <option value="late">Late</option>
                 <option value="absent">Absent</option>
                 <option value="leave">Leave</option>
+                <option value="half_day">Half day</option>
                 <option value="missing_check_in">Check-in missing</option>
                 <option value="missing_check_out">Check-out missing</option>
               </select>

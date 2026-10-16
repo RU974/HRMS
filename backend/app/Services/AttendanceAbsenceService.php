@@ -122,13 +122,14 @@ class AttendanceAbsenceService
         return $marked;
     }
 
-    public function markDay(CarbonInterface $day, ?string $companyId = null): int
+    public function markDay(CarbonInterface $day, ?string $companyId = null, ?int $employeeId = null): int
     {
         $date = $day->toDateString();
 
         $employees = Employee::query()
             ->where('status', 'active')
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
+            ->when($employeeId, fn ($q) => $q->whereKey($employeeId))
             ->where(fn ($q) => $q->whereNull('joining_date')->orWhereDate('joining_date', '<=', $date))
             ->get(['id', 'company_id', 'shift_id']);
 
@@ -167,7 +168,7 @@ class AttendanceAbsenceService
             $record = $existing->get($employee->id);
             if ($record) {
                 // Any punch at all means they showed up; never overwrite real data.
-                if ($record->check_in || $record->check_out || in_array($record->status, ['absent', 'leave'], true)) {
+                if ($record->check_in || $record->check_out || in_array($record->status, Attendance::MANUAL_STATUSES, true)) {
                     continue;
                 }
                 $record->update(['status' => 'absent']);
