@@ -98,14 +98,25 @@ class AttendanceLateStatusCorrectionTest extends TestCase
         $this->assertSame('present', $attendance->fresh()->status);
     }
 
-    public function test_changing_shift_grace_refreshes_existing_late_records(): void
+    public function test_changing_shift_grace_refreshes_existing_late_records_when_asked_to_resnapshot(): void
+    {
+        $attendance = $this->lateRecord();
+        $this->shift->departmentGraces()->create(['department_id' => $this->employee->department_id, 'grace_minutes' => 30]);
+
+        $changed = app(AttendanceStatusRecalculator::class)->recalculate(Carbon::parse('2026-10-01'), null, null, true, null, null, true);
+
+        $this->assertSame(1, $changed);
+        $this->assertSame('present', $attendance->fresh()->status);
+    }
+
+    public function test_a_grace_change_does_not_re_judge_a_past_day_on_its_own(): void
     {
         $attendance = $this->lateRecord();
         $this->shift->departmentGraces()->create(['department_id' => $this->employee->department_id, 'grace_minutes' => 30]);
 
         $changed = app(AttendanceStatusRecalculator::class)->recalculate(Carbon::parse('2026-10-01'));
 
-        $this->assertSame(1, $changed);
-        $this->assertSame('present', $attendance->fresh()->status);
+        $this->assertSame(0, $changed);
+        $this->assertSame('late', $attendance->fresh()->status);
     }
 }

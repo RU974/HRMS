@@ -54,6 +54,11 @@ export interface AttendanceItem {
   status_reason?: "policy" | null;
   shift_start_time?: string | null;
   shift_end_time?: string | null;
+  /** The shift the day was recorded under (frozen on the record). */
+  shift_name?: string | null;
+  shift_source?: "default" | "roster" | "rotation" | "override" | "swap" | "none";
+  /** The day was a rest day for this employee (weekly off or a day off in a roster). */
+  is_scheduled_off?: boolean;
   correction_status?: "pending" | "approved" | "rejected" | null;
   correction_request_notes?: string | null;
   correction_proposed_check_in?: string | null;

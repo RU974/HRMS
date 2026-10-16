@@ -7,7 +7,6 @@ use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\Leave;
-use App\Models\Shift;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
@@ -21,9 +20,6 @@ class AttendanceAbsenceService
 {
     /** Used when the employee has no shift, or the shift predates working_days. */
     public const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5];
-
-    /** @var array<int, array<int>> shift_id => ISO weekdays */
-    private array $shiftDays = [];
 
     /**
      * Mark absences for every day in [$from, $to] (inclusive). Today and the
@@ -87,7 +83,7 @@ class AttendanceAbsenceService
         }
 
         $noCheckOut = Attendance::query()
-            ->with('employee.shift')
+            ->with('employee')
             ->whereDate('date', '>=', $from->toDateString())
             ->whereNotNull('check_in')
             ->whereNull('check_out')
@@ -95,7 +91,7 @@ class AttendanceAbsenceService
             ->whereHas('employee', $employeeIds)
             ->get();
         foreach ($noCheckOut as $record) {
-            $shift = $record->employee?->shift;
+            $shift = $record->judgingShift();
             $date  = Carbon::parse($record->date)->toDateString();
 
             if ($shift && $shift->end_time) {
@@ -133,11 +129,13 @@ class AttendanceAbsenceService
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->when($employeeId, fn ($q) => $q->whereKey($employeeId))
             ->where(fn ($q) => $q->whereNull('joining_date')->orWhereDate('joining_date', '<=', $date))
-            ->get(['id', 'company_id', 'shift_id']);
+            ->get(['id', 'company_id', 'shift_id', 'department_id']);
 
         if ($employees->isEmpty()) {
             return 0;
         }
+
+        app(ShiftResolver::class)->preload($employees, $date, $date);
 
         $holidayCompanies = Holiday::withoutGlobalScopes()
             ->whereDate('holiday_date', $date)
@@ -192,25 +190,9 @@ class AttendanceAbsenceService
         return $marked;
     }
 
+    /** Whether the employee is scheduled to work on the day: roster, rotation, swap or override first, then their shift. */
     public function isWorkingDay(Employee $employee, CarbonInterface $day): bool
     {
-        return in_array($day->dayOfWeekIso, $this->workingDaysFor($employee), true);
-    }
-
-    /** @return array<int> ISO weekday numbers (1 = Monday ... 7 = Sunday) */
-    public function workingDaysFor(Employee $employee): array
-    {
-        if (!$employee->shift_id) {
-            return self::DEFAULT_WORKING_DAYS;
-        }
-
-        return $this->shiftDays[$employee->shift_id] ??= (function () use ($employee) {
-            $days = Shift::withoutGlobalScopes()->whereKey($employee->shift_id)->value('working_days');
-            $days = is_string($days) ? json_decode($days, true) : $days;
-
-            return is_array($days) && $days !== []
-                ? array_map('intval', $days)
-                : self::DEFAULT_WORKING_DAYS;
-        })();
+        return app(ShiftResolver::class)->isWorkingDay($employee, $day);
     }
 }

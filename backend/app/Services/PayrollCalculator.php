@@ -21,6 +21,61 @@ class PayrollCalculator
         $this->attendanceService = new PayrollAttendanceService();
     }
 
+    /** Length of a shift in hours (overnight shifts roll over midnight), or null without a shift. */
+    private function shiftHours(?\App\Models\Shift $shift): ?float
+    {
+        if (!$shift || !$shift->start_time || !$shift->end_time) {
+            return null;
+        }
+
+        try {
+            $start = Carbon::parse($shift->start_time);
+            $end = Carbon::parse($shift->end_time);
+            // Overnight shift (e.g. 22:00 -> 06:00): roll end forward a day so the diff reflects
+            // the actual shift length instead of the ~16h gap between the raw times.
+            if ($end->lessThanOrEqualTo($start)) {
+                $end->addDay();
+            }
+
+            // Plain timestamp arithmetic: Carbon 3's diffInMinutes() sign differs from Carbon 2's.
+            return max(1, ($end->getTimestamp() - $start->getTimestamp()) / 3600.0);
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Overtime hours and pay for a month's attendance. The only source of overtime in payroll:
+     * automatic, capped per day, no approval, none on a weekly off or holiday. Nothing a client
+     * sends can change it.
+     *
+     * @return array{hours: float, pay: float}
+     */
+    public function overtimeFor($employee, float $baseSalary, \Illuminate\Support\Collection $attendances): array
+    {
+        // Hours in a normal day: the average of the shifts the month's records were judged against
+        // (rosters and rotations can mix shifts), else the employee's own shift, else 8.
+        $durations = $attendances->map(fn ($att) => $this->shiftHours($att->judgingShift()))->filter()->values();
+        $shiftDailyHours = $durations->isNotEmpty()
+            ? (float) $durations->avg()
+            : ($this->shiftHours($employee->shift) ?? 8.0);
+
+        $calculator = new AttendanceCalculator();
+        $companyId = $employee->company_id ? (string) $employee->company_id : null;
+        $hours = 0.0;
+        foreach ($attendances as $att) {
+            if ($att->check_out) {
+                $hours += $calculator->calculateOvertimeHours($att, $att->judgingShift(), $companyId);
+            }
+        }
+
+        $workingDays = config('payroll.working_days_per_month', 22);
+        $hourlyRate = $shiftDailyHours > 0 ? ($baseSalary / ($workingDays * $shiftDailyHours)) : 0;
+        $pay = round($hours * $hourlyRate * config('payroll.overtime_multiplier', 1.5), 2);
+
+        return ['hours' => round($hours, 2), 'pay' => $pay];
+    }
+
     /**
      * Calculate payroll components for an employee for a given month/year.
      * Returns associative array: base_salary, allowances, bonuses_total, overtime_pay,
@@ -72,42 +127,7 @@ class PayrollCalculator
             ->whereMonth('date', $month)
             ->get();
 
-        $overtimeHours = 0.0;
-        $shift = $employee->shift; // may be null
-        $shiftDailyHours = 8.0;
-        if ($shift && $shift->start_time && $shift->end_time) {
-            try {
-                $start = Carbon::parse($shift->start_time);
-                $end = Carbon::parse($shift->end_time);
-                // Overnight shift (e.g. 22:00 -> 06:00): roll end forward a day so
-                // the diff reflects actual shift length instead of the ~16h gap
-                // you get from comparing raw times, which halves the hourly rate.
-                if ($end->lessThanOrEqualTo($start)) {
-                    $end->addDay();
-                }
-                // Carbon 3's diffInMinutes($other) returns $other - $this (sign flipped
-                // from Carbon 2's absolute-by-default behavior), so end->diffInMinutes(start)
-                // came back negative for every normal shift and got clamped to the max(1, ...)
-                // floor — every employee's hourly rate was computed as if their shift were 1
-                // hour long. Timestamp arithmetic sidesteps the ambiguity entirely.
-                $shiftDailyHours = max(1, ($end->getTimestamp() - $start->getTimestamp()) / 3600.0);
-            } catch (\Exception $e) {
-                $shiftDailyHours = 8.0;
-            }
-        }
-
-        $calculator = new AttendanceCalculator();
-        foreach ($attendances as $att) {
-            if (!$att->check_out) {
-                continue;
-            }
-            $overtimeHours += $calculator->calculateOvertimeHours($att, $shift);
-        }
-
-        $workingDays = config('payroll.working_days_per_month', 22);
-        $hourlyRate = $shiftDailyHours > 0 ? ($baseSalary / ($workingDays * $shiftDailyHours)) : 0;
-        $overtimeMultiplier = config('payroll.overtime_multiplier', 1.5);
-        $overtimePay = round($overtimeHours * $hourlyRate * $overtimeMultiplier, 2);
+        ['hours' => $overtimeHours, 'pay' => $overtimePay] = $this->overtimeFor($employee, $baseSalary, $attendances);
 
         // Absences, unpaid leave, half days, lates and days before joining cost pay.
         $attendanceSummary = $this->attendanceService->summarize($employee, $month, $year, $attendances, $preloadedLeaves);

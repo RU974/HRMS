@@ -70,8 +70,6 @@ export interface PayrollPayload {
   allowances?: number;
   bonus?: number;
   commission?: number;
-  overtime_hours?: number;
-  overtime_pay?: number;
   deductions?: number;
   tax?: number;
   payment_date: string;
@@ -246,6 +244,10 @@ export interface PayrollFilters {
   month?: number;
   year?: number;
   page?: number;
+  per_page?: number;
+  search?: string;
+  sort_by?: "emp_id" | "employee" | "period" | "base_salary" | "net_salary" | "payment_date" | "status";
+  sort_dir?: "asc" | "desc";
 }
 
 function qs(params: Record<string, string | number | undefined> | PayrollFilters) {
@@ -256,6 +258,24 @@ function qs(params: Record<string, string | number | undefined> | PayrollFilters
 
 export function listPayroll(filters: PayrollFilters = {}) {
   return apiClient<PaginationMeta<PayrollRecord>>(`/payroll${qs(filters)}`);
+}
+
+/**
+ * Every payroll record matching the filters. The API paginates (max 200 per
+ * page), so this walks all pages — use it for pickers and drill-downs, not for
+ * the main records table, which pages server-side.
+ */
+export async function listAllPayroll(filters: Omit<PayrollFilters, "page" | "per_page"> = {}): Promise<PayrollRecord[]> {
+  const all: PayrollRecord[] = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const res = await listPayroll({ ...filters, page, per_page: 200 });
+    all.push(...(res.data ?? []));
+    lastPage = res.last_page ?? 1;
+    page += 1;
+  } while (page <= lastPage);
+  return all;
 }
 
 export function getPayrollByEmployee(employeeId: number, year?: number) {

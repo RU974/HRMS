@@ -65,6 +65,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
     items: [
       { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, permissions: ["dashboard:view"] },
       { label: "My Profile", path: "/profile", icon: UserCircle2 },
+      { label: "My Schedule", path: "/my-schedule", icon: CalendarClock },
     ],
   },
   {
@@ -99,6 +100,7 @@ export const sidebarSections: SidebarSectionConfig[] = [
         children: [
           { label: "Attendance Records",   path: "/attendance",                              icon: Clock3,         permissions: ["attendance:view", "attendance:edit", "attendance:manage_settings"] },
           { label: "Correction Requests", path: "/attendance/corrections",                  icon: ClipboardCheck, permissions: ["attendance:approve", "attendance:manage_settings"] },
+          { label: "Team Schedule",       path: "/team-schedule",                           icon: CalendarClock,  permissions: ["employees:view"] },
           { label: "Biometric Devices",   path: "/attendance/biometric-devices",            icon: ScanFace,       permissions: ["biometric:view"] },
           { label: "Sync Logs",           path: "/attendance/biometric-devices/sync-logs",  icon: FileText,       permissions: ["biometric:view"] },
         ],

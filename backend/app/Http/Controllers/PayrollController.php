@@ -17,15 +17,23 @@ class PayrollController extends Controller
 {
     // ──────────────────────────────────────────────────────────────
     //  GET /api/payroll
-    //  Filters: employee_id, status, month, year, page
+    //  Filters: employee_id, status, month, year, search (name / employee no.)
+    //  Paging:  page, per_page (1-200, default 15)
+    //  Sorting: sort_by (emp_id|employee|period|base_salary|net_salary|
+    //           payment_date|status), sort_dir (asc|desc). Always tie-broken
+    //           by id so pages never overlap or skip rows.
     // ──────────────────────────────────────────────────────────────
     public function index(Request $request)
     {
         $this->authorizePermission($request, 'payroll:view');
 
-        $query = Payroll::with(['employee'])
-            ->orderByDesc('year')
-            ->orderByDesc('month');
+        $request->validate([
+            'per_page' => 'nullable|integer|min:1|max:200',
+            'sort_by'  => 'nullable|in:emp_id,employee,period,base_salary,net_salary,payment_date,status',
+            'sort_dir' => 'nullable|in:asc,desc',
+        ]);
+
+        $query = Payroll::with(['employee']);
 
         // Multi-tenant scope
         $this->scopeToCompany($request, $query, 'employee');
@@ -45,8 +53,47 @@ class PayrollController extends Controller
         if ($request->filled('year')) {
             $query->where('year', (int) $request->query('year'));
         }
+        if ($request->filled('search')) {
+            $term = '%' . addcslashes(trim((string) $request->query('search')), '\\%_') . '%';
+            $query->whereHas('employee', function ($q) use ($term): void {
+                $q->where(function ($inner) use ($term): void {
+                    $inner->where('name', 'like', $term)
+                        ->orWhere('employee_number', 'like', $term);
+                });
+            });
+        }
 
-        return $this->ok($query->paginate(15));
+        $this->applyPayrollSort($query, $request->query('sort_by'), $request->query('sort_dir'));
+
+        return $this->ok($query->paginate((int) $request->query('per_page', 15)));
+    }
+
+    /**
+     * Server-side ordering for the payroll list. Employee columns are sorted
+     * through a correlated subquery so the paginator's row count is unaffected.
+     */
+    private function applyPayrollSort($query, ?string $sortBy, ?string $sortDir): void
+    {
+        $dir = $sortDir === 'asc' ? 'asc' : 'desc';
+
+        $employeeColumn = fn (string $column) => Employee::query()
+            ->select($column)
+            ->whereColumn('employees.id', 'payrolls.employee_id')
+            ->limit(1);
+
+        match ($sortBy) {
+            'emp_id'       => $query->orderBy($employeeColumn('employee_number'), $dir),
+            'employee'     => $query->orderBy($employeeColumn('name'), $dir),
+            'period'       => $query->orderBy('year', $dir)->orderBy('month', $dir),
+            'base_salary'  => $query->orderBy('base_salary', $dir),
+            'net_salary'   => $query->orderBy('net_salary', $dir),
+            'payment_date' => $query->orderBy('payment_date', $dir),
+            'status'       => $query->orderBy('status', $dir),
+            // Default: newest period first.
+            default        => $query->orderByDesc('year')->orderByDesc('month'),
+        };
+
+        $query->orderByDesc('id');
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -65,8 +112,6 @@ class PayrollController extends Controller
             'allowances'     => 'nullable|numeric|min:0',
             'bonus'          => 'nullable|numeric|min:0',
             'commission'     => 'nullable|numeric|min:0',
-            'overtime_hours' => 'nullable|numeric|min:0',
-            'overtime_pay'   => 'nullable|numeric|min:0',
             'deductions'     => 'nullable|numeric|min:0',
             'attendance_deduction' => 'nullable|numeric|min:0',
             'tax'            => 'nullable|numeric|min:0',
@@ -76,12 +121,15 @@ class PayrollController extends Controller
 
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
 
+        // Overtime is automatic: never taken from the request.
+        $overtime = $this->automaticOvertime((int) $validated['employee_id'], (float) $validated['base_salary'], (int) $validated['month'], (int) $validated['year']);
+
         $validated['status'] = $validated['status'] ?? Payroll::STATUS_DRAFT;
         $validated['allowances'] = $validated['allowances'] ?? 0;
         $validated['bonus'] = $validated['bonus'] ?? 0;
         $validated['commission'] = $validated['commission'] ?? 0;
-        $validated['overtime_hours'] = $validated['overtime_hours'] ?? 0;
-        $validated['overtime_pay'] = $validated['overtime_pay'] ?? 0;
+        $validated['overtime_hours'] = $overtime['hours'];
+        $validated['overtime_pay'] = $overtime['pay'];
         $validated['deductions'] = $validated['deductions'] ?? 0;
         $validated['attendance_deduction'] = $validated['attendance_deduction'] ?? 0;
         $validated['tax'] = $validated['tax'] ?? 0;
@@ -146,8 +194,6 @@ class PayrollController extends Controller
             'allowances'     => 'nullable|numeric|min:0',
             'bonus'          => 'nullable|numeric|min:0',
             'commission'     => 'nullable|numeric|min:0',
-            'overtime_hours' => 'nullable|numeric|min:0',
-            'overtime_pay'   => 'nullable|numeric|min:0',
             'deductions'     => 'nullable|numeric|min:0',
             'attendance_deduction' => 'nullable|numeric|min:0',
             'tax'            => 'nullable|numeric|min:0',
@@ -157,6 +203,16 @@ class PayrollController extends Controller
         if (array_key_exists('attendance_deduction', $validated)) {
             $validated['attendance_deduction'] = $validated['attendance_deduction'] ?? 0;
         }
+
+        // Overtime is automatic: re-derived from attendance (follows a changed base salary), never from the request.
+        $overtime = $this->automaticOvertime(
+            (int) $payroll->employee_id,
+            (float) ($validated['base_salary'] ?? $payroll->base_salary),
+            (int) $payroll->month,
+            (int) $payroll->year
+        );
+        $validated['overtime_hours'] = $overtime['hours'];
+        $validated['overtime_pay'] = $overtime['pay'];
 
         $merged = array_merge($payroll->only([
             'base_salary', 'allowances', 'bonus', 'commission', 'overtime_pay', 'deductions', 'attendance_deduction', 'tax',
@@ -573,6 +629,22 @@ class PayrollController extends Controller
      * client-supplied value, so a payroll record can never persist with a
      * net_salary that doesn't reconcile with its own line items.
      */
+    /** @return array{hours: float, pay: float} */
+    private function automaticOvertime(int $employeeId, float $baseSalary, int $month, int $year): array
+    {
+        $employee = Employee::with('shift')->find($employeeId);
+        if (!$employee) {
+            return ['hours' => 0.0, 'pay' => 0.0];
+        }
+
+        $attendances = \App\Models\Attendance::where('employee_id', $employeeId)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->get();
+
+        return (new \App\Services\PayrollCalculator())->overtimeFor($employee, $baseSalary, $attendances);
+    }
+
     private function computeNetSalary(array $components): float
     {
         $gross = (float) ($components['base_salary'] ?? 0)

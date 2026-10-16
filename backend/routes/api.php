@@ -30,6 +30,9 @@ use App\Http\Controllers\PerformanceReviewTemplateController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\ShiftRotationController;
+use App\Http\Controllers\ShiftScheduleController;
+use App\Http\Controllers\ShiftSwapController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\UserRoleController;
 use App\Http\Controllers\UserManagementController;
@@ -384,6 +387,26 @@ $registerRoutes = function (): void {
                 Route::get('leaves/encashment',      [LeaveController::class, 'encashment']);
                 Route::apiResource('leaves', LeaveController::class);
             });
+
+        // Shift scheduling: rosters, rotations, one-day overrides and swaps. Reading the roster and
+        // writing it are checked inside the controllers (managers see their team; employees see and swap
+        // their own days), and these paths must be registered before the shifts resource below.
+        Route::get('my-schedule', [ShiftScheduleController::class, 'mySchedule']);
+        Route::get('shifts/schedule', [ShiftScheduleController::class, 'roster']);
+        Route::get('shifts/assignments', [ShiftScheduleController::class, 'assignments']);
+        Route::post('shifts/assignments', [ShiftScheduleController::class, 'storeAssignment']);
+        Route::put('shifts/assignments/{id}', [ShiftScheduleController::class, 'updateAssignment'])->whereNumber('id');
+        Route::delete('shifts/assignments/{id}', [ShiftScheduleController::class, 'destroyAssignment'])->whereNumber('id');
+        Route::get('shifts/overrides', [ShiftScheduleController::class, 'overrides']);
+        Route::post('shifts/overrides', [ShiftScheduleController::class, 'storeOverride']);
+        Route::delete('shifts/overrides/{id}', [ShiftScheduleController::class, 'destroyOverride'])->whereNumber('id');
+        Route::apiResource('shift-rotations', ShiftRotationController::class);
+        Route::get('shift-swaps', [ShiftSwapController::class, 'index']);
+        Route::get('shift-swaps/colleagues', [ShiftSwapController::class, 'colleagues']);
+        Route::post('shift-swaps', [ShiftSwapController::class, 'store']);
+        Route::post('shift-swaps/{id}/respond', [ShiftSwapController::class, 'respond'])->whereNumber('id');
+        Route::post('shift-swaps/{id}/decide', [ShiftSwapController::class, 'decide'])->whereNumber('id');
+        Route::post('shift-swaps/{id}/cancel', [ShiftSwapController::class, 'cancel'])->whereNumber('id');
 
         // Attendance/Leave setup routes
         Route::middleware('permission:attendance:edit')->group(function () {

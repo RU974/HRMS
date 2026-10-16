@@ -15,7 +15,7 @@ import {
   createPayslip,
   deletePayslip,
   downloadPayslipPdf,
-  listPayroll,
+  listAllPayroll,
   listPayslips,
   updatePayslip,
 } from "@/services/payroll-service";
@@ -48,7 +48,7 @@ export function PayslipsTab() {
 
   const payslipsQ  = useQuery({ queryKey: ["payroll", "payslips"],  queryFn: async () => (await listPayslips()).data ?? [] });
   const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployeeOptions()).data ?? [] });
-  const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: async () => (await listPayroll()).data ?? [] });
+  const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: () => listAllPayroll() });
 
   const payslips  = payslipsQ.data ?? [];
   const employees = employeesQ.data ?? [];

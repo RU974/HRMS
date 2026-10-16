@@ -288,8 +288,13 @@ class BiometricSyncService
         $date = $timestamp->toDateString();
 
         $type  = $punch['type'] ?? 'in';
-        $shift = Employee::find($employeeId)?->shift;
+        $employee = Employee::find($employeeId);
         $calculator = new AttendanceCalculator();
+        // Which shift applies is a per-date question (rosters, rotations, swaps): today's shift for a
+        // new day, yesterday's for a night shift that started the evening before.
+        $resolver = app(ShiftResolver::class);
+        $shift = $employee ? $resolver->on($employee, $date)->shift : null;
+        $previousShift = $employee ? $resolver->on($employee, $timestamp->copy()->subDay())->shift : null;
 
         // Night shifts: the record's date is the shift-start date, so a punch after
         // midnight must be attached to the still-open record from the previous evening.
@@ -321,8 +326,9 @@ class BiometricSyncService
         // With no shift assigned, an evening check-in followed by a morning punch is
         // still treated as a night shift rather than a new day.
         $anchor = $open ?? $closed;
-        $overnight = $calculator->isOvernightShift($shift)
-            || (!$shift && $anchor
+        // A night record that is already open/closed is judged by the shift it was filed under.
+        $overnight = $calculator->isOvernightShift($anchor ? $anchor->judgingShift() : $shift)
+            || (!$shift && !$anchor?->judgingShift() && $anchor
                 && (int) Carbon::parse($anchor->check_in)->format('G') >= 16
                 && (int) $timestamp->format('G') < 12);
 
@@ -356,14 +362,17 @@ class BiometricSyncService
         // filed under that date instead of polluting today's record.
         // With no shift assigned, the person counts as a night worker when a recent check-in
         // was in the evening.
-        $nightWorker = $shift?->start_time
-            ? $overnight
+        $previousNight = $calculator->isOvernightShift($previousShift);
+        $nightWorker = ($shift?->start_time || $previousNight)
+            ? ($overnight || $previousNight)
             : Attendance::where('employee_id', $employeeId)
                 ->whereNotNull('check_in')
                 ->where('check_in', '>=', $timestamp->copy()->subDays(7)->toDateTimeString())
                 ->get(['check_in'])
                 ->contains(fn ($row) => (int) Carbon::parse($row->check_in)->format('G') >= 16);
-        $morningCutoff = $shift?->start_time ? (int) Carbon::parse($shift->start_time)->format('G') : 12;
+        $morningCutoff = $previousNight
+            ? (int) Carbon::parse($previousShift->end_time)->format('G') + 4
+            : ($shift?->start_time ? (int) Carbon::parse($shift->start_time)->format('G') : 12);
 
         if ($type === 'out' && $nightWorker && (int) $timestamp->format('G') < $morningCutoff) {
             $previous = $timestamp->copy()->subDay()->toDateString();
@@ -381,6 +390,9 @@ class BiometricSyncService
 
         $attendance->source = 'biometric';
         $attendance->biometric_device_id = $device->id;
+        if ($attendance->shift_snapshot === null) {
+            $attendance->captureShift(); // what this day is judged against, frozen from the first punch
+        }
 
         // A record whose check_in falls on an earlier calendar day than its date is a
         // leftover from the old timezone-shift bug; today's real punch must replace it.
@@ -401,11 +413,10 @@ class BiometricSyncService
 
                 // Derive late/present status from shift + policy
                 $policy = AttendancePolicy::forEmployee(Employee::find($employeeId));
-                $shift  = Employee::find($employeeId)?->effectiveShift();
                 $attendance->status = (new AttendanceCalculator())->statusForPunch(
                     $attendance,
                     $policy,
-                    $shift,
+                    $attendance->judgingShift(),
                     $timestamp->toDateTimeString(),
                     'present'
                 );
@@ -450,7 +461,7 @@ class BiometricSyncService
         $attendance->status = (new AttendanceCalculator())->recomputeStatus(
             $attendance,
             AttendancePolicy::forEmployee($employee),
-            $employee?->effectiveShift()
+            $attendance->judgingShift()
         );
     }
 }

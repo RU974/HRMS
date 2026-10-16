@@ -64,6 +64,7 @@ class GeneratePayrollJob implements ShouldQueue
 
                 $existingEmployeeIds = Payroll::where('month', $this->month)
                     ->where('year', $this->year)
+                    ->whereIn('employee_id', $this->employeeIds)
                     ->pluck('employee_id')
                     ->flip();
 

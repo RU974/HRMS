@@ -15,7 +15,7 @@ import {
   createBonus,
   deleteBonus,
   listBonuses,
-  listPayroll,
+  listAllPayroll,
   updateBonus,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
@@ -42,7 +42,7 @@ export function BonusesTab() {
 
   const bonusesQ   = useQuery({ queryKey: ["payroll", "bonuses"],   queryFn: async () => (await listBonuses()).data ?? [] });
   const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployeeOptions()).data ?? [] });
-  const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: async () => (await listPayroll()).data ?? [] });
+  const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: () => listAllPayroll() });
 
   const { sorted: bonuses, sort, toggle: toggleSort } = useTableSort(bonusesQ.data ?? [], "employee", {
     employee: (b) => b.employee?.name, amount: (b) => Number(b.amount),

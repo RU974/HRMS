@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\AttendancePolicy;
+use App\Models\Holiday;
 use App\Models\Shift;
 use Carbon\Carbon;
 
@@ -305,9 +306,72 @@ class AttendanceCalculator
         return Carbon::parse($attendance->date)->toDateString();
     }
 
-    public function calculateOvertimeHours(Attendance $attendance, ?Shift $shift): float
+    /** @var array<string, array<string, true>> company|Y-m => holiday dates */
+    private static array $holidayMonths = [];
+
+    public static function flushHolidayCache(): void
+    {
+        self::$holidayMonths = [];
+    }
+
+    /**
+     * A weekly off (outside the shift's working days) or a company holiday. Work on such a day
+     * earns neither overtime nor comp-off. Optional holidays are working days.
+     */
+    public function isNonWorkingDay(Attendance $attendance, ?Shift $shift, ?string $companyId = null): bool
+    {
+        try {
+            $date = Carbon::parse($attendance->date);
+        } catch (\Exception $e) {
+            return false;
+        }
+
+        // The roster decides for the record's own day: a day off in a rotation, a one-off day off or
+        // a swap is a rest day whatever the shift's working_days say.
+        $snapshot = $attendance->shift_snapshot;
+        if (is_array($snapshot) && array_key_exists('is_working_day', $snapshot)) {
+            if (!$snapshot['is_working_day']) {
+                return true;
+            }
+        } elseif ($shift) {
+            $days = is_string($shift->working_days) ? json_decode($shift->working_days, true) : $shift->working_days;
+            $days = is_array($days) && $days !== []
+                ? array_map('intval', $days)
+                : AttendanceAbsenceService::DEFAULT_WORKING_DAYS;
+
+            if (!in_array($date->dayOfWeekIso, $days, true)) {
+                return true;
+            }
+        }
+
+        $companyId ??= $attendance->employee?->company_id;
+        if (!$companyId) {
+            return false;
+        }
+
+        $key = $companyId . '|' . $date->format('Y-m');
+        self::$holidayMonths[$key] ??= Holiday::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('is_optional', false)
+            ->whereBetween('holiday_date', [$date->copy()->startOfMonth()->toDateString(), $date->copy()->endOfMonth()->toDateString()])
+            ->pluck('holiday_date')
+            ->mapWithKeys(fn ($d) => [Carbon::parse($d)->toDateString() => true])
+            ->all();
+
+        return isset(self::$holidayMonths[$key][$date->toDateString()]);
+    }
+
+    /**
+     * Overtime is automatic (time worked past the shift end), hard-capped per day, never needs
+     * approval, and is zero on a weekly off or holiday.
+     */
+    public function calculateOvertimeHours(Attendance $attendance, ?Shift $shift, ?string $companyId = null): float
     {
         if (!$attendance->check_out || !$shift || !$shift->end_time) {
+            return 0.0;
+        }
+
+        if ($this->isNonWorkingDay($attendance, $shift, $companyId)) {
             return 0.0;
         }
 

@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\Shift;
+use App\Services\ShiftResolver;
 use App\Models\User;
 use App\Services\AttendanceCalculator;
 use App\Services\AttendancePolicyResolver;
@@ -20,7 +21,7 @@ class AttendanceController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Attendance::with('employee.shift');
+        $query = Attendance::with('employee');
         $this->scopeToCompany($request, $query, 'employee.user');
         if ($this->isLineManagerOnly($request)) {
             $query->whereHas('employee', fn ($q) => $this->scopeToOwnTeam($q, $request));
@@ -108,7 +109,7 @@ class AttendanceController extends Controller
         }
 
         $policy = AttendancePolicy::forEmployee(Employee::find($validated['employee_id']));
-        $shift = $this->getEmployeeShift((int) $validated['employee_id']);
+        $shift = $this->getEmployeeShift((int) $validated['employee_id'], $validated['date']);
         $status = $validated['status'] ?? 'present';
 
         if (!empty($validated['check_in'])) {
@@ -175,7 +176,10 @@ class AttendanceController extends Controller
         }
 
         $policy = AttendancePolicy::forEmployee($attendance->employee);
-        $shift = $attendance->employee?->effectiveShift();
+        // The shift the day was frozen with; only a record moved to another date is judged by that date's shift.
+        $shift = $date === Carbon::parse($attendance->date)->toDateString()
+            ? $attendance->judgingShift()
+            : ($attendance->employee ? app(ShiftResolver::class)->on($attendance->employee, $date)->shift : null);
 
         // Judge the times the record will end up with, not just the ones in this request:
         // moving only the check-in past the stored check-out is just as invalid.
@@ -379,7 +383,7 @@ class AttendanceController extends Controller
             $checkOut = ($row['check_out'] ?? '') !== '' ? $calc->resolveCheckOut($date, $checkIn, $row['check_out']) : null;
             if ($checkIn) {
                 $policy = AttendancePolicy::forEmployee($employee);
-                $shift = $employee->effectiveShift();
+                $shift = app(ShiftResolver::class)->on($employee, $date)->shift;
                 $status = $calc->deriveStatusFromCheckIn($policy, $shift, $checkIn, $status);
                 if ($checkOut) {
                     $status = $this->closedDayStatus($status, $checkIn, $checkOut, $policy, $shift);
@@ -435,7 +439,7 @@ class AttendanceController extends Controller
             ->groupBy('status')
             ->get();
 
-        $records = Attendance::with('employee.shift')
+        $records = Attendance::with('employee')
             ->where('employee_id', $employeeId)
             ->whereMonth('date', $month)
             ->whereYear('date', $year)
@@ -508,10 +512,14 @@ class AttendanceController extends Controller
         $attendance = Attendance::where('employee_id', $validated['employee_id'])->whereDate('date', $today)->first();
         $employee = Employee::find($validated['employee_id']);
         $policy = AttendancePolicy::forEmployee($employee);
-        $shift = $employee?->effectiveShift();
+        $resolver = app(ShiftResolver::class);
+        $shift = $employee ? $resolver->on($employee, $today)->shift : null;
         $now = Carbon::now();
 
-        if (!$attendance && $this->attendanceCalculator()->isOvernightShift($shift)) {
+        // Overnight if today's shift runs past midnight, or last night's did (the open record is then still today's).
+        $overnight = $this->attendanceCalculator()->isOvernightShift($shift)
+            || ($employee && $this->attendanceCalculator()->isOvernightShift($resolver->on($employee, $today->copy()->subDay())->shift));
+        if (!$attendance && $overnight) {
             $open = $this->findOpenPreviousDayRecord((int) $validated['employee_id'], $now);
             if ($open) {
                 return $this->ok($open, 'Already checked in (night shift in progress)');
@@ -591,7 +599,7 @@ class AttendanceController extends Controller
                 $attendance->check_in->toDateTimeString(),
                 $update['check_out'],
                 AttendancePolicy::forEmployee($attendance->employee),
-                $attendance->employee?->effectiveShift()
+                $attendance->judgingShift()
             );
         }
 
@@ -721,7 +729,7 @@ class AttendanceController extends Controller
             return collect();
         }
 
-        return Attendance::with('employee.shift')
+        return Attendance::with('employee')
             ->whereIn('employee_id', $employeeIds)
             ->whereMonth('date', $month)->whereYear('date', $year)
             ->whereNotNull('check_in')->whereNotNull('check_out')
@@ -951,7 +959,7 @@ class AttendanceController extends Controller
             $update['status'] = $calc->recomputeStatus(
                 $preview,
                 AttendancePolicy::forEmployee($attendance->employee),
-                $attendance->employee?->effectiveShift()
+                $attendance->judgingShift()
             );
         } elseif ($validated['correction_status'] === 'approved') {
             // No new times proposed: the reviewer accepted the employee's explanation
@@ -977,9 +985,12 @@ class AttendanceController extends Controller
         return new AttendanceCalculator();
     }
 
-    private function getEmployeeShift(int $employeeId)
+    /** The shift the employee is scheduled on for a date (roster, rotation, swap or override before their default). */
+    private function getEmployeeShift(int $employeeId, string $date)
     {
-        return Employee::find($employeeId)?->effectiveShift();
+        $employee = Employee::find($employeeId);
+
+        return $employee ? app(ShiftResolver::class)->on($employee, $date)->shift : null;
     }
 
     private function authorizeAttendanceAccess(Request $request, int $employeeId): void

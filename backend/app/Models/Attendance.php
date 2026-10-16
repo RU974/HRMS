@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Models\AttendancePolicy;
 use App\Services\AttendanceCalculator;
+use App\Services\ScheduledShift;
+use App\Services\ShiftResolver;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
 
@@ -30,6 +32,8 @@ class Attendance extends Model
         'check_in',
         'check_out',
         'date',
+        'shift_id',
+        'shift_snapshot',
         'status',
         'status_reason',
         'source',
@@ -49,10 +53,18 @@ class Attendance extends Model
         'check_in' => 'datetime',
         'check_out' => 'datetime',
         'date' => 'date',
+        'shift_snapshot' => 'array',
         'work_from_home' => 'boolean',
         'correction_requested_at' => 'datetime',
         'correction_reviewed_at' => 'datetime',
     ];
+
+    protected $hidden = ['shift_snapshot'];
+
+    private ?ScheduledShift $scheduledMemo = null;
+
+    /** @var array<string, mixed>|null the snapshot $scheduledMemo was built from */
+    private ?array $scheduledMemoOf = null;
 
     protected $appends = [
         'overtime_hours',
@@ -63,6 +75,9 @@ class Attendance extends Model
         'is_short_hours',
         'shift_start_time',
         'shift_end_time',
+        'shift_name',
+        'shift_source',
+        'is_scheduled_off',
     ];
 
     protected static function booted(): void
@@ -70,6 +85,14 @@ class Attendance extends Model
         // Remember whether a half day / absence came from the policy or from a person, so a
         // later correction of the punches re-evaluates the first kind and keeps the second.
         static::saving(function (Attendance $attendance) {
+            // The shift the day was judged against is frozen on the record the first time it is
+            // saved (and again if the record moves to another day or person), so changing a shift,
+            // roster or default later never re-judges a day that already happened.
+            if ($attendance->employee_id && $attendance->date
+                && ($attendance->shift_snapshot === null || $attendance->isDirty(['date', 'employee_id']))) {
+                $attendance->captureShift();
+            }
+
             // A person's override stays until they (or a correction) change the status again.
             if ($attendance->status_reason === self::REASON_MANUAL
                 && ($attendance->isDirty('status_reason') || !$attendance->isDirty('status'))) {
@@ -86,7 +109,7 @@ class Attendance extends Model
             $derived = (new AttendanceCalculator())->ruleStatus(
                 $attendance,
                 AttendancePolicy::forEmployee($employee),
-                $employee?->effectiveShift()
+                $attendance->judgingShift()
             );
             $attendance->status_reason = $derived === $attendance->status ? self::REASON_POLICY : null;
         });
@@ -108,9 +131,55 @@ class Attendance extends Model
         return $this->leave_id !== null;
     }
 
+    /** Freeze the shift the employee is scheduled on for this record's date. */
+    public function captureShift(?ScheduledShift $schedule = null): void
+    {
+        $employee = $this->employee;
+        $schedule ??= $employee ? app(ShiftResolver::class)->on($employee, $this->date) : null;
+        if (!$schedule) {
+            return;
+        }
+
+        $this->shift_id = $schedule->shift?->id;
+        $this->shift_snapshot = $schedule->toSnapshot();
+    }
+
+    /**
+     * What the employee was scheduled to do on this record's day: read from the frozen snapshot, or
+     * (for a record that has none yet) worked out from today's roster without saving it.
+     */
+    public function scheduledShift(): ScheduledShift
+    {
+        // Several appended attributes ask for this per row; build it once per snapshot.
+        $snapshot = $this->shift_snapshot;
+        if ($snapshot && $this->scheduledMemo !== null && $this->scheduledMemoOf === $snapshot) {
+            return $this->scheduledMemo;
+        }
+
+        $stored = ScheduledShift::fromSnapshot($snapshot);
+        if ($stored) {
+            $this->scheduledMemo = $stored;
+            $this->scheduledMemoOf = $snapshot;
+
+            return $stored;
+        }
+
+        $employee = $this->employee;
+
+        return $employee && $this->date
+            ? app(ShiftResolver::class)->on($employee, $this->date)
+            : new ScheduledShift(null, true, ScheduledShift::SOURCE_NONE);
+    }
+
+    /** The shift (department grace applied) this day is judged against. */
+    public function judgingShift(): ?Shift
+    {
+        return $this->scheduledShift()->shift;
+    }
+
     public function getOvertimeHoursAttribute(): float
     {
-        return (new AttendanceCalculator())->calculateOvertimeHours($this, $this->employee?->shift);
+        return (new AttendanceCalculator())->calculateOvertimeHours($this, $this->judgingShift());
     }
 
     public function getDurationHoursAttribute(): float
@@ -120,31 +189,47 @@ class Attendance extends Model
 
     public function getShiftStartTimeAttribute(): ?string
     {
-        $time = $this->employee?->shift?->start_time;
+        $time = $this->judgingShift()?->start_time;
 
         return $time ? substr((string) $time, 0, 5) : null;
     }
 
+    public function getShiftNameAttribute(): ?string
+    {
+        return $this->judgingShift()?->name;
+    }
+
+    public function getShiftSourceAttribute(): string
+    {
+        return $this->scheduledShift()->source;
+    }
+
+    /** The day was a rest day (weekly off or day off in a roster) for this employee. */
+    public function getIsScheduledOffAttribute(): bool
+    {
+        return !$this->scheduledShift()->isWorkingDay;
+    }
+
     public function getShiftEndTimeAttribute(): ?string
     {
-        $time = $this->employee?->shift?->end_time;
+        $time = $this->judgingShift()?->end_time;
 
         return $time ? substr((string) $time, 0, 5) : null;
     }
 
     public function getIsEarlyArrivalAttribute(): bool
     {
-        return (new AttendanceCalculator())->isEarlyArrival($this, $this->employee?->shift);
+        return (new AttendanceCalculator())->isEarlyArrival($this, $this->judgingShift());
     }
 
     public function getIsLateArrivalAttribute(): bool
     {
-        return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::forEmployee($this->employee), $this->employee?->effectiveShift());
+        return (new AttendanceCalculator())->isLateArrival($this, AttendancePolicy::forEmployee($this->employee), $this->judgingShift());
     }
 
     public function getIsEarlyLeaveAttribute(): bool
     {
-        return (new AttendanceCalculator())->isEarlyLeave($this, AttendancePolicy::forEmployee($this->employee), $this->employee?->effectiveShift());
+        return (new AttendanceCalculator())->isEarlyLeave($this, AttendancePolicy::forEmployee($this->employee), $this->judgingShift());
     }
 
     public function getIsShortHoursAttribute(): bool

@@ -32,6 +32,8 @@ class Shift extends Model
         // Changing a shift's working days changes which leave days are real working days.
         static::updated(function (Shift $shift): void {
             if ($shift->wasChanged('working_days')) {
+                // "updated" fires before the resolver's own "saved" listener empties its caches.
+                app(\App\Services\ShiftResolver::class)->flush();
                 app(\App\Services\LeaveAttendanceSync::class)->syncShift((int) $shift->id);
             }
         });

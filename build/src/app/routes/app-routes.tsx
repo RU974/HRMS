@@ -34,6 +34,8 @@ const EmployeeDocumentsPage = lazy(() => import("@/modules/employee-documents").
 const DepartmentsPage = lazy(() => import("@/modules/departments").then((m) => ({ default: m.DepartmentsPage })));
 const DesignationsPage = lazy(() => import("@/modules/designations").then((m) => ({ default: m.DesignationsPage })));
 const ShiftsPage = lazy(() => import("@/modules/shifts").then((m) => ({ default: m.ShiftsPage })));
+const TeamSchedulePage = lazy(() => import("@/modules/shifts").then((m) => ({ default: m.TeamSchedulePage })));
+const MySchedulePage = lazy(() => import("@/modules/shifts").then((m) => ({ default: m.MySchedulePage })));
 const DevicesListPage = lazy(() => import("@/modules/biometric-devices").then((m) => ({ default: m.DevicesListPage })));
 const SyncLogsPage = lazy(() => import("@/modules/biometric-devices").then((m) => ({ default: m.SyncLogsPage })));
 const DeviceMappingPage = lazy(() => import("@/modules/biometric-devices").then((m) => ({ default: m.DeviceMappingPage })));
@@ -85,6 +87,7 @@ export const appRouter = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard",                 element: <DashboardPage /> },
       { path: "profile",                   element: <ProfilePage /> },
+      { path: "my-schedule",               element: <MySchedulePage /> },
       { path: "employees",                 element: withPermission(<EmployeesPage />,              ["employees:view", "employees:edit"]) },
       { path: "employees/new",             element: withPermission(<EmployeeFormPage />,           ["employees:create"]) },
       { path: "employees/:id/edit",        element: withPermission(<EmployeeFormPage />,           ["employees:edit"]) },
@@ -115,6 +118,7 @@ export const appRouter = createBrowserRouter([
       { path: "departments",               element: withPermission(<DepartmentsPage />,           ["settings:manage_settings"]) },
       { path: "designations",              element: withPermission(<DesignationsPage />,          ["settings:manage_settings"]) },
       { path: "shifts",                    element: withPermission(<ShiftsPage />,                ["attendance:edit"]) },
+      { path: "team-schedule",             element: withPermission(<TeamSchedulePage />,          ["employees:view"]) },
       { path: "holidays",                  element: withPermission(<HolidaysPage />,              ["attendance:edit"]) },
       { path: "performance",               element: withPermission(<PerformancePage />,           ["performance:view", "performance:manage_settings"]) },
       { path: "performance/reviews",       element: withPermission(<PerformanceReviewsPage />,    ["performance:view", "performance:manage_settings"]) },

@@ -16,7 +16,7 @@ import {
   createDeduction,
   deleteDeduction,
   listDeductions,
-  listPayroll,
+  listAllPayroll,
   updateDeduction,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
@@ -56,7 +56,7 @@ export function DeductionsTab() {
 
   const deductionsQ = useQuery({ queryKey: ["payroll", "deductions"], queryFn: async () => (await listDeductions()).data ?? [] });
   const employeesQ  = useQuery({ queryKey: ["payroll", "employees"],  queryFn: async () => (await getEmployeeOptions()).data ?? [] });
-  const payrollsQ   = useQuery({ queryKey: ["payroll", "base"],       queryFn: async () => (await listPayroll()).data ?? [] });
+  const payrollsQ   = useQuery({ queryKey: ["payroll", "base"],       queryFn: () => listAllPayroll() });
 
   const { sorted: deductions, sort, toggle: toggleSort } = useTableSort(deductionsQ.data ?? [], "employee", {
     employee: (d) => d.employee?.name, amount: (d) => Number(d.amount),

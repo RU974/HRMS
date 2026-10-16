@@ -145,7 +145,10 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 | `AttendanceController` | Attendance records, correction requests |
 | `BiometricDeviceController` | Device CRUD, agent push/sync/discovery endpoints |
 | `HolidayController` | Holiday management |
-| `ShiftController` | Shift management |
+| `ShiftController` | Shift management (edits reach today onward; `apply_from` re-judges earlier records; a shift in use cannot be deleted) |
+| `ShiftScheduleController` | Roster grid (`shifts/schedule`), `my-schedule`, roster assignments (date ranges, bulk, overlap trimmed/split) and one-day overrides / days off |
+| `ShiftRotationController` | Rotations: a repeating pattern of days (shift or day off) followed from an anchor date |
+| `ShiftSwapController` | One-day swaps: request -> colleague accepts -> manager/HR approves -> overrides written; `shift-swaps/colleagues` for the picker |
 | `LeaveController` | Leave request CRUD |
 | `LeaveTypeController` | Leave type CRUD |
 | `LeaveBlackoutController` | Blackout period management |
@@ -226,6 +229,11 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 | `ReportAnalyticsService` | Advanced analytics aggregation |
 | `ReportExportService` | PDF/CSV export generation |
 | `ScopeService` | Cross-module query scope utilities |
+| `ShiftResolver` | The single answer to "which shift is this person on, on this date?": override/swap, then roster assignment (fixed shift or rotation), then the employee default. Request-scoped caches; `preload()` for bulk jobs |
+| `ScheduledShift` | Result of the resolver (shift with department grace applied, working-day flag, source); also rebuilt from an attendance snapshot |
+| `ShiftScheduleService` | Writes to the schedule (assign/trim, overrides, swaps) and returns warnings (rest < 8h, leave, holiday, joining date) |
+| `ShiftAttendanceSync` | After a schedule change: re-syncs leave, re-captures snapshots, re-derives status, drops auto-absences on days now off, marks new absences. Never reaches past days unless asked (override on that day, `apply_from`, `apply_to_past`) |
+| `ShiftNotificationService` | In-app notifications for swaps and roster changes (never throws) |
 | `TaxCalculator` | Tax bracket computation |
 | `ThemeSettingsService` | Theme read/write |
 | `TicketNotificationService` | Ticket event notifications |
@@ -289,6 +297,14 @@ All major models carry a `company_id` column. Every query on company-scoped reso
 - Designed to run every 15 minutes via Windows Task Scheduler or Linux cron
 - Pushes to `POST /api/auth/biometric-agent/push`, `POST /api/auth/biometric-agent/sync-users`, `POST /api/auth/biometric-agent/discovered-devices`
 - Device registration and employee mapping are managed from the HRMS web UI (biometric-devices module)
+
+## Shift scheduling
+
+- An employee's `shift_id` is only the **default**. The effective shift for a date comes from `ShiftResolver` (override/swap > roster assignment or rotation > default). Never read `employee->shift` to judge a particular day; use `$employee->scheduleOn($date)` or, for a record, `$attendance->judgingShift()`.
+- Every `attendances` row freezes the shift it was judged against in `shift_id` + `shift_snapshot` (name, times, overnight flag, grace with the department override, `is_working_day`, source). Late/early/overtime/missing-check-out read the snapshot, so editing a shift, a roster or an employee's default does not re-judge past days. Records without a snapshot (none after the backfill migration) fall back to today's schedule.
+- Schedule changes reach today and later automatically. Earlier days change only on purpose: a one-day override on that date, `PUT shifts/{id}` with `apply_from`, `apply_to_past` on a roster assignment, or `attendance:recalculate-status --resnapshot`. At most 120 past days are re-judged per call.
+- A rotation slot with no shift is a day off and a slot with a shift is a working day regardless of the shift's `working_days`; a fixed shift on a roster still follows its `working_days`.
+- Permissions: `attendance:edit` writes rosters, rotations and overrides; reading other people's rosters needs `attendance:edit|approve|manage_settings` or being a line manager (team only); every employee can read their own `my-schedule` and ask/answer/withdraw swaps. A swap is decided by `attendance:edit`/company admin or the requester's line manager, never by the two people involved. Unsettled swaps are cancelled by `shifts:expire-swaps` (daily).
 
 ## Access control
 

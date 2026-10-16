@@ -40,6 +40,9 @@ class AppServiceProvider extends ServiceProvider
         // Policies are looked up per company; scoped so each request/job reads them once.
         $this->app->scoped(\App\Services\AttendancePolicyResolver::class);
 
+        // Which shift someone is on, per date; its small caches live for one request / job.
+        $this->app->scoped(\App\Services\ShiftResolver::class);
+
         //
     }
 
@@ -48,6 +51,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Anything that can change who is on which shift empties the resolver's caches.
+        foreach ([
+            \App\Models\Shift::class, \App\Models\ShiftDepartmentGrace::class, \App\Models\ShiftAssignment::class,
+            \App\Models\ShiftOverride::class, \App\Models\ShiftRotation::class, \App\Models\ShiftRotationSlot::class,
+            \App\Models\Employee::class,
+        ] as $model) {
+            foreach (['saved', 'deleted'] as $event) {
+                Event::listen("eloquent.{$event}: {$model}", fn () => app(\App\Services\ShiftResolver::class)->flush());
+            }
+        }
+
         // Replace the built-in Reverb driver with one that never lets a websocket
         // outage turn a successful request into a 500 (see the class for details).
         Broadcast::extend('reverb', function ($app, array $config) {

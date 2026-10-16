@@ -82,11 +82,17 @@ function SourceBadge({ source }: { source?: string | null }) {
 
 // Hours elapsed since check-in and time left until the shift ends, for open records.
 function ShiftProgress({ item, now }: { item: AttendanceItem; now: Date }) {
-  if (!item.check_in || item.check_out) return <span className="text-[var(--muted)]">—</span>;
+  // The shift the day was judged against (frozen on the record), not whatever the employee is on today.
+  const planned = item.is_scheduled_off
+    ? <p className="text-xs text-[var(--muted)]">Day off{item.shift_source && item.shift_source !== "default" && item.shift_source !== "none" ? ` (${item.shift_source})` : ""}</p>
+    : item.shift_name
+      ? <p className="text-xs text-[var(--muted)]">{item.shift_name}{item.shift_start_time && item.shift_end_time ? ` ${item.shift_start_time}–${item.shift_end_time}` : ""}</p>
+      : null;
+  if (!item.check_in || item.check_out) return planned ?? <span className="text-[var(--muted)]">—</span>;
 
   const checkIn = new Date(item.check_in.replace(" ", "T"));
   const elapsedMs = now.getTime() - checkIn.getTime();
-  if (Number.isNaN(elapsedMs) || elapsedMs < 0) return <span className="text-[var(--muted)]">—</span>;
+  if (Number.isNaN(elapsedMs) || elapsedMs < 0) return planned ?? <span className="text-[var(--muted)]">—</span>;
 
   const fmt = (ms: number) => {
     const mins = Math.floor(ms / 60000);
@@ -106,6 +112,7 @@ function ShiftProgress({ item, now }: { item: AttendanceItem; now: Date }) {
 
   return (
     <div className="text-xs leading-tight">
+      {planned}
       <p className="font-semibold text-[var(--text)]">{fmt(elapsedMs)} on shift</p>
       {endLabel && (
         <p className={remaining !== null && remaining <= 0 ? "text-amber-600" : "text-[var(--muted)]"}>

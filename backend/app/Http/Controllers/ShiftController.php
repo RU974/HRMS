@@ -3,7 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Department;
+use App\Models\Employee;
 use App\Models\Shift;
+use App\Models\ShiftAssignment;
+use App\Models\ShiftOverride;
+use App\Models\ShiftRotationSlot;
+use App\Services\ShiftAttendanceSync;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -68,10 +74,14 @@ class ShiftController extends Controller
             'working_days.*' => 'integer|between:1,7|distinct',
             'grace_minutes' => 'sometimes|integer|min:0|max:180',
             'is_active'     => 'sometimes|boolean',
+            // Days that already happened keep the shift they were recorded with. Pass a date to
+            // re-judge the records from that date on with the edited shift as well.
+            'apply_from'    => 'nullable|date',
             ...$this->departmentGraceRules(),
         ]);
         $graces = $validated['department_graces'] ?? null;
-        unset($validated['department_graces']);
+        $applyFrom = $validated['apply_from'] ?? null;
+        unset($validated['department_graces'], $validated['apply_from']);
 
         $shift->update($validated);
         // Only touch overrides when the client sent the key (an empty array clears them).
@@ -79,11 +89,12 @@ class ShiftController extends Controller
             $this->syncDepartmentGraces($shift, $graces ?? [], $companyId);
         }
 
-        // Grace or timing changed: refresh present/late on the recent records of this shift.
-        app(\App\Services\AttendanceStatusRecalculator::class)
-            ->recalculate(now()->subDays(31)->startOfDay(), null, (int) $shift->id);
+        // Timing, grace or working days changed: it reaches today and later (open and future records),
+        // or an earlier date when the admin asked for it. Past records keep their frozen shift otherwise.
+        $from = $applyFrom ? Carbon::parse($applyFrom)->startOfDay()->min(Carbon::today()) : Carbon::today();
+        $refreshed = app(ShiftAttendanceSync::class)->refresh(null, $from, null, (int) $shift->id, (string) $companyId);
 
-        return $this->ok($shift->load('departmentGraces'), 'Shift updated successfully');
+        return $this->ok(array_merge($shift->load('departmentGraces')->toArray(), ['applied_from' => $from->toDateString(), 'refreshed' => $refreshed]), 'Shift updated successfully');
     }
 
     public function destroy(Request $request, $id)
@@ -91,7 +102,24 @@ class ShiftController extends Controller
         $this->authorizePermission($request, 'attendance:edit');
         $query = Shift::query();
         $this->scopeToCompany($request, $query);
-        $query->findOrFail($id)->delete();
+        $shift = $query->findOrFail($id);
+
+        // Past records keep their own copy of the shift, but live schedules still point at it.
+        $uses = array_filter([
+            'employees with it as their default shift' => Employee::where('shift_id', $shift->id)->count(),
+            'roster assignments' => ShiftAssignment::withoutGlobalScopes()->where('shift_id', $shift->id)->count(),
+            'rotation slots' => ShiftRotationSlot::where('shift_id', $shift->id)->count(),
+            'day overrides or swaps from today on' => ShiftOverride::withoutGlobalScopes()->where('shift_id', $shift->id)->whereDate('date', '>=', today())->count(),
+        ]);
+        if ($uses) {
+            $detail = collect($uses)->map(fn ($n, $label) => "{$n} {$label}")->implode(', ');
+
+            return $this->fail("This shift is still in use ({$detail}). Reassign them first, or mark the shift inactive instead.", 422);
+        }
+
+        // Past overrides pointing here only describe history; the records hold their own snapshot.
+        ShiftOverride::withoutGlobalScopes()->where('shift_id', $shift->id)->delete();
+        $shift->delete();
         return $this->ok(null, 'Shift deleted successfully');
     }
 

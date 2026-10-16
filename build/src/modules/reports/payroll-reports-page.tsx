@@ -3,7 +3,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { getPayrollReportSummary } from "@/services/report-service";
-import { listPayroll, type PayrollStatus } from "@/services/payroll-service";
+import { listAllPayroll, type PayrollStatus } from "@/services/payroll-service";
 import { ReportCrudSection } from "@/modules/reports/report-crud-section";
 import { ReportDrillDownPanel } from "@/modules/reports/report-drilldown";
 import { ReportExportButtons } from "@/modules/reports/report-export-buttons";
@@ -135,7 +135,7 @@ export function PayrollReportsPage() {
         <ReportDrillDownPanel
           title={`Payroll — ${drillStatus} (${formatMonthYear(month, year)})`}
           queryKey={["reports", "payroll", "drilldown", drillStatus, month, year]}
-          queryFn={async () => (await listPayroll({ status: drillStatus as PayrollStatus, month, year })).data ?? []}
+          queryFn={() => listAllPayroll({ status: drillStatus as PayrollStatus, month, year })}
           rowKey={(row) => row.id}
           viewAllHref={`/payroll?status=${drillStatus}`}
           onClose={() => setDrillStatus(null)}

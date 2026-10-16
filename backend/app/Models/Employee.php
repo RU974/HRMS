@@ -13,9 +13,13 @@ class Employee extends Model
 {
     protected static function booted(): void
     {
-        // A new shift (working days) or joining date changes which leave days count.
+        // A new default shift or department (grace) changes the schedule from today on; days that
+        // already happened keep the shift they were recorded with. Joining date moves which leave days count.
         static::updated(function (Employee $employee): void {
-            if ($employee->wasChanged(['shift_id', 'joining_date'])) {
+            if ($employee->wasChanged(['shift_id', 'department_id'])) {
+                // The refresh re-syncs the employee's leave as well.
+                app(\App\Services\ShiftAttendanceSync::class)->refresh([(int) $employee->id], \Carbon\Carbon::today());
+            } elseif ($employee->wasChanged('joining_date')) {
                 app(\App\Services\LeaveAttendanceSync::class)->syncEmployee($employee);
             }
         });
@@ -114,6 +118,12 @@ class Employee extends Model
         $effective->grace_minutes = $shift->graceMinutesFor($this->department_id ? (int) $this->department_id : null);
 
         return $effective;
+    }
+
+    /** What this employee is scheduled to do on a date: roster, rotation, swap or override first, else their default shift. */
+    public function scheduleOn(\Carbon\CarbonInterface|string $date): \App\Services\ScheduledShift
+    {
+        return app(\App\Services\ShiftResolver::class)->on($this, $date);
     }
 
     public function manager(): BelongsTo

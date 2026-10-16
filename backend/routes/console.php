@@ -72,3 +72,8 @@ Schedule::command('calls:prune-signals')->daily();
 // Remind interviewers about missing scorecards and assignees about due onboarding tasks.
 Schedule::command('recruitment:send-reminders')->hourly();
 Schedule::command('recruitment:apply-retention')->dailyAt('02:30');
+
+// ─── Shift scheduling ───────────────────────────────────────────────────────
+
+// Cancel shift-swap requests nobody settled before the day arrived.
+Schedule::command('shifts:expire-swaps')->dailyAt('00:30');

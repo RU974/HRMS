@@ -6,7 +6,7 @@ import { FormInput } from "@/components/forms/form-input";
 import { toast } from "@/components/notifications/toast";
 import {
   createSalarySlipFromPayroll,
-  listPayroll,
+  listAllPayroll,
 } from "@/services/payroll-service";
 import { useAuthStore } from "@/store/auth-store";
 import { sel } from "./payroll-shared";
@@ -15,7 +15,7 @@ export function SalarySlipTab() {
   const queryClient = useQueryClient();
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
 
-  const payrollsQ = useQuery({ queryKey: ["payroll", "base"], queryFn: async () => (await listPayroll()).data ?? [] });
+  const payrollsQ = useQuery({ queryKey: ["payroll", "base"], queryFn: () => listAllPayroll() });
   const payrolls = payrollsQ.data ?? [];
 
   const [slipPayrollId, setSlipPayrollId] = useState(0);

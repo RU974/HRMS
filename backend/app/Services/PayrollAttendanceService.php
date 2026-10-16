@@ -15,7 +15,7 @@ use Illuminate\Support\Collection;
 /**
  * Turns a month of attendance and leave into days of unpaid time.
  *
- * Every scheduled working day of the month (shift working days, minus company holidays)
+ * Every scheduled working day of the month (the roster / rotation / swap, else the shift's working days; minus company holidays)
  * is looked at once:
  *  - before the joining date            -> unpaid
  *  - approved leave of an unpaid type   -> unpaid (0.5 for a half-day leave)
@@ -62,11 +62,12 @@ class PayrollAttendanceService
         $missingAsAbsent = (bool) $rules?->missing_punch_as_absent;
         $autoAbsent = $rules?->auto_mark_absent !== false;
         $calculator = $earlyLeaveCountsAsLate ? new AttendanceCalculator() : null;
-        $shift = $earlyLeaveCountsAsLate ? $employee->effectiveShift() : null;
 
         $monthStart = Carbon::create($year, $month, 1)->startOfDay();
         $monthEnd = $monthStart->copy()->endOfMonth()->startOfDay();
         $lastJudged = Carbon::yesterday()->min($monthEnd);
+        // Rosters, rotations and swaps decide which days are scheduled; read them once for the month.
+        app(ShiftResolver::class)->preload(collect([$employee]), $monthStart, $monthEnd);
 
         $attendances ??= Attendance::query()
             ->where('employee_id', $employee->id)
@@ -130,7 +131,7 @@ class PayrollAttendanceService
                 } else {
                     $unpaidLeave += 0.5;
                 }
-                if ($hasPunch && ($row->status === 'late' || ($calculator && $calculator->isEarlyLeave($row, $rules, $shift)))) {
+                if ($hasPunch && ($row->status === 'late' || ($calculator && $calculator->isEarlyLeave($row, $rules, $row->judgingShift())))) {
                     $lates++;
                 }
                 continue;
@@ -147,7 +148,7 @@ class PayrollAttendanceService
                         $absent++;
                     }
                 } else {
-                    if ($row->status === 'late' || ($calculator && $row->check_out && $calculator->isEarlyLeave($row, $rules, $shift))) {
+                    if ($row->status === 'late' || ($calculator && $row->check_out && $calculator->isEarlyLeave($row, $rules, $row->judgingShift()))) {
                         $lates++;
                     }
                 }

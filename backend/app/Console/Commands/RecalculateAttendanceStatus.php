@@ -8,9 +8,9 @@ use Illuminate\Console\Command;
 
 class RecalculateAttendanceStatus extends Command
 {
-    protected $signature = 'attendance:recalculate-status {--from= : First date (default 31 days ago)} {--to= : Last date} {--shift= : Only this shift id} {--apply : Write the changes (default is a dry run)}';
+    protected $signature = 'attendance:recalculate-status {--from= : First date (default 31 days ago)} {--to= : Last date} {--shift= : Only this shift id} {--resnapshot : Re-judge against the current roster and shift instead of the shift each record was made under} {--apply : Write the changes (default is a dry run)}';
 
-    protected $description = 'Re-derive present/late status from check-in times using the current shift and department grace periods';
+    protected $description = 'Re-derive present/late status from check-in times (against each record frozen shift, or the current roster with --resnapshot)';
 
     public function handle(AttendanceStatusRecalculator $recalculator): int
     {
@@ -24,7 +24,9 @@ class RecalculateAttendanceStatus extends Command
             $this->option('shift') ? (int) $this->option('shift') : null,
             $apply,
             fn ($record, $status) => $this->line(sprintf('#%d employee %d %s: %s -> %s',
-                $record->id, $record->employee_id, $record->date->toDateString(), $record->status, $status))
+                $record->id, $record->employee_id, $record->date->toDateString(), $record->status, $status)),
+            null,
+            (bool) $this->option('resnapshot')
         );
 
         $this->info(($apply ? 'Updated' : 'Would update') . " {$changed} record(s).");

@@ -20,6 +20,10 @@ class Holiday extends Model
         };
         static::saved($resync);
         static::deleted($resync);
+
+        // Overtime is zero on a holiday; the calculator caches holiday dates per month.
+        static::saved(fn () => \App\Services\AttendanceCalculator::flushHolidayCache());
+        static::deleted(fn () => \App\Services\AttendanceCalculator::flushHolidayCache());
     }
 
     protected $fillable = [

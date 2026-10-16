@@ -1,6 +1,6 @@
-import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SortableTh, type SortState } from "@/components/tables/use-table-sort";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,7 +11,9 @@ import { Modal } from "@/components/modals/modal";
 import { toast } from "@/components/notifications/toast";
 import { getEmployeeOptions } from "@/services/employee-service";
 import {
+  type PayrollFilters,
   type PayrollRecord,
+  type PayrollStatus,
   approvePayroll,
   createPayroll,
   deletePayroll,
@@ -60,16 +62,62 @@ export function PayrollRecordsTab() {
   const canManage = useAuthStore(s => s.hasPermission("payroll:manage_settings"));
 
   const employeesQ = useQuery({ queryKey: ["payroll", "employees"], queryFn: async () => (await getEmployeeOptions()).data ?? [] });
-  const payrollsQ  = useQuery({ queryKey: ["payroll", "base"],      queryFn: async () => (await listPayroll()).data ?? [] });
+
+  // ── List: filters, sorting and paging all run on the server ───────────────
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<PayrollStatus | "">("");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
+  const [sort, setSort] = useState<SortState>({ key: "period", dir: "desc" });
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const month = Number(monthFilter);
+  const year = Number(yearFilter);
+  const filters: PayrollFilters = {
+    page,
+    per_page: perPage,
+    search: search || undefined,
+    status: statusFilter || undefined,
+    month: month >= 1 && month <= 12 ? month : undefined,
+    year: year >= 2000 ? year : undefined,
+    sort_by: sort.key as PayrollFilters["sort_by"],
+    sort_dir: sort.dir,
+  };
+
+  const payrollsQ = useQuery({
+    queryKey: ["payroll", "records", filters],
+    queryFn: () => listPayroll(filters),
+    placeholderData: keepPreviousData,
+  });
 
   const employees = employeesQ.data ?? [];
-  const { sorted: payrolls, sort, toggle: toggleSort } = useTableSort(payrollsQ.data ?? [], "employee", {
-    emp_id: (p) => p.employee?.employee_number,
-    employee: (p) => p.employee?.name,
-    period: (p) => p.year * 100 + p.month,
-    base_salary: (p) => Number(p.base_salary),
-    net_salary: (p) => Number(p.net_salary),
-  });
+  const payrolls = payrollsQ.data?.data ?? [];
+  const total = payrollsQ.data?.total ?? 0;
+  const totalPages = Math.max(1, payrollsQ.data?.last_page ?? 1);
+  const rangeFrom = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const rangeTo = Math.min(total, (page - 1) * perPage + payrolls.length);
+
+  // Deleting the last row of the last page (or narrowing a filter) can leave us past the end.
+  useEffect(() => {
+    if (payrollsQ.data && page > totalPages) setPage(totalPages);
+  }, [payrollsQ.data, page, totalPages]);
+
+  function toggleSort(key: string) {
+    setSort(prev => (prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+    setPage(1);
+  }
+
+  function changeFilter(apply: () => void) {
+    apply();
+    setPage(1);
+  }
 
   // ── Generate modal ─────────────────────────────────────────────────────────
   const [genModal, setGenModal] = useState(false);
@@ -78,7 +126,7 @@ export function PayrollRecordsTab() {
   const genMut = useMutation({
     mutationFn: () => generatePayrollAndWait({ month: genMonth, year: genYear }),
     onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] });
+      await queryClient.invalidateQueries({ queryKey: ["payroll"] });
       toast.success("Payroll generated", `${result.created} created, ${result.skipped} skipped, ${result.failed} failed.`);
       setGenModal(false);
     },
@@ -128,37 +176,37 @@ export function PayrollRecordsTab() {
   // carries the components that feed it — never a manually-entered total.
   const payrollCreate = useMutation({
     mutationFn: (values: PayrollRecordFormValues) => createPayroll(values),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll created", "Payroll record created successfully."); setPayrollModal(false); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll"] }); toast.success("Payroll created", "Payroll record created successfully."); setPayrollModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const payrollUpdate = useMutation({
     mutationFn: (values: PayrollRecordFormValues) => updatePayroll(payrollEdit!.id, { base_salary: values.base_salary, allowances: values.allowances, bonus: values.bonus, commission: values.commission, deductions: values.deductions, tax: values.tax, payment_date: values.payment_date }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Payroll updated", "Payroll record updated successfully."); setPayrollModal(false); },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["payroll"] }); toast.success("Payroll updated", "Payroll record updated successfully."); setPayrollModal(false); },
     onError: (e: Error) => toast.error("Save failed", e.message),
   });
 
   const payrollDelete = useMutation({
     mutationFn: deletePayroll,
-    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Deleted", "Payroll record removed."); },
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll"] }); toast.success("Deleted", "Payroll record removed."); },
     onError: (e: Error) => toast.error("Delete failed", e.message),
   });
 
   const payrollPaid = useMutation({
     mutationFn: markPayrollPaid,
-    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Marked as paid", "Payroll has been marked as paid."); },
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll"] }); toast.success("Marked as paid", "Payroll has been marked as paid."); },
     onError: (e: Error) => toast.error("Action failed", e.message),
   });
 
   const payrollApprov = useMutation({
     mutationFn: approvePayroll,
-    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Approved", "Payroll has been approved."); },
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll"] }); toast.success("Approved", "Payroll has been approved."); },
     onError: (e: Error) => toast.error("Approval failed", e.message),
   });
 
   const payrollReject = useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) => rejectPayroll(id, reason),
-    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll", "base"] }); toast.success("Rejected", "Payroll sent back to draft."); },
+    onSuccess: async () => { queryClient.invalidateQueries({ queryKey: ["payroll"] }); toast.success("Rejected", "Payroll sent back to draft."); },
     onError: (e: Error) => toast.error("Reject failed", e.message),
   });
 
@@ -172,10 +220,38 @@ export function PayrollRecordsTab() {
             <Button variant="outline" className="text-xs" onClick={() => void handleExport()} disabled={exporting}>{exporting ? "Exporting…" : "⬇ Bank CSV Export"}</Button>
           </div>
           <Button variant="outline" className="text-xs" onClick={() => setGenModal(true)}>⚡ Generate Payroll</Button>
-          <Button variant="outline" className="text-xs" onClick={() => void handleSummaryPdf()} disabled={pdfLoading || payrolls.length === 0}>{pdfLoading ? "Generating…" : "⬇ Payroll PDF"}</Button>
+          <Button variant="outline" className="text-xs" onClick={() => void handleSummaryPdf()} disabled={pdfLoading || total === 0}>{pdfLoading ? "Generating…" : "⬇ Payroll PDF"}</Button>
           <Button className="ml-auto text-xs" onClick={() => { setPayrollEdit(null); resetPayroll(emptyPayrollForm); setPayrollModal(true); }}>+ Manual Entry</Button>
         </div>
       )}
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-[var(--muted)]">Search</label>
+          <input type="search" value={searchInput} onChange={e => setSearchInput(e.target.value)} placeholder="Employee name or ID" className="h-9 w-56 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-[var(--muted)]">Status</label>
+          <select value={statusFilter} onChange={e => changeFilter(() => setStatusFilter(e.target.value as PayrollStatus | ""))} className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm">
+            <option value="">All statuses</option>
+            {(["draft", "reviewed", "approved", "paid", "pending", "processed", "cancelled"] as PayrollStatus[]).map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-[var(--muted)]">Period month</label>
+          <select value={monthFilter} onChange={e => changeFilter(() => setMonthFilter(e.target.value))} className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm">
+            <option value="">All months</option>
+            {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-[var(--muted)]">Period year</label>
+          <input type="number" min={2000} value={yearFilter} onChange={e => changeFilter(() => setYearFilter(e.target.value))} placeholder="All" className="h-9 w-24 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm" />
+        </div>
+        {(searchInput || statusFilter || monthFilter || yearFilter) && (
+          <Button variant="outline" className="text-xs" onClick={() => { setSearchInput(""); setSearch(""); setStatusFilter(""); setMonthFilter(""); setYearFilter(""); setPage(1); }}>Clear filters</Button>
+        )}
+      </div>
 
       <div className="overflow-x-auto">
         <table className="rtable w-full text-sm">
@@ -228,12 +304,33 @@ export function PayrollRecordsTab() {
                 </td>
               </tr>
             ))}
-            {!payrollsQ.isLoading && payrolls.length === 0 && (
-              <tr><td colSpan={8}className="p-8 text-center text-sm text-[var(--muted)]">No payroll records. Generate payroll or add manually.</td></tr>
+            {payrollsQ.isError && (
+              <tr><td colSpan={8} className="p-8 text-center text-sm text-red-600">Could not load payroll records. {(payrollsQ.error as Error)?.message}</td></tr>
+            )}
+            {!payrollsQ.isLoading && !payrollsQ.isError && payrolls.length === 0 && (
+              <tr><td colSpan={8} className="p-8 text-center text-sm text-[var(--muted)]">{search || statusFilter || monthFilter || yearFilter ? "No payroll records match these filters." : "No payroll records. Generate payroll or add manually."}</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+          <p className="text-xs text-[var(--muted)]">
+            Showing {rangeFrom}–{rangeTo} of {total} record{total === 1 ? "" : "s"} · Page {page} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-[var(--muted)]" htmlFor="payroll-per-page">Per page</label>
+            <select id="payroll-per-page" value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }} className="h-8 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs">
+              {[10, 25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <Button variant="outline" className="text-xs px-3 py-1.5" disabled={page <= 1} onClick={() => setPage(1)} aria-label="First page">«</Button>
+            <Button variant="outline" className="text-xs px-3 py-1.5" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Prev</Button>
+            <Button variant="outline" className="text-xs px-3 py-1.5" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next →</Button>
+            <Button variant="outline" className="text-xs px-3 py-1.5" disabled={page >= totalPages} onClick={() => setPage(totalPages)} aria-label="Last page">»</Button>
+          </div>
+        </div>
+      )}
 
       {/* Generate modal */}
       {genModal && (

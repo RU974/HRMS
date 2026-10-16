@@ -148,7 +148,8 @@ class DashboardController extends Controller
                 'status' => $employee->status,
                 'department' => $employee->department?->only(['id', 'name']),
                 'designation' => $employee->designationRef?->only(['id', 'name']),
-                'shift' => $employee->shift?->only(['id', 'name']),
+                // Today's shift (roster, rotation, swap or override before the default), not just the default.
+                'shift' => $employee->scheduleOn(today())->shift?->only(['id', 'name']),
                 'manager' => $employee->manager?->only(['id', 'name']),
             ],
             'attendance' => [
