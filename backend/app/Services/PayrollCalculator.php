@@ -13,15 +13,20 @@ class PayrollCalculator
 {
     protected TaxCalculator $taxCalculator;
 
+    protected PayrollAttendanceService $attendanceService;
+
     public function __construct()
     {
         $this->taxCalculator = new TaxCalculator();
+        $this->attendanceService = new PayrollAttendanceService();
     }
 
     /**
      * Calculate payroll components for an employee for a given month/year.
      * Returns associative array: base_salary, allowances, bonuses_total, overtime_pay,
-     * deductions_total, tax, net_salary
+     * deductions_total, attendance_deduction, tax, net_salary.
+     * $preloadedAttendances must hold every attendance row of the employee for the month
+     * (open ones too): absences, half days and lates are read from them.
      */
     public function calculateForEmployee(
         $employee,
@@ -30,7 +35,8 @@ class PayrollCalculator
         ?\Illuminate\Support\Collection $preloadedBonuses = null,
         ?\Illuminate\Support\Collection $preloadedDeductions = null,
         ?\Illuminate\Support\Collection $preloadedAttendances = null,
-        ?\Illuminate\Support\Collection $preloadedCommissions = null
+        ?\Illuminate\Support\Collection $preloadedCommissions = null,
+        ?\Illuminate\Support\Collection $preloadedLeaves = null
     ): array {
         // basic_salary defaults to 0 (not null) for employees created before that
         // column existed, so "?? $employee->salary" never actually falls back —
@@ -64,7 +70,6 @@ class PayrollCalculator
         $attendances = $preloadedAttendances ?? Attendance::where('employee_id', $employee->id)
             ->whereYear('date', $year)
             ->whereMonth('date', $month)
-            ->whereNotNull('check_out')
             ->get();
 
         $overtimeHours = 0.0;
@@ -93,6 +98,9 @@ class PayrollCalculator
 
         $calculator = new AttendanceCalculator();
         foreach ($attendances as $att) {
+            if (!$att->check_out) {
+                continue;
+            }
             $overtimeHours += $calculator->calculateOvertimeHours($att, $shift);
         }
 
@@ -101,13 +109,17 @@ class PayrollCalculator
         $overtimeMultiplier = config('payroll.overtime_multiplier', 1.5);
         $overtimePay = round($overtimeHours * $hourlyRate * $overtimeMultiplier, 2);
 
+        // Absences, unpaid leave, half days, lates and days before joining cost pay.
+        $attendanceSummary = $this->attendanceService->summarize($employee, $month, $year, $attendances, $preloadedLeaves);
+        $attendanceDeduction = $this->attendanceService->amount($baseSalary, $attendanceSummary);
+
         $gross = $baseSalary + $allowances + $bonusesTotal + $commissionTotal + $overtimePay;
 
-        // taxable components: base, taxable bonuses, commission, overtime
-        $taxableAmount = $baseSalary + $taxableBonuses + $commissionTotal + $overtimePay;
+        // taxable components: base earned (after attendance deduction), taxable bonuses, commission, overtime
+        $taxableAmount = max(0, $baseSalary - $attendanceDeduction) + $taxableBonuses + $commissionTotal + $overtimePay;
         $tax = $this->taxCalculator->calculate($taxableAmount, $employee->company_id ?? null);
 
-        $net = round(max(0, $gross - $deductionsTotal - $tax), 2);
+        $net = round(max(0, $gross - $deductionsTotal - $attendanceDeduction - $tax), 2);
 
         return [
             'base_salary' => round($baseSalary, 2),
@@ -118,6 +130,9 @@ class PayrollCalculator
             'overtime_pay' => $overtimePay,
             'deductions' => round($deductionsTotal, 2),
             'loan_deductions' => round($loanDeductions, 2),
+            'attendance_deduction' => $attendanceDeduction,
+            'unpaid_days' => (float) $attendanceSummary['unpaid_days'],
+            'attendance_summary' => $attendanceSummary,
             'tax' => $tax,
             'gross' => round($gross, 2),
             'net_salary' => $net,

@@ -18,6 +18,9 @@ class Payroll extends Model
         'overtime_hours',
         'overtime_pay',
         'deductions',
+        'attendance_deduction',
+        'unpaid_days',
+        'attendance_summary',
         'tax',
         'net_salary',
         'payment_date',
@@ -31,6 +34,7 @@ class Payroll extends Model
     ];
 
     protected $casts = [
+        'attendance_summary' => 'array',
         'approved_at' => 'datetime',
         'paid_at'     => 'datetime',
         'rejected_at' => 'datetime',

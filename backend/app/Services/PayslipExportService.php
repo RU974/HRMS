@@ -35,8 +35,11 @@ class PayslipExportService
         }
         $deductions = [
             'Deductions' => (float) ($payroll->deductions ?? 0),
-            'Tax' => (float) ($payroll->tax ?? 0),
         ];
+        if ((float) ($payroll->attendance_deduction ?? 0) > 0) {
+            $deductions['Absence / unpaid leave'] = (float) $payroll->attendance_deduction;
+        }
+        $deductions['Tax'] = (float) ($payroll->tax ?? 0);
 
         $employeeName = $employee?->name
             ?? (trim(($employee?->first_name ?? '') . ' ' . ($employee?->last_name ?? '')) ?: '—');

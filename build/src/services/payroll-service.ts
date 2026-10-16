@@ -12,6 +12,20 @@ export interface PayrollEmployee {
   employee_number?: string | null;
 }
 
+export interface PayrollAttendanceSummary {
+  scheduled_days: number;
+  absent_days: number;
+  half_days: number;
+  late_count: number;
+  late_blocks: number;
+  paid_leave_days: number;
+  unpaid_leave_days: number;
+  pre_joining_days: number;
+  missing_punch_days: number;
+  unpaid_days: number;
+  attendance_tracked: boolean;
+}
+
 export interface PayrollRecord {
   id: number;
   employee_id: number;
@@ -24,6 +38,10 @@ export interface PayrollRecord {
   overtime_hours: number | string;
   overtime_pay: number | string;
   deductions: number | string;
+  /** Pay withheld for absences, unpaid leave, half days, lates and days before joining. */
+  attendance_deduction?: number | string;
+  unpaid_days?: number | string;
+  attendance_summary?: PayrollAttendanceSummary | null;
   tax: number | string;
   net_salary: number | string;
   payment_date: string;

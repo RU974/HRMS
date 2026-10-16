@@ -8,6 +8,7 @@ use App\Models\Bonus;
 use App\Models\Commission;
 use App\Models\Deduction;
 use App\Models\Employee;
+use App\Models\Leave;
 use App\Models\LoanAdvance;
 use App\Models\Payroll;
 use App\Models\PayrollProcessing;
@@ -87,7 +88,14 @@ class GeneratePayrollJob implements ShouldQueue
                 $allAttendances = Attendance::whereIn('employee_id', $this->employeeIds)
                     ->whereYear('date', $this->year)
                     ->whereMonth('date', $this->month)
-                    ->whereNotNull('check_out')
+                    ->get()
+                    ->groupBy('employee_id');
+
+                $monthStart = Carbon::create($this->year, $this->month, 1)->startOfMonth();
+                $allLeaves = Leave::whereIn('employee_id', $this->employeeIds)
+                    ->where('status', 'approved')
+                    ->whereDate('from_date', '<=', $monthStart->copy()->endOfMonth()->toDateString())
+                    ->whereDate('to_date', '>=', $monthStart->toDateString())
                     ->get()
                     ->groupBy('employee_id');
 
@@ -108,6 +116,7 @@ class GeneratePayrollJob implements ShouldQueue
                             $employeeDeductions,
                             $allAttendances->get($employee->id, collect()),
                             $employeeCommissions,
+                            $allLeaves->get($employee->id, collect()),
                         );
 
                         $payroll = Payroll::create([
@@ -121,6 +130,9 @@ class GeneratePayrollJob implements ShouldQueue
                             'overtime_hours' => $components['overtime_hours'],
                             'overtime_pay' => $components['overtime_pay'],
                             'deductions' => $components['deductions'],
+                            'attendance_deduction' => $components['attendance_deduction'],
+                            'unpaid_days' => $components['unpaid_days'],
+                            'attendance_summary' => $components['attendance_summary'],
                             'tax' => $components['tax'],
                             'net_salary' => $components['net_salary'],
                             'status' => Payroll::STATUS_DRAFT,

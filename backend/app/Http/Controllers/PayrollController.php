@@ -6,6 +6,7 @@ use App\Jobs\GeneratePayrollJob;
 use App\Models\BackgroundRun;
 use App\Models\Employee;
 use App\Models\Payroll;
+use App\Models\PayrollAttendancePolicy;
 use App\Models\PayrollProcessing;
 use App\Models\User;
 use App\Services\PayrollNotificationService;
@@ -67,6 +68,7 @@ class PayrollController extends Controller
             'overtime_hours' => 'nullable|numeric|min:0',
             'overtime_pay'   => 'nullable|numeric|min:0',
             'deductions'     => 'nullable|numeric|min:0',
+            'attendance_deduction' => 'nullable|numeric|min:0',
             'tax'            => 'nullable|numeric|min:0',
             'payment_date'   => 'nullable|date',
             'status'         => 'nullable|in:' . implode(',', Payroll::lifecycleStates()),
@@ -81,6 +83,7 @@ class PayrollController extends Controller
         $validated['overtime_hours'] = $validated['overtime_hours'] ?? 0;
         $validated['overtime_pay'] = $validated['overtime_pay'] ?? 0;
         $validated['deductions'] = $validated['deductions'] ?? 0;
+        $validated['attendance_deduction'] = $validated['attendance_deduction'] ?? 0;
         $validated['tax'] = $validated['tax'] ?? 0;
         // net_salary is always derived server-side rather than trusted from the
         // client — manual entry previously let base/allowances/bonus/deductions/tax
@@ -146,12 +149,17 @@ class PayrollController extends Controller
             'overtime_hours' => 'nullable|numeric|min:0',
             'overtime_pay'   => 'nullable|numeric|min:0',
             'deductions'     => 'nullable|numeric|min:0',
+            'attendance_deduction' => 'nullable|numeric|min:0',
             'tax'            => 'nullable|numeric|min:0',
             'payment_date'   => 'nullable|date',
         ]);
 
+        if (array_key_exists('attendance_deduction', $validated)) {
+            $validated['attendance_deduction'] = $validated['attendance_deduction'] ?? 0;
+        }
+
         $merged = array_merge($payroll->only([
-            'base_salary', 'allowances', 'bonus', 'commission', 'overtime_pay', 'deductions', 'tax',
+            'base_salary', 'allowances', 'bonus', 'commission', 'overtime_pay', 'deductions', 'attendance_deduction', 'tax',
         ]), $validated);
         $validated['net_salary'] = $this->computeNetSalary($merged);
 
@@ -232,6 +240,7 @@ class PayrollController extends Controller
                 SUM(commission)        AS total_commission,
                 SUM(overtime_pay)      AS total_overtime,
                 SUM(deductions)        AS total_deductions,
+                SUM(attendance_deduction) AS total_attendance_deduction,
                 SUM(tax)               AS total_tax,
                 SUM(net_salary)        AS total_net_salary
             ')
@@ -297,6 +306,49 @@ class PayrollController extends Controller
         GeneratePayrollJob::dispatchSync($run->id, $employeeIds, $month, $year, $processing->id);
 
         return $this->ok(['background_run_id' => $run->id], 'Payroll generation has been queued.', 202);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  GET|PUT /api/payroll/attendance-policy   (payroll:manage_settings)
+    //  How absences, unpaid leave, half days and lates reduce pay.
+    // ──────────────────────────────────────────────────────────────
+    public function attendancePolicy(Request $request)
+    {
+        $this->authorizePermission($request, 'payroll:manage_settings');
+
+        return $this->ok(PayrollAttendancePolicy::settingsFor($this->policyCompanyId($request)));
+    }
+
+    public function updateAttendancePolicy(Request $request)
+    {
+        $this->authorizePermission($request, 'payroll:manage_settings');
+
+        $validated = $request->validate([
+            'enabled'                 => 'sometimes|boolean',
+            'absent_deduction_days'   => 'sometimes|numeric|min:0|max:5',
+            'half_day_deduction_days' => 'sometimes|numeric|min:0|max:1',
+            'lates_per_deduction'     => 'sometimes|integer|min:0|max:31',
+            'late_deduction_days'     => 'sometimes|numeric|min:0|max:5',
+        ]);
+
+        $companyId = $this->policyCompanyId($request);
+        if (!$companyId) {
+            return $this->fail('Your account is not linked to a company.', 422);
+        }
+
+        PayrollAttendancePolicy::updateOrCreate(
+            ['company_id' => $companyId],
+            array_merge(PayrollAttendancePolicy::settingsFor($companyId), $validated)
+        );
+
+        return $this->ok(PayrollAttendancePolicy::settingsFor($companyId), 'Attendance pay policy saved. It applies to payroll generated from now on.');
+    }
+
+    private function policyCompanyId(Request $request): ?string
+    {
+        $id = $request->user()?->company_id;
+
+        return $id ? (string) $id : null;
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -452,7 +504,8 @@ class PayrollController extends Controller
             'bonus'      => $sum('bonus'),
             'commission' => $sum('commission'),
             'overtime'   => $sum('overtime_pay'),
-            'deductions' => $sum('deductions'),
+            // Includes pay withheld for absences / unpaid leave so the columns still add up to net.
+            'deductions' => $sum('deductions') + $sum('attendance_deduction'),
             'tax'        => $sum('tax'),
             'net'        => $sum('net_salary'),
         ];
@@ -528,7 +581,8 @@ class PayrollController extends Controller
             + (float) ($components['commission'] ?? 0)
             + (float) ($components['overtime_pay'] ?? 0);
 
-        $net = $gross - (float) ($components['deductions'] ?? 0) - (float) ($components['tax'] ?? 0);
+        $net = $gross - (float) ($components['deductions'] ?? 0)
+            - (float) ($components['attendance_deduction'] ?? 0) - (float) ($components['tax'] ?? 0);
 
         return round(max(0, $net), 2);
     }

@@ -55,7 +55,7 @@
                     <td class="r">{{ number_format((float) $p->bonus, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->commission, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->overtime_pay, 2) }}</td>
-                    <td class="r">{{ number_format((float) $p->deductions, 2) }}</td>
+                    <td class="r">{{ number_format((float) $p->deductions + (float) $p->attendance_deduction, 2) }}</td>
                     <td class="r">{{ number_format((float) $p->tax, 2) }}</td>
                     <td class="r"><strong>{{ number_format((float) $p->net_salary, 2) }}</strong></td>
                     <td>{{ ucfirst($p->status) }}</td>

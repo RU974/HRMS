@@ -122,7 +122,7 @@ export function PayrollRecordsTab() {
   });
 
   const [watchedBase, watchedAllowances, watchedBonus, watchedCommission, watchedDeductions, watchedTax] = watchPayroll(["base_salary", "allowances", "bonus", "commission", "deductions", "tax"]);
-  const previewNet = Math.max(0, Number(watchedBase) + Number(watchedAllowances) + Number(watchedBonus) + Number(watchedCommission) - Number(watchedDeductions) - Number(watchedTax));
+  const previewNet = Math.max(0, Number(watchedBase) + Number(watchedAllowances) + Number(watchedBonus) + Number(watchedCommission) - Number(watchedDeductions) - Number(payrollEdit?.attendance_deduction ?? 0) - Number(watchedTax));
 
   // net_salary is always computed server-side now, so the payload only ever
   // carries the components that feed it — never a manually-entered total.
@@ -273,8 +273,16 @@ export function PayrollRecordsTab() {
                 <SummaryCard label={`Overtime (${fmt(Number(payrollDetail.overtime_hours ?? 0))} hrs)`} value={fmt(Number(payrollDetail.overtime_pay))} />
               )}
               <SummaryCard label="Deductions" value={fmt(Number(payrollDetail.deductions))} />
+              {Number(payrollDetail.attendance_deduction ?? 0) > 0 && (
+                <SummaryCard label={`Absence / unpaid leave (${fmt(Number(payrollDetail.unpaid_days ?? 0))} days)`} value={fmt(Number(payrollDetail.attendance_deduction))} />
+              )}
               <SummaryCard label="Tax" value={fmt(Number(payrollDetail.tax))} />
             </div>
+            {payrollDetail.attendance_summary && Number(payrollDetail.attendance_deduction ?? 0) > 0 && (
+              <div className="rounded-lg bg-[var(--background)] p-2 text-xs text-[var(--muted)]">
+                Of {payrollDetail.attendance_summary.scheduled_days} working days: {payrollDetail.attendance_summary.absent_days} absent, {payrollDetail.attendance_summary.unpaid_leave_days} unpaid leave, {payrollDetail.attendance_summary.half_days} half day(s), {payrollDetail.attendance_summary.late_count} late ({payrollDetail.attendance_summary.late_blocks} penalised){payrollDetail.attendance_summary.pre_joining_days > 0 ? `, ${payrollDetail.attendance_summary.pre_joining_days} before joining` : ""}.
+              </div>
+            )}
             {payrollDetail.rejection_reason && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                 Rejected: {payrollDetail.rejection_reason}
