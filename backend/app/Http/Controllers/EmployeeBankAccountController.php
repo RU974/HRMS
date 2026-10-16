@@ -19,7 +19,7 @@ class EmployeeBankAccountController extends Controller
             $query->where('employee_id', (int) $request->query('employee_id'));
         }
 
-        return $this->ok($query->paginate(20));
+        return $this->ok($query->paginate($this->perPage($request, 20)));
     }
 
     public function store(Request $request)

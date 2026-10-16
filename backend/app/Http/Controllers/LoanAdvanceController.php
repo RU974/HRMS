@@ -26,7 +26,7 @@ class LoanAdvanceController extends Controller
             $query->where('type', $request->query('type'));
         }
 
-        return $this->ok($query->paginate(20));
+        return $this->ok($query->paginate($this->perPage($request, 20)));
     }
 
     public function store(Request $request)

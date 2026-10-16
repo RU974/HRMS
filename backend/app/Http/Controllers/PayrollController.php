@@ -327,8 +327,15 @@ class PayrollController extends Controller
         $month = (int) $validated['month'];
         $year  = (int) $validated['year'];
 
+        $periodEnd = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->toDateString();
+
+        // Active employees who had joined by the end of the period. Someone starting next
+        // month has no pay for this one.
         $employeeQuery = Employee::query()
-            ->where('status', 'active');
+            ->where('status', 'active')
+            ->where(function ($q) use ($periodEnd): void {
+                $q->whereNull('joining_date')->orWhere('joining_date', '<=', $periodEnd);
+            });
 
         $this->scopeToCompany($request, $employeeQuery);
 

@@ -86,6 +86,8 @@ export interface PayrollGenerateResult {
   created: number;
   skipped: number;
   failed: number;
+  /** Employees left out because no salary is set on their record. */
+  no_salary?: number;
 }
 
 export interface BackgroundRunHandle {
@@ -256,6 +258,24 @@ function qs(params: Record<string, string | number | undefined> | PayrollFilters
   return `?${new URLSearchParams(entries.map(([key, value]) => [key, String(value)])).toString()}`;
 }
 
+/**
+ * Fetch every page of a paginated list endpoint (max 200 per page) and return it in the
+ * same shape a single page has, so callers keep reading `.data`. Without this the API's
+ * default page size silently hides everything past the first 15-20 rows.
+ */
+async function fetchAllPages<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<PaginationMeta<T>> {
+  const all: T[] = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const res = await apiClient<PaginationMeta<T>>(`${path}${qs({ ...params, page, per_page: 200 })}`);
+    all.push(...(res.data ?? []));
+    lastPage = res.last_page ?? 1;
+    page += 1;
+  } while (page <= lastPage);
+  return { data: all, current_page: 1, last_page: 1, total: all.length };
+}
+
 export function listPayroll(filters: PayrollFilters = {}) {
   return apiClient<PaginationMeta<PayrollRecord>>(`/payroll${qs(filters)}`);
 }
@@ -316,7 +336,7 @@ export function getPayrollMonthlySummary(month: number, year: number) {
 }
 
 export function listPayrollProcessings(month?: number, year?: number, status?: PayrollProcessing["status"]) {
-  return apiClient<PaginationMeta<PayrollProcessing>>(`/payroll-processings${qs({ month, year, status })}`);
+  return fetchAllPages<PayrollProcessing>("/payroll-processings", { month, year, status });
 }
 export function createPayrollProcessing(payload: Omit<PayrollProcessing, "id">) {
   return apiClient<PayrollProcessing>("/payroll-processings", { method: "POST", body: JSON.stringify(payload) });
@@ -329,7 +349,7 @@ export function deletePayrollProcessing(id: number) {
 }
 
 export function listBonuses() {
-  return apiClient<PaginationMeta<Bonus>>("/bonuses");
+  return fetchAllPages<Bonus>("/bonuses");
 }
 export function createBonus(payload: Omit<Bonus, "id" | "employee">) {
   return apiClient<Bonus>("/bonuses", { method: "POST", body: JSON.stringify(payload) });
@@ -342,7 +362,7 @@ export function deleteBonus(id: number) {
 }
 
 export function listCommissions() {
-  return apiClient<PaginationMeta<Commission>>("/commissions");
+  return fetchAllPages<Commission>("/commissions");
 }
 export function createCommission(payload: { employee_id: number; business_amount: number; effective_date: string; notes?: string | null }) {
   return apiClient<Commission>("/commissions", { method: "POST", body: JSON.stringify(payload) });
@@ -352,7 +372,7 @@ export function deleteCommission(id: number) {
 }
 
 export function listDeductions() {
-  return apiClient<PaginationMeta<Deduction>>("/deductions");
+  return fetchAllPages<Deduction>("/deductions");
 }
 export function createDeduction(payload: Omit<Deduction, "id" | "employee">) {
   return apiClient<Deduction>("/deductions", { method: "POST", body: JSON.stringify(payload) });
@@ -365,7 +385,7 @@ export function deleteDeduction(id: number) {
 }
 
 export function listPayslips() {
-  return apiClient<PaginationMeta<Payslip>>("/payslips");
+  return fetchAllPages<Payslip>("/payslips");
 }
 export function createPayslip(payload: Omit<Payslip, "id" | "employee" | "payroll">) {
   return apiClient<Payslip>("/payslips", { method: "POST", body: JSON.stringify(payload) });
@@ -445,7 +465,7 @@ export function deleteSalaryGrade(id: number) {
 }
 
 export function listSalaryIncrements(filters: { employee_id?: number } = {}) {
-  return apiClient<PaginationMeta<SalaryIncrement>>(`/salary-increments${qs(filters)}`);
+  return fetchAllPages<SalaryIncrement>("/salary-increments", filters);
 }
 export function createSalaryIncrement(payload: Omit<SalaryIncrement, "id" | "employee" | "increment_percent_computed">) {
   return apiClient<SalaryIncrement>("/salary-increments", { method: "POST", body: JSON.stringify(payload) });
@@ -458,7 +478,7 @@ export function deleteSalaryIncrement(id: number) {
 }
 
 export function listLoanAdvances(filters: { employee_id?: number; status?: string; type?: LoanAdvanceType } = {}) {
-  return apiClient<PaginationMeta<LoanAdvance>>(`/loan-advances${qs(filters)}`);
+  return fetchAllPages<LoanAdvance>("/loan-advances", filters);
 }
 export function createLoanAdvance(payload: Omit<LoanAdvance, "id" | "company_id" | "employee">) {
   return apiClient<LoanAdvance>("/loan-advances", { method: "POST", body: JSON.stringify(payload) });
@@ -467,7 +487,7 @@ export function updateLoanAdvance(id: number, payload: Partial<Omit<LoanAdvance,
   return apiClient<LoanAdvance>(`/loan-advances/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 }
 export function listEmployeeBankAccounts() {
-  return apiClient<PaginationMeta<EmployeeBankAccount>>("/employee-bank-accounts");
+  return fetchAllPages<EmployeeBankAccount>("/employee-bank-accounts");
 }
 export function createEmployeeBankAccount(payload: EmployeeBankAccountPayload) {
   return apiClient<EmployeeBankAccount>("/employee-bank-accounts", { method: "POST", body: JSON.stringify(payload) });

@@ -23,7 +23,7 @@ class CommissionController extends Controller
             $query->where('employee_id', $employeeId);
         }
 
-        return $this->ok($query->latest('effective_date')->latest('id')->paginate(15));
+        return $this->ok($query->latest('effective_date')->latest('id')->paginate($this->perPage($request, 15)));
     }
 
     /**

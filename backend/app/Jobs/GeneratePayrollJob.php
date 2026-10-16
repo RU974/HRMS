@@ -55,8 +55,9 @@ class GeneratePayrollJob implements ShouldQueue
             $created = 0;
             $skipped = 0;
             $failed = 0;
+            $noSalary = 0;
 
-            DB::transaction(function () use ($calculator, &$created, &$skipped, &$failed) {
+            DB::transaction(function () use ($calculator, &$created, &$skipped, &$failed, &$noSalary) {
                 $this->ensureLoanEmiDeductions($this->employeeIds, $this->month, $this->year);
                 $this->ensureSalaryDeductionAdvances($this->employeeIds, $this->month, $this->year);
 
@@ -120,6 +121,13 @@ class GeneratePayrollJob implements ShouldQueue
                             $allLeaves->get($employee->id, collect()),
                         );
 
+                        // No salary on file: a 0-pay record would only look like a successful run.
+                        // Reported in the summary so someone can fix the employee and re-generate.
+                        if ($components['base_salary'] <= 0) {
+                            $noSalary++;
+                            continue;
+                        }
+
                         $payroll = Payroll::create([
                             'employee_id' => $employee->id,
                             'month' => $this->month,
@@ -162,10 +170,10 @@ class GeneratePayrollJob implements ShouldQueue
 
             $run->update([
                 'status' => BackgroundRun::STATUS_DONE,
-                'summary' => compact('created', 'skipped', 'failed'),
+                'summary' => ['created' => $created, 'skipped' => $skipped, 'failed' => $failed, 'no_salary' => $noSalary],
             ]);
 
-            $this->updateProcessingStatus('completed', "Generated {$created}, skipped {$skipped}, failed {$failed}.");
+            $this->updateProcessingStatus('completed', "Generated {$created}, skipped {$skipped}, failed {$failed}" . ($noSalary ? ", {$noSalary} without a salary" : '') . '.');
         } catch (\Throwable $e) {
             $run->update([
                 'status' => BackgroundRun::STATUS_FAILED,

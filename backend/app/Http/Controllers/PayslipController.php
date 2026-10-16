@@ -51,7 +51,7 @@ class PayslipController extends Controller
             $query->where('status', $request->query('status'));
         }
 
-        return $this->ok($query->latest()->paginate(15));
+        return $this->ok($query->latest()->paginate($this->perPage($request, 15)));
     }
 
     public function store(Request $request)

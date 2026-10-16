@@ -93,10 +93,11 @@ class PayrollCalculator
         ?\Illuminate\Support\Collection $preloadedCommissions = null,
         ?\Illuminate\Support\Collection $preloadedLeaves = null
     ): array {
-        // basic_salary defaults to 0 (not null) for employees created before that
-        // column existed, so "?? $employee->salary" never actually falls back —
-        // 0 is not null. Use "?:" so a zero/unset basic_salary falls back too.
-        $baseSalary = (float) ($employee->basic_salary ?: $employee->salary ?: 0);
+        // basic_salary defaults to 0.00 (not null) for employees created before that column
+        // existed, so "?? $employee->salary" never falls back. Neither does "?:": the decimal
+        // column comes back as the string "0.00", which PHP treats as truthy. Compare numerically.
+        $basicSalary = (float) $employee->basic_salary;
+        $baseSalary = $basicSalary > 0 ? $basicSalary : (float) ($employee->salary ?? 0);
         $allowances = (float) ($employee->allowances ?? 0);
 
         $bonuses = $preloadedBonuses ?? Bonus::where('employee_id', $employee->id)

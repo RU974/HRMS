@@ -44,7 +44,7 @@ class BonusController extends Controller
             $query->where('payroll_id', (int) $request->query('payroll_id'));
         }
 
-        return $this->ok($query->latest()->paginate(15));
+        return $this->ok($query->latest()->paginate($this->perPage($request, 15)));
     }
 
     public function store(Request $request)

@@ -317,4 +317,14 @@ abstract class Controller
         }
         $query->where(fn ($q) => $q->whereNull('company_id')->orWhere('company_id', $companyId));
     }
+
+    /**
+     * Page size for list endpoints: the client's `per_page` (1-200) or the given default.
+     */
+    protected function perPage(Request $request, int $default = 15): int
+    {
+        $requested = (int) $request->query('per_page', $default);
+
+        return max(1, min(200, $requested ?: $default));
+    }
 }

@@ -127,7 +127,8 @@ export function PayrollRecordsTab() {
     mutationFn: () => generatePayrollAndWait({ month: genMonth, year: genYear }),
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["payroll"] });
-      toast.success("Payroll generated", `${result.created} created, ${result.skipped} skipped, ${result.failed} failed.`);
+      const noSalary = result.no_salary ?? 0;
+      toast.success("Payroll generated", `${result.created} created, ${result.skipped} skipped, ${result.failed} failed.${noSalary ? ` ${noSalary} employee${noSalary === 1 ? " has" : "s have"} no salary set and ${noSalary === 1 ? "was" : "were"} left out.` : ""}`);
       setGenModal(false);
     },
     onError: (e: Error) => toast.error("Generation failed", e.message),

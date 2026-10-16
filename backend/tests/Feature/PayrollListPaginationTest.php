@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\Bonus;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\Payroll;
@@ -96,5 +97,23 @@ class PayrollListPaginationTest extends TestCase
         $this->getJson('/api/v1/payroll?search=Person 07')->assertOk()->assertJsonPath('data.total', 1);
         $this->getJson('/api/v1/payroll?search=E-02')->assertOk()->assertJsonPath('data.total', 10);
         $this->getJson('/api/v1/payroll?search=%25')->assertOk()->assertJsonPath('data.total', 0);
+    }
+
+    public function test_related_payroll_lists_honour_per_page_and_clamp_it(): void
+    {
+        $manager = $this->seedPayrolls(20);
+        Sanctum::actingAs($manager);
+
+        foreach (Employee::all() as $employee) {
+            Bonus::create(['employee_id' => $employee->id, 'title' => 'Spot', 'amount' => 100, 'taxable' => false, 'effective_date' => '2026-10-05']);
+        }
+
+        // Default page size is unchanged...
+        $this->getJson('/api/v1/bonuses')->assertOk()->assertJsonCount(15, 'data.data')->assertJsonPath('data.total', 20);
+        // ...but a client can ask for everything in one go,
+        $this->getJson('/api/v1/bonuses?per_page=200')->assertOk()->assertJsonCount(20, 'data.data');
+        // and an absurd size is clamped rather than loading the whole table.
+        $this->getJson('/api/v1/bonuses?per_page=100000')->assertOk()->assertJsonPath('data.per_page', 200);
+        $this->getJson('/api/v1/bonuses?per_page=0')->assertOk()->assertJsonPath('data.per_page', 15);
     }
 }

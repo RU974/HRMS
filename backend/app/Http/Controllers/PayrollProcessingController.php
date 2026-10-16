@@ -28,7 +28,7 @@ class PayrollProcessingController extends Controller
             $query->where('status', $request->query('status'));
         }
 
-        return $this->ok($query->paginate(15));
+        return $this->ok($query->paginate($this->perPage($request, 15)));
     }
 
     // ──────────────────────────────────────────────────────────────
