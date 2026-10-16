@@ -26,6 +26,8 @@ class BiometricDevice extends Model
         'timezone',
         'status',
         'last_sync_at',
+        'stale_alerted_at',
+        'monitor_sync',
         'company_id',
     ];
 
@@ -35,6 +37,8 @@ class BiometricDevice extends Model
 
     protected $casts = [
         'last_sync_at' => 'datetime',
+        'stale_alerted_at' => 'datetime',
+        'monitor_sync' => 'boolean',
         'port' => 'integer',
         'sync_interval_minutes' => 'integer',
     ];
@@ -65,6 +69,27 @@ class BiometricDevice extends Model
         }
 
         return $plain !== null && $plain !== '' && Hash::check($plain, $this->agent_token_hash);
+    }
+
+    /**
+     * Silence longer than this means the device or agent has stopped syncing: the company's
+     * policy value when set, else three missed intervals (at least 3 hours).
+     */
+    public function staleAfterMinutes(): int
+    {
+        $custom = AttendancePolicy::forCompany($this->company_id ? (string) $this->company_id : null)?->device_stale_minutes;
+
+        return $custom ? (int) $custom : max(180, 3 * (int) ($this->sync_interval_minutes ?: 60));
+    }
+
+    public function isStale(): bool
+    {
+        if (!$this->monitor_sync) {
+            return false;
+        }
+        $since = $this->last_sync_at ?? $this->created_at;
+
+        return $since !== null && $since->lt(now()->subMinutes($this->staleAfterMinutes()));
     }
 
     public function syncLogs()

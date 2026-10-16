@@ -26,6 +26,8 @@ export interface BiometricDevice {
   timezone: string;
   status: DeviceStatus;
   last_sync_at?: string | null;
+  /** False = never alert when this device stops syncing. */
+  monitor_sync?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -43,6 +45,7 @@ export interface CreateBiometricDevicePayload {
   sync_mode: SyncMode;
   sync_interval_minutes?: number | null;
   timezone: string;
+  monitor_sync?: boolean;
 }
 
 export type UpdateBiometricDevicePayload = Partial<CreateBiometricDevicePayload>;

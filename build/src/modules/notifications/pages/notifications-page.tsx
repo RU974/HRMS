@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { FormField } from "@/components/common/form-field";
 import { FormInput } from "@/components/forms/form-input";
 import { Modal } from "@/components/modals/modal";
@@ -274,6 +275,15 @@ export function NotificationsPage() {
                   <p className="mt-1 text-sm text-[var(--muted)]">{item.message}</p>
 
                   <div className="mt-2 flex flex-wrap gap-2">
+                    {item.link && item.link.startsWith("/") && (
+                      <Link
+                        to={item.link}
+                        onClick={() => { if (!item.is_read) markReadMutation.mutate(item.id); }}
+                        className="text-xs font-medium text-[var(--primary)] hover:underline"
+                      >
+                        Open
+                      </Link>
+                    )}
                     {!item.is_read && (
                       <button
                         onClick={() => markReadMutation.mutate(item.id)}

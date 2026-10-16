@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\AttendancePolicy;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\Leave;
@@ -90,19 +91,26 @@ class AttendanceAbsenceService
             ->whereIn('status', ['present', 'late'])
             ->whereHas('employee', $employeeIds)
             ->get();
+        $zones = [];
         foreach ($noCheckOut as $record) {
             $shift = $record->judgingShift();
             $date  = Carbon::parse($record->date)->toDateString();
 
+            // Punch times are wall-clock in the company's timezone, so the deadline is judged there
+            // (the app clock itself runs in UTC).
+            $companyId = (string) $record->employee?->company_id;
+            $zones[$companyId] ??= ($companyId !== '' ? Company::find($companyId)?->timezone : null) ?: config('app.timezone');
+            $zone = $zones[$companyId];
+
             if ($shift && $shift->end_time) {
-                $shiftEnd = Carbon::parse($date . ' ' . $shift->end_time);
+                $shiftEnd = Carbon::parse($date . ' ' . $shift->end_time, $zone);
                 if ($calculator->isOvernightShift($shift)) {
                     $shiftEnd->addDay();
                 }
                 $due = $shiftEnd->addHours(self::MISSING_CHECK_OUT_BUFFER_HOURS);
             } else {
                 // No shift: the day itself has to be over.
-                $due = Carbon::parse($date)->addDay()->endOfDay();
+                $due = Carbon::parse($date, $zone)->addDay()->endOfDay();
             }
 
             if (now()->lt($due)) {

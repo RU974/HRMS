@@ -36,6 +36,7 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
     sync_mode: initial?.sync_mode ?? "scheduled",
     sync_interval_minutes: initial?.sync_interval_minutes ?? 15,
     timezone: initial?.timezone ?? "Asia/Karachi",
+    monitor_sync: initial?.monitor_sync ?? true,
   });
 
   const isTcp = form.connection_type === "tcp";
@@ -193,6 +194,19 @@ export function DeviceFormModal({ initial, onClose, onSubmit, submitting }: Devi
             ))}
           </select>
         </FormField>
+
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={form.monitor_sync ?? true}
+            onChange={(e) => update("monitor_sync", e.target.checked)}
+          />
+          <span>
+            Alert HR if this device stops syncing
+            <span className="block text-xs text-[var(--muted)]">Turn off for a device that is switched off on purpose or not in use yet.</span>
+          </span>
+        </label>
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

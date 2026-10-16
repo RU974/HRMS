@@ -14,7 +14,7 @@ class DepartmentController extends Controller
     {
         $this->authorizeAnyPermission($request, ['settings:manage_settings', 'employees:edit', 'recruitment:view']);
 
-        $query = Department::query()->withCount('employees')->orderBy('name');
+        $query = Department::query()->with('head:id,name')->withCount('employees')->orderBy('name');
         $this->scopeToCompany($request, $query);
         if ($request->boolean('include_archived')) {
             $query->withTrashed();
@@ -119,6 +119,7 @@ class DepartmentController extends Controller
                     ->where('company_id', $companyId)
                     ->whereNull('deleted_at'),
             ],
+            'head_employee_id' => $this->headRule($companyId),
         ]);
 
         $validated['company_id'] = $companyId;
@@ -143,6 +144,7 @@ class DepartmentController extends Controller
                     ->where('company_id', $companyId)
                     ->whereNull('deleted_at'),
             ],
+            'head_employee_id' => $this->headRule($companyId),
         ]);
 
         $department->update($validated);
@@ -210,5 +212,11 @@ class DepartmentController extends Controller
         $department->forceDelete();
 
         return $this->ok(null, 'Department permanently deleted successfully');
+    }
+
+    /** The head must be an employee of the same company (or empty). */
+    private function headRule($companyId): array
+    {
+        return ['nullable', 'integer', Rule::exists('employees', 'id')->where('company_id', $companyId)];
     }
 }

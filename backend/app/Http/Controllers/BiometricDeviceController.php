@@ -51,6 +51,7 @@ class BiometricDeviceController extends Controller
             $device->company_id = $request->user()->company_id;
         }
         $device->status = 'never_synced';
+        $device->monitor_sync ??= true;
         $device->save();
 
         $agentToken = $device->rotateAgentToken();
@@ -942,6 +943,7 @@ class BiometricDeviceController extends Controller
             'sync_mode' => "$required|in:realtime,scheduled",
             'sync_interval_minutes' => 'nullable|integer|min:1|max:1440',
             'timezone' => "$required|string|max:64",
+            'monitor_sync' => 'sometimes|boolean',
         ];
 
         $validated = $request->validate($rules);

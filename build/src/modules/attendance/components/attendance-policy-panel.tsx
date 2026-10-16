@@ -27,6 +27,10 @@ type Draft = {
   lates_per_absent: string;
   auto_mark_absent: boolean;
   missing_punch_as_absent: boolean;
+  alerts_enabled: boolean;
+  alerts_email: boolean;
+  late_alert_threshold: string;
+  device_stale_minutes: string;
   apply_from: string;
 };
 
@@ -49,6 +53,10 @@ function toDraft(p: AttendancePolicy): Draft {
     lates_per_absent: num(p.lates_per_absent),
     auto_mark_absent: p.auto_mark_absent,
     missing_punch_as_absent: p.missing_punch_as_absent,
+    alerts_enabled: p.alerts_enabled ?? true,
+    alerts_email: p.alerts_email ?? false,
+    late_alert_threshold: num(p.late_alert_threshold),
+    device_stale_minutes: num(p.device_stale_minutes),
     apply_from: "",
   };
 }
@@ -71,6 +79,10 @@ function validate(d: Draft): Record<string, string> {
   else if (halfLate !== null && absentLate !== null && absentLate <= halfLate) e.absent_after_late_minutes = "Must be later than the half-day limit.";
   const lates = orNull(d.lates_per_absent);
   if (lates !== null && (!Number.isInteger(lates) || lates < 0 || lates > 31)) e.lates_per_absent = "Whole number from 0 to 31.";
+  const alertLates = orNull(d.late_alert_threshold);
+  if (alertLates !== null && (!Number.isInteger(alertLates) || alertLates < 1 || alertLates > 31)) e.late_alert_threshold = "Whole number from 1 to 31.";
+  const stale = orNull(d.device_stale_minutes);
+  if (stale !== null && (!Number.isInteger(stale) || stale < 30 || stale > 10080)) e.device_stale_minutes = "Whole minutes from 30 to 10080.";
   const grace = orNull(d.early_leave_grace_minutes);
   if (grace !== null && (!Number.isInteger(grace) || grace < 0 || grace > 240)) e.early_leave_grace_minutes = "Whole minutes from 0 to 240.";
   return e;
@@ -92,6 +104,10 @@ function toPayload(d: Draft): AttendancePolicyInput & { apply_from?: string | nu
     lates_per_absent: orNull(d.lates_per_absent) ?? 0,
     auto_mark_absent: d.auto_mark_absent,
     missing_punch_as_absent: d.missing_punch_as_absent,
+    alerts_enabled: d.alerts_enabled,
+    alerts_email: d.alerts_email,
+    late_alert_threshold: orNull(d.late_alert_threshold),
+    device_stale_minutes: orNull(d.device_stale_minutes),
     apply_from: d.apply_from || null,
   };
 }
@@ -234,6 +250,23 @@ export function AttendancePolicyPanel() {
           <Toggle label="Missing punch counts as absent in payroll" hint="A day with only one punch is deducted like an absence."
             checked={draft.missing_punch_as_absent} onChange={(v) => set("missing_punch_as_absent", v)} />
         </div>
+      </Section>
+
+      <Section title="Alerts" hint="In-app notifications about attendance problems, sent in the company's local daytime (08:00 to 22:00).">
+        <div className="md:col-span-2">
+          <Toggle label="Send attendance alerts" hint="Tells the employee and their manager (or HR when there is no manager) about absences, missing punches and repeated lates, and tells HR when a biometric device stops syncing."
+            checked={draft.alerts_enabled} onChange={(v) => set("alerts_enabled", v)} />
+        </div>
+        <div className="md:col-span-2">
+          <Toggle label="Also send alerts by email" hint="Emails the same alerts to the same people. Needs outgoing mail to be set up on the server."
+            checked={draft.alerts_email} onChange={(v) => set("alerts_email", v)} />
+        </div>
+        <Field label="Warn after N lates in a month" error={errors.late_alert_threshold} hint={'Empty = same as "N lates = 1 absent" when set, otherwise 3. Repeats at every further multiple.'}>
+          {numInput("late_alert_threshold", "Automatic")}
+        </Field>
+        <Field label="Device silent for (minutes)" error={errors.device_stale_minutes} hint="Empty = three missed sync intervals, at least 3 hours. Minimum 30.">
+          {numInput("device_stale_minutes", "Automatic")}
+        </Field>
       </Section>
 
       <Card>

@@ -42,6 +42,11 @@ class UpdateAttendancePolicyRequest extends FormRequest
             'auto_mark_absent'              => 'sometimes|boolean',
             'missing_punch_as_absent'       => 'sometimes|boolean',
 
+            'alerts_enabled'                => 'sometimes|boolean',
+            'alerts_email'                  => 'sometimes|boolean',
+            'late_alert_threshold'          => 'sometimes|nullable|integer|min:1|max:31',
+            'device_stale_minutes'          => 'sometimes|nullable|integer|min:30|max:10080',
+
             // Not stored: re-judge existing records from this date once the policy is saved.
             'apply_from'                    => 'sometimes|nullable|date|before_or_equal:today',
         ];

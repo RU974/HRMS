@@ -6,6 +6,7 @@ import { getResolvedTheme, useThemeStore } from "@/store/theme-store";
 import { ToastContainer } from "@/components/notifications/toast";
 import { CallProvider } from "@/components/call/CallProvider";
 import { ChatInboxListener } from "@/components/chat/chat-inbox-listener";
+import { NotificationLiveListener } from "@/components/notifications/notification-live-listener";
 
 const queryClient = new QueryClient();
 
@@ -96,6 +97,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <CallProvider>
         <ChatInboxListener />
+        <NotificationLiveListener />
         {children}
         <ToastContainer />
       </CallProvider>

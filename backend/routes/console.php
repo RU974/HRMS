@@ -58,6 +58,12 @@ Schedule::command('biometric:sync-scheduled')->everyFiveMinutes();
 Schedule::command('attendance:sync-leaves --apply --days=35')->dailyAt('00:15');
 Schedule::command('attendance:mark-absent')->dailyAt('00:30');
 
+// Tell employees and managers about absences, missing punches and repeated lates;
+// tell HR when a device or its agent stops syncing (and when it recovers).
+// Hourly: a forgotten punch is raised the same day; each user is told once per record.
+Schedule::command('attendance:notify-exceptions')->hourly()->withoutOverlapping();
+Schedule::command('biometric:check-stale')->everyFifteenMinutes()->withoutOverlapping();
+
 // ─── Calls ────────────────────────────────────────────────────────────────
 
 // Mark unanswered calls as missed and drop participants whose client stopped

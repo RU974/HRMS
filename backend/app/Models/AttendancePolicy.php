@@ -23,6 +23,10 @@ class AttendancePolicy extends Model
         'lates_per_absent',
         'auto_mark_absent',
         'missing_punch_as_absent',
+        'alerts_enabled',
+        'alerts_email',
+        'late_alert_threshold',
+        'device_stale_minutes',
     ];
 
     protected $fillable = [
@@ -44,6 +48,10 @@ class AttendancePolicy extends Model
         'lates_per_absent' => 'integer',
         'auto_mark_absent' => 'boolean',
         'missing_punch_as_absent' => 'boolean',
+        'alerts_enabled' => 'boolean',
+        'alerts_email' => 'boolean',
+        'late_alert_threshold' => 'integer',
+        'device_stale_minutes' => 'integer',
     ];
 
     /** What a company gets when neither it nor the global default has a row. */
@@ -64,6 +72,10 @@ class AttendancePolicy extends Model
             'lates_per_absent' => 0,
             'auto_mark_absent' => true,
             'missing_punch_as_absent' => false,
+            'alerts_enabled' => true,
+            'alerts_email' => false,
+            'late_alert_threshold' => null,
+            'device_stale_minutes' => null,
         ];
     }
 

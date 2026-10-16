@@ -19,3 +19,8 @@ Broadcast::channel('call.{userId}', function ($user, $userId) {
 Broadcast::channel('chat.user.{userId}', function ($user, $userId) {
     return (int) $user->id === (int) $userId;
 });
+
+// Private per-user channel that tells the browser a new notification exists.
+Broadcast::channel('notifications.user.{userId}', function ($user, $userId) {
+    return (int) $user->id === (int) $userId;
+});

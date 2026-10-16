@@ -4,6 +4,9 @@ import { useAuthStore } from "@/store/auth-store";
 export interface DepartmentItem {
   id: number;
   name: string;
+  /** The employee who heads the department; hears about attendance exceptions of its people. */
+  head_employee_id?: number | null;
+  head?: { id: number; name: string } | null;
   employees_count?: number;
   deleted_at?: string | null;
 }
@@ -142,8 +145,8 @@ export const listDepartments = () => apiClient<DepartmentItem[]>("/departments")
 export const listDepartmentsForCompany = (companyId: string) =>
   apiClient<DepartmentItem[]>(`/departments?company_id=${companyId}`);
 export const getDepartment = (id: number) => apiClient<DepartmentDetailItem>(`/departments/${id}`);
-export const createDepartment = (payload: { name: string }) => apiClient<DepartmentItem>("/departments", { method: "POST", body: JSON.stringify(payload) });
-export const updateDepartment = (id: number, payload: { name: string }) => apiClient<DepartmentItem>(`/departments/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const createDepartment = (payload: { name: string; head_employee_id?: number | null }) => apiClient<DepartmentItem>("/departments", { method: "POST", body: JSON.stringify(payload) });
+export const updateDepartment = (id: number, payload: { name: string; head_employee_id?: number | null }) => apiClient<DepartmentItem>(`/departments/${id}`, { method: "PUT", body: JSON.stringify(payload) });
 export const deleteDepartment = (id: number) => apiClient<null>(`/departments/${id}`, { method: "DELETE" });
 
 export const listDesignations = () => apiClient<DesignationItem[]>("/designations");
@@ -486,6 +489,13 @@ export interface AttendancePolicy {
   lates_per_absent: number;
   auto_mark_absent: boolean;
   missing_punch_as_absent: boolean;
+  alerts_enabled: boolean;
+  /** Also email the alerts. */
+  alerts_email: boolean;
+  /** Lates in a month before employee and manager are warned; null = follows "N lates = 1 absent", else 3. */
+  late_alert_threshold: number | null;
+  /** Minutes of silence before a device is reported; null = automatic. */
+  device_stale_minutes: number | null;
   recalculated_records?: number | null;
 }
 

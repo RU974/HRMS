@@ -41,7 +41,9 @@ export function NotificationDropdown() {
 
   const notificationsQuery = useQuery({
     queryKey: ["notifications", "unread-count"],
-    queryFn: () => listNotifications({ read: "unread" })
+    queryFn: () => listNotifications({ read: "unread" }),
+    // Alerts are created by scheduled jobs, so pick them up without a page reload.
+    refetchInterval: 60_000
   });
 
   const announcementsQuery = useQuery({

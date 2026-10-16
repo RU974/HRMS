@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\NotificationCreated;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -23,6 +24,21 @@ class NotificationItem extends Model
     protected $casts = [
         'is_read' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        // Push every new notification to its recipient live. A websocket server that is down
+        // must never stop the notification from being saved, so failures are swallowed.
+        static::created(function (self $item): void {
+            if ($item->user_id) {
+                rescue(
+                    fn () => event(new NotificationCreated((int) $item->user_id, (int) $item->id, (string) $item->type, (string) $item->title, $item->link)),
+                    null,
+                    false
+                );
+            }
+        });
+    }
 
     public function user(): BelongsTo
     {

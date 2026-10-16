@@ -2,7 +2,7 @@ import { SortableTh, useTableSort } from "@/components/tables/use-table-sort";
 import { TimeInput24 } from "@/components/forms/time-input-24";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page-header/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -559,9 +559,30 @@ export function AttendancePage() {
   const [proposedOut, setProposedOut]   = useState("");
 
   // Records filters (dates are "YYYY-MM-DD" or "" for unbounded)
-  const [dateFrom, setDateFrom]         = useState("");
-  const [dateTo, setDateTo]             = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // Notification links arrive as /attendance?date=YYYY-MM-DD | ?month=YYYY-MM, plus &status= and &employee=.
+  const [searchParams] = useSearchParams();
+  const linkDate  = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get("date") ?? "") ? searchParams.get("date")! : "";
+  const linkMonth = /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.get("month") ?? "") ? searchParams.get("month")! : "";
+  const linkStatus = ["present", "late", "absent", "leave", "half_day", "missing_check_in", "missing_check_out"].includes(searchParams.get("status") ?? "")
+    ? searchParams.get("status")! : "";
+  const [dateFrom, setDateFrom]         = useState(linkDate || (linkMonth ? `${linkMonth}-01` : ""));
+  const [dateTo, setDateTo]             = useState(linkDate || (linkMonth
+    ? `${linkMonth}-${String(new Date(Number(linkMonth.slice(0, 4)), Number(linkMonth.slice(5, 7)), 0).getDate()).padStart(2, "0")}` : ""));
+  const [statusFilter, setStatusFilter] = useState(linkStatus);
+  const [employeeFilter, setEmployeeFilter] = useState(Number(searchParams.get("employee")) > 0 ? Number(searchParams.get("employee")) : 0);
+  // Clicking a notification while already on this page only changes the query string.
+  const linkKey = searchParams.toString();
+  useEffect(() => {
+    if (!linkKey) return;
+    setDateFrom(linkDate || (linkMonth ? `${linkMonth}-01` : ""));
+    setDateTo(linkDate || (linkMonth
+      ? `${linkMonth}-${String(new Date(Number(linkMonth.slice(0, 4)), Number(linkMonth.slice(5, 7)), 0).getDate()).padStart(2, "0")}` : ""));
+    setStatusFilter(linkStatus);
+    setEmployeeFilter(Number(searchParams.get("employee")) > 0 ? Number(searchParams.get("employee")) : 0);
+    setTab("records");
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkKey]);
   const listFilters = {
     dateFrom: dateFrom || undefined,
     dateTo:   dateTo || undefined,
@@ -593,8 +614,8 @@ export function AttendancePage() {
   }, [searchInput]);
 
   const query = useQuery({
-    queryKey: ["attendance", "list", page, seesTeam ? null : employeeId, search, dateFrom, dateTo, statusFilter],
-    queryFn: () => listAttendancePaginated(page, seesTeam ? undefined : employeeId, search || undefined, listFilters),
+    queryKey: ["attendance", "list", page, seesTeam ? (employeeFilter || null) : employeeId, search, dateFrom, dateTo, statusFilter],
+    queryFn: () => listAttendancePaginated(page, seesTeam ? (employeeFilter || undefined) : employeeId, search || undefined, listFilters),
     enabled: seesTeam || employeeId > 0,
     placeholderData: (prev) => prev,
   });
@@ -886,8 +907,8 @@ export function AttendancePage() {
                 <option value="missing_check_in">Check-in missing</option>
                 <option value="missing_check_out">Check-out missing</option>
               </select>
-              {(dateFrom || dateTo || statusFilter) && (
-                <Button variant="outline" onClick={() => { setDateFrom(""); setDateTo(""); setStatusFilter(""); setPage(1); }}>Clear</Button>
+              {(dateFrom || dateTo || statusFilter || employeeFilter > 0) && (
+                <Button variant="outline" onClick={() => { setDateFrom(""); setDateTo(""); setStatusFilter(""); setEmployeeFilter(0); setPage(1); }}>Clear</Button>
               )}
               {canExport && (
                 <Button variant="outline" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
@@ -935,7 +956,7 @@ export function AttendancePage() {
 
                 {!query.isLoading && records.length === 0 && (
                   <tr><td colSpan={colCount} className="p-10 text-center text-sm text-[var(--muted)]">
-                    {query.isError ? "Could not load attendance records." : dateFrom || dateTo || statusFilter ? "No records match these filters." : "No attendance records found."}
+                    {query.isError ? "Could not load attendance records." : dateFrom || dateTo || statusFilter || employeeFilter > 0 ? "No records match these filters." : "No attendance records found."}
                   </td></tr>
                 )}
 
