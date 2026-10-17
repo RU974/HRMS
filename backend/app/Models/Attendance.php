@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Exceptions\AttendancePeriodLockedException;
 use App\Models\AttendancePolicy;
 use App\Services\AttendanceCalculator;
+use App\Services\AttendancePeriodGuard;
 use App\Services\ScheduledShift;
 use App\Services\ShiftResolver;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class Attendance extends Model
 {
@@ -47,9 +50,26 @@ class Attendance extends Model
         'correction_requested_at',
         'correction_response_notes',
         'correction_reviewed_at',
+        'edited_by',
+        'edited_at',
+        'edited_source',
     ];
 
+    /** Fields whose change is written to attendance_histories and stamps edited_by / edited_at. */
+    public const TRACKED_FIELDS = [
+        'employee_id', 'leave_id', 'date', 'check_in', 'check_out', 'shift_id', 'status', 'status_reason',
+        'source', 'biometric_device_id', 'work_from_home', 'notes', 'correction_status',
+        'correction_request_notes', 'correction_proposed_check_in', 'correction_proposed_check_out',
+        'correction_response_notes',
+    ];
+
+    /** Who/what is writing right now (set by recordingAs); null means "the signed-in user, else the system". */
+    private static ?string $changeSource = null;
+
+    private static ?string $changeReason = null;
+
     protected $casts = [
+        'edited_at' => 'datetime',
         'check_in' => 'datetime',
         'check_out' => 'datetime',
         'date' => 'date',
@@ -59,7 +79,9 @@ class Attendance extends Model
         'correction_reviewed_at' => 'datetime',
     ];
 
-    protected $hidden = ['shift_snapshot'];
+    // The editor relation is only read for its name (edited_by_name); serialising a whole User per row
+    // would run role queries for every record in a list.
+    protected $hidden = ['shift_snapshot', 'editor'];
 
     private ?ScheduledShift $scheduledMemo = null;
 
@@ -78,10 +100,28 @@ class Attendance extends Model
         'shift_name',
         'shift_source',
         'is_scheduled_off',
+        'edited_by_name',
     ];
 
     protected static function booted(): void
     {
+        // A closed month (admin lock or payroll already run) accepts no change at all, from any
+        // writer: screens, imports, the biometric agent, leave sync, recalculation. Background
+        // writers go through saveIfOpen()/deleteIfOpen() and skip the row instead of failing.
+        static::saving(function (Attendance $attendance) {
+            if ($attendance->exists && !$attendance->isDirty()) {
+                return;
+            }
+            $guard = app(AttendancePeriodGuard::class);
+            $guard->assertOpen($attendance->employee_id, $attendance->date);
+            if ($attendance->exists && $attendance->isDirty(['date', 'employee_id'])) {
+                $guard->assertOpen($attendance->getOriginal('employee_id'), $attendance->getOriginal('date'));
+            }
+        });
+        static::deleting(function (Attendance $attendance) {
+            app(AttendancePeriodGuard::class)->assertOpen($attendance->employee_id, $attendance->date);
+        });
+
         // Remember whether a half day / absence came from the policy or from a person, so a
         // later correction of the punches re-evaluates the first kind and keeps the second.
         static::saving(function (Attendance $attendance) {
@@ -113,6 +153,145 @@ class Attendance extends Model
             );
             $attendance->status_reason = $derived === $attendance->status ? self::REASON_POLICY : null;
         });
+
+        // "Edited by / at": the last person (or background job) that changed something that matters.
+        static::saving(function (Attendance $attendance) {
+            if (!$attendance->exists || $attendance->isDirty(self::TRACKED_FIELDS)) {
+                $attendance->edited_by = self::currentActorId();
+                $attendance->edited_at = now();
+                $attendance->edited_source = self::currentSource();
+            }
+        });
+
+        static::created(fn (Attendance $a) => $a->writeHistory('created', array_filter(
+            array_map(fn ($v) => [null, $v], $a->trackedValues($a->getAttributes())),
+            fn ($pair) => $pair[1] !== null
+        )));
+        static::updated(function (Attendance $a) {
+            $changes = [];
+            foreach (array_intersect(self::TRACKED_FIELDS, array_keys($a->getChanges())) as $field) {
+                $old = self::normalise($field, $a->getRawOriginal($field));
+                $new = self::normalise($field, $a->getAttributes()[$field] ?? null);
+                if ($old !== $new) {
+                    $changes[$field] = [$old, $new];
+                }
+            }
+            if ($changes !== []) {
+                $a->writeHistory('updated', $changes);
+            }
+        });
+        static::deleted(fn (Attendance $a) => $a->writeHistory('deleted', array_filter(
+            array_map(fn ($v) => [$v, null], $a->trackedValues($a->getAttributes())),
+            fn ($pair) => $pair[0] !== null
+        )));
+    }
+
+    /**
+     * Run attendance writes on behalf of a named source (and optional reason) so the history says
+     * who changed a record: 'biometric', 'leave', 'auto_absent', 'recalculation', 'schedule', 'import', ...
+     */
+    public static function recordingAs(string $source, callable $callback, ?string $reason = null): mixed
+    {
+        [$previousSource, $previousReason] = [self::$changeSource, self::$changeReason];
+        self::$changeSource = $source;
+        self::$changeReason = $reason;
+        try {
+            return $callback();
+        } finally {
+            [self::$changeSource, self::$changeReason] = [$previousSource, $previousReason];
+        }
+    }
+
+    /** Save for a background writer: a closed month is skipped (logged) instead of raising. */
+    public function saveIfOpen(?string $source = null): bool
+    {
+        try {
+            return (bool) ($source ? self::recordingAs($source, fn () => $this->save()) : $this->save());
+        } catch (AttendancePeriodLockedException) {
+            Log::info('Attendance change skipped: period closed', ['employee_id' => $this->employee_id, 'date' => $this->date?->toDateString()]);
+
+            return false;
+        }
+    }
+
+    public function deleteIfOpen(?string $source = null): bool
+    {
+        try {
+            return (bool) ($source ? self::recordingAs($source, fn () => $this->delete()) : $this->delete());
+        } catch (AttendancePeriodLockedException) {
+            Log::info('Attendance delete skipped: period closed', ['employee_id' => $this->employee_id, 'date' => $this->date?->toDateString()]);
+
+            return false;
+        }
+    }
+
+    private static function currentActorId(): ?int
+    {
+        try {
+            return request()?->user()?->id;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private static function currentSource(): string
+    {
+        return self::$changeSource ?? (self::currentActorId() ? 'manual' : 'system');
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function trackedValues(array $attributes): array
+    {
+        $values = [];
+        foreach (self::TRACKED_FIELDS as $field) {
+            $values[$field] = self::normalise($field, $attributes[$field] ?? null);
+        }
+
+        return $values;
+    }
+
+    private static function normalise(string $field, mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+        $value = (string) $value;
+
+        return $field === 'date' ? substr($value, 0, 10) : $value;
+    }
+
+    /** @param array<string, array{0: ?string, 1: ?string}> $changes */
+    private function writeHistory(string $action, array $changes): void
+    {
+        AttendanceHistory::create([
+            'company_id' => Employee::withoutGlobalScopes()->whereKey($this->employee_id)->value('company_id'),
+            'attendance_id' => $this->id,
+            'employee_id' => $this->employee_id,
+            'date' => self::normalise('date', $this->getAttributes()['date'] ?? null) ?? now()->toDateString(),
+            'action' => $action,
+            'changes' => $changes,
+            'user_id' => self::currentActorId(),
+            'source' => self::currentSource(),
+            'reason' => self::$changeReason,
+            'created_at' => now(),
+        ]);
+    }
+
+    public function editor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'edited_by');
+    }
+
+    /** Name of whoever edited last; only filled where the list eager-loads `editor` (never queries per row). */
+    public function getEditedByNameAttribute(): ?string
+    {
+        return $this->relationLoaded('editor') ? $this->editor?->name : null;
     }
 
     public function employee(): BelongsTo

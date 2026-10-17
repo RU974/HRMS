@@ -70,6 +70,40 @@ export interface AttendanceItem {
   correction_requested_at?: string | null;
   correction_reviewed_at?: string | null;
   biometric_device_id?: number | null;
+  /** Last person (or background job, see edited_source) that changed the record. */
+  edited_at?: string | null;
+  edited_source?: string | null;
+  edited_by?: number | null;
+  edited_by_name?: string | null;
+}
+
+export interface AttendanceHistoryEntry {
+  id: number;
+  attendance_id: number | null;
+  employee_id: number;
+  date: string;
+  action: "created" | "updated" | "deleted";
+  /** field -> [old, new] */
+  changes: Record<string, [string | null, string | null]> | null;
+  user_id: number | null;
+  source: string;
+  reason: string | null;
+  created_at: string;
+  actor?: { id: number; name: string } | null;
+  employee?: { id: number; name: string; employee_number?: string | null } | null;
+}
+
+export interface AttendancePeriod {
+  year: number;
+  month: number;
+  /** Closed by an administrator. */
+  locked: boolean;
+  locked_by: { id: number; name: string } | null;
+  locked_at: string | null;
+  reason: string | null;
+  payroll_completed: boolean;
+  /** Payroll records for the month; each closes the attendance of its employee. */
+  payroll_records: number;
 }
 
 export interface LeaveItem {
@@ -193,11 +227,48 @@ export const updateHoliday = (id: number, payload: Partial<Omit<HolidayItem, "id
 export const deleteHoliday = (id: number) => apiClient<null>(`/holidays/${id}`, { method: "DELETE" });
 
 export const listAttendance = () => apiClient<PaginatedResponse<AttendanceItem>>("/attendance?per_page=50");
-export const createAttendance = (payload: { employee_id: number; date: string; check_in?: string | null; check_out?: string | null; status?: AttendanceItem["status"]; work_from_home?: boolean; notes?: string | null }) =>
+export const createAttendance = (payload: { employee_id: number; date: string; check_in?: string | null; check_out?: string | null; status?: AttendanceItem["status"]; work_from_home?: boolean; notes?: string | null; reason?: string | null }) =>
   apiClient<AttendanceItem>("/attendance", { method: "POST", body: JSON.stringify(payload) });
-export const updateAttendance = (id: number, payload: { date?: string; check_in?: string | null; check_out?: string | null; status?: AttendanceItem["status"]; work_from_home?: boolean; notes?: string | null }) =>
+export const updateAttendance = (id: number, payload: { date?: string; check_in?: string | null; check_out?: string | null; status?: AttendanceItem["status"]; work_from_home?: boolean; notes?: string | null; reason?: string | null }) =>
   apiClient<AttendanceItem>(`/attendance/${id}`, { method: "PUT", body: JSON.stringify(payload) });
-export const deleteAttendance = (id: number) => apiClient<null>(`/attendance/${id}`, { method: "DELETE" });
+export const deleteAttendance = (id: number, reason?: string | null) =>
+  apiClient<null>(`/attendance/${id}`, { method: "DELETE", body: JSON.stringify({ reason: reason || null }) });
+
+export const getAttendanceHistory = (id: number) => apiClient<AttendanceHistoryEntry[]>(`/attendance/${id}/history`);
+
+export function getAttendanceChangeLog(params: { page?: number; action?: string; dateFrom?: string; dateTo?: string }) {
+  const q = new URLSearchParams({ per_page: "25", page: String(params.page ?? 1) });
+  if (params.action) q.set("action", params.action);
+  if (params.dateFrom) q.set("date_from", params.dateFrom);
+  if (params.dateTo) q.set("date_to", params.dateTo);
+  return apiClient<PaginatedResponse<AttendanceHistoryEntry>>(`/attendance/history?${q.toString()}`);
+}
+
+export interface AttendanceReopening {
+  id: number;
+  employee_id: number | null;
+  year: number;
+  month: number;
+  reason: string;
+  opened_at: string | null;
+  expires_at: string;
+  closed_at: string | null;
+  active: boolean;
+  opener?: { id: number; name: string } | null;
+  employee?: { id: number; name: string } | null;
+}
+
+export const listAttendanceReopenings = () => apiClient<AttendanceReopening[]>("/attendance/period-reopenings");
+export const reopenAttendancePeriod = (payload: { year: number; month: number; reason: string; employee_id?: number | null; hours?: number }) =>
+  apiClient<AttendanceReopening>("/attendance/period-reopenings", { method: "POST", body: JSON.stringify(payload) });
+export const closeAttendanceReopening = (id: number) =>
+  apiClient<AttendanceReopening>(`/attendance/period-reopenings/${id}/close`, { method: "POST" });
+
+export const listAttendancePeriods = (year: number) => apiClient<AttendancePeriod[]>(`/attendance/period-locks?year=${year}`);
+export const lockAttendancePeriod = (year: number, month: number, reason?: string | null) =>
+  apiClient<unknown>("/attendance/period-locks", { method: "POST", body: JSON.stringify({ year, month, reason: reason || null }) });
+export const unlockAttendancePeriod = (year: number, month: number, reason: string) =>
+  apiClient<null>("/attendance/period-locks/unlock", { method: "POST", body: JSON.stringify({ year, month, reason }) });
 export const checkInAttendance = (employeeId: number) =>
   apiClient<AttendanceItem>("/attendance/check-in", {
     method: "POST",

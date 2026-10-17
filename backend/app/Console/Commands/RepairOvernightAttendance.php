@@ -16,6 +16,10 @@ class RepairOvernightAttendance extends Command
 
     public function handle(): int
     {
+        return \App\Models\Attendance::recordingAs('repair', fn () => $this->repair(), 'Attendance repair command');
+    }
+    private function repair(): int
+    {
         $apply = (bool) $this->option('apply');
         $fixed = 0;
 
@@ -25,6 +29,9 @@ class RepairOvernightAttendance extends Command
             ->whereColumn('check_out', '<', 'check_in')
             ->get()
             ->each(function (Attendance $row) use ($apply, &$fixed) {
+                if ($this->closed($row)) {
+                    return;
+                }
                 $this->line(sprintf('#%d employee %d %s: clear check-out %s (before check-in)',
                     $row->id, $row->employee_id, $row->date->toDateString(), $row->check_out));
                 $fixed++;
@@ -50,6 +57,10 @@ class RepairOvernightAttendance extends Command
                     ->where('check_in', '<', $out)
                     ->orderByDesc('check_in')
                     ->first();
+
+                if ($this->closed($orphan, $target)) {
+                    return;
+                }
 
                 if (!$target) {
                     $this->moveOrphanToShiftDay($orphan, $out, $apply, $fixed);
@@ -112,6 +123,13 @@ class RepairOvernightAttendance extends Command
         if ($previous && ($previous->check_in || $previous->check_out)) {
             return;
         }
+        // The row moves to the previous day, so that day's month must be open too.
+        $moved = $orphan->replicate();
+        $moved->id = $orphan->id;
+        $moved->date = $previousDate;
+        if ($this->closed($moved, $previous)) {
+            return;
+        }
 
         $note = 'Check-in missing: only a check-out punch (' . $out->format('H:i') . ') was recorded.';
         $this->line(sprintf('#%d employee %d: out-only %s -> %s as missing check-in%s', $orphan->id,
@@ -126,5 +144,19 @@ class RepairOvernightAttendance extends Command
         $orphan->status = Attendance::STATUS_MISSING_CHECK_IN;
         $orphan->notes = $note;
         $orphan->save();
+    }
+    /** True (and reported) when any of these rows sits in a closed month: a repair must not rewrite it. */
+    private function closed(?\App\Models\Attendance ...$rows): bool
+    {
+        $guard = app(\App\Services\AttendancePeriodGuard::class);
+        foreach ($rows as $row) {
+            if ($row && $guard->lockFor((int) $row->employee_id, $row->date)) {
+                $this->warn(sprintf('#%d employee %d %s: skipped (period closed)', $row->id, $row->employee_id, $row->date->toDateString()));
+
+                return true;
+            }
+        }
+
+        return false;
     }
 }

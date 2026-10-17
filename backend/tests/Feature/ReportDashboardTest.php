@@ -201,6 +201,68 @@ class ReportDashboardTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_attendance_detail_report_breaks_down_by_employee_department_and_day(): void
+    {
+        $company = Company::create(['name' => 'Detail Co']);
+        $other = Company::create(['name' => 'Other Co']);
+        $manager = $this->createUserWithRole(User::ROLE_HR_MANAGER, ['company_id' => $company->id]);
+
+        $make = function (string $name, string $dept, Company $co) {
+            $user = User::factory()->create(['company_id' => $co->id]);
+
+            return Employee::create([
+                'user_id' => $user->id,
+                'company_id' => $co->id,
+                'name' => $name,
+                'email' => strtolower($name) . '@example.com',
+                'department_id' => Department::create(['name' => $dept, 'company_id' => $co->id])->id,
+                'designation' => 'Analyst',
+                'salary' => 1000,
+                'status' => 'active',
+            ]);
+        };
+
+        $ann = $make('Ann', 'Sales', $company);
+        $bob = $make('Bob', 'Support', $company);
+        $outsider = $make('Zed', 'Sales', $other);
+
+        Attendance::create(['employee_id' => $ann->id, 'date' => '2026-05-04', 'check_in' => '2026-05-04 09:00:00', 'check_out' => '2026-05-04 17:00:00', 'status' => 'present']);
+        Attendance::create(['employee_id' => $ann->id, 'date' => '2026-05-05', 'check_in' => '2026-05-05 09:30:00', 'check_out' => '2026-05-05 17:30:00', 'status' => 'late']);
+        Attendance::create(['employee_id' => $bob->id, 'date' => '2026-05-04', 'status' => 'absent']);
+        Attendance::create(['employee_id' => $outsider->id, 'date' => '2026-05-04', 'check_in' => '2026-05-04 09:00:00', 'check_out' => '2026-05-04 17:00:00', 'status' => 'present']);
+
+        Sanctum::actingAs($manager);
+
+        $response = $this->getJson('/api/v1/reports/attendance/detail?month=5&year=2026')
+            ->assertOk()
+            ->assertJsonPath('data.days_in_month', 31)
+            ->assertJsonCount(2, 'data.employees')
+            ->assertJsonCount(2, 'data.departments');
+
+        $rows = collect($response->json('data.employees'))->keyBy('name');
+        $this->assertSame(16.0, (float) $rows['Ann']['hours_worked']);
+        $this->assertSame(1, $rows['Ann']['late']);
+        $this->assertSame(1, $rows['Ann']['late_count']);
+        $this->assertSame(1, $rows['Bob']['absent']);
+        $this->assertSame('present', $rows['Ann']['days']['4']['status']);
+        $this->assertArrayNotHasKey('Zed', $rows->all());
+
+        $dept = collect($response->json('data.departments'))->keyBy('department');
+        $this->assertSame(2, $dept['Sales']['days_worked']);
+        $this->assertSame(0.0, (float) $dept['Support']['attendance_rate']);
+
+        $this->getJson('/api/v1/reports/attendance/detail?month=5&year=2026&department_id=' . $ann->department_id)
+            ->assertOk()
+            ->assertJsonCount(1, 'data.employees');
+
+        foreach (['employees', 'departments', 'late', 'overtime', 'grid'] as $view) {
+            $this->get("/api/v1/reports/attendance/detail?month=5&year=2026&view={$view}&format=csv")
+                ->assertOk();
+        }
+
+        $this->getJson('/api/v1/reports/attendance/detail?month=13&year=2026')->assertStatus(422);
+    }
+
     public function test_report_endpoints_validate_month_and_year(): void
     {
         $user = $this->createUserWithRole(User::ROLE_HR_MANAGER);

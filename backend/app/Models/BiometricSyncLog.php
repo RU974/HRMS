@@ -16,6 +16,7 @@ class BiometricSyncLog extends Model
         'records_fetched',
         'records_matched',
         'records_unmatched',
+        'records_locked',
         'status',
         'error_message',
         'company_id',
@@ -27,6 +28,7 @@ class BiometricSyncLog extends Model
         'records_fetched' => 'integer',
         'records_matched' => 'integer',
         'records_unmatched' => 'integer',
+        'records_locked' => 'integer',
     ];
 
     public function device()

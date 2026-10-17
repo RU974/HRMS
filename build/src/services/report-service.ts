@@ -117,6 +117,68 @@ export function getAttendanceReportSummary(month: number, year: number) {
   return apiClient<ReportCountsItem[]>(`/reports/attendance?month=${month}&year=${year}`);
 }
 
+export interface AttendanceDayCell {
+  status: string;
+  hours: number;
+  late: boolean;
+  late_minutes: number;
+  overtime: number;
+  off: boolean;
+}
+
+export interface AttendanceDetailEmployee {
+  employee_id: number;
+  name: string;
+  employee_number: string | null;
+  department_id: number | null;
+  department: string;
+  present: number;
+  late: number;
+  absent: number;
+  leave: number;
+  half_day: number;
+  missing: number;
+  days_recorded: number;
+  days_worked: number;
+  late_count: number;
+  late_minutes: number;
+  early_leave_count: number;
+  hours_worked: number;
+  overtime_hours: number;
+  avg_hours: number;
+  attendance_rate: number | null;
+  /** Keyed by day of month; PHP encodes an empty map as []. */
+  days: Record<string, AttendanceDayCell>;
+}
+
+export interface AttendanceDetailDepartment extends Omit<AttendanceDetailEmployee, "employee_id" | "name" | "employee_number" | "department_id" | "days" | "days_recorded"> {
+  department_id: number | null;
+  headcount: number;
+}
+
+export interface AttendanceDetailReport {
+  month: number;
+  year: number;
+  days_in_month: number;
+  totals: {
+    employees: number;
+    days_worked: number;
+    absent: number;
+    late_count: number;
+    late_minutes: number;
+    hours_worked: number;
+    overtime_hours: number;
+    attendance_rate: number | null;
+  };
+  employees: AttendanceDetailEmployee[];
+  departments: AttendanceDetailDepartment[];
+}
+
+export function getAttendanceDetailReport(month: number, year: number, departmentId?: number | null) {
+  const dept = departmentId ? `&department_id=${departmentId}` : "";
+  return apiClient<AttendanceDetailReport>(`/reports/attendance/detail?month=${month}&year=${year}${dept}`);
+}
+
 export function getPayrollReportSummary(month: number, year: number) {
   return apiClient<ReportCountsItem[]>(`/reports/payroll?month=${month}&year=${year}`);
 }

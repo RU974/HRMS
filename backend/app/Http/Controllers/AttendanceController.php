@@ -3,25 +3,29 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Models\AttendanceHistory;
 use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\Shift;
 use App\Services\ShiftResolver;
 use App\Models\User;
+use App\Exceptions\AttendancePeriodLockedException;
 use App\Services\AttendanceCalculator;
+use App\Services\AttendancePeriodGuard;
 use App\Services\AttendancePolicyResolver;
 use App\Services\AttendanceStatusRecalculator;
 use App\Http\Requests\UpdateAttendancePolicyRequest;
 use App\Services\AttendanceNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 
 class AttendanceController extends Controller
 {
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = Attendance::with('employee');
+        $query = Attendance::with(['employee', 'editor:id,name']);
         $this->scopeToCompany($request, $query, 'employee.user');
         if ($this->isLineManagerOnly($request)) {
             $query->whereHas('employee', fn ($q) => $this->scopeToOwnTeam($q, $request));
@@ -81,10 +85,26 @@ class AttendanceController extends Controller
 
     public function show($id)
     {
-        $attendance = Attendance::with('employee')->findOrFail($id);
+        $attendance = Attendance::with(['employee', 'editor:id,name'])->findOrFail($id);
         $this->authorizeAttendanceAccess(request(), (int) $attendance->employee_id);
         $this->assertEmployeeInCompany(request(), (int) $attendance->employee_id);
         return $this->ok($attendance);
+    }
+
+    // GET /attendance/{attendance}/history — every change to one record, newest first.
+    // Same visibility as the record itself.
+    public function history(Request $request, $id)
+    {
+        $attendance = Attendance::findOrFail($id);
+        $this->authorizeAttendanceAccess($request, (int) $attendance->employee_id);
+        $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
+
+        return $this->ok(
+            AttendanceHistory::with('actor:id,name')
+                ->where('attendance_id', $attendance->id)
+                ->orderByDesc('created_at')->orderByDesc('id')
+                ->get()
+        );
     }
 
     public function store(Request $request)
@@ -98,8 +118,11 @@ class AttendanceController extends Controller
             'status'         => 'nullable|in:'.implode(',', Attendance::ALL_STATUSES),
             'work_from_home' => 'nullable|boolean',
             'notes'          => 'nullable|string',
+            'reason'         => 'nullable|string|max:500',
         ]);
         $this->assertEmployeeInCompany($request, (int) $validated['employee_id']);
+        $reason = Arr::pull($validated, 'reason');
+        app(AttendancePeriodGuard::class)->assertOpen((int) $validated['employee_id'], $validated['date']);
 
         $alreadyExists = Attendance::where('employee_id', $validated['employee_id'])
             ->whereDate('date', $validated['date'])
@@ -144,8 +167,8 @@ class AttendanceController extends Controller
 
         $validated['status'] = $status;
 
-        $attendance = Attendance::create($validated);
-        return $this->ok($attendance, 'Attendance recorded successfully', 201);
+        $attendance = Attendance::recordingAs('manual', fn () => Attendance::create($validated), $reason);
+        return $this->ok($attendance->load('editor:id,name'), 'Attendance recorded successfully', 201);
     }
 
     public function update(Request $request, $id)
@@ -160,9 +183,16 @@ class AttendanceController extends Controller
             'status'         => 'sometimes|in:'.implode(',', Attendance::ALL_STATUSES),
             'work_from_home' => 'nullable|boolean',
             'notes'          => 'nullable|string',
+            'reason'         => 'nullable|string|max:500',
         ]);
+        $reason = Arr::pull($validated, 'reason');
 
         $date = Carbon::parse($validated['date'] ?? $attendance->date)->toDateString();
+        // Checked up front so a closed month answers 423 before any status is worked out; the model
+        // enforces the same rule on the save itself.
+        $guard = app(AttendancePeriodGuard::class);
+        $guard->assertOpen((int) $attendance->employee_id, $attendance->date);
+        $guard->assertOpen((int) $attendance->employee_id, $date);
         if (!empty($validated['check_in'])) {
             $validated['check_in'] = $this->attendanceCalculator()->normalizeCheckTime($date, $validated['check_in']);
         }
@@ -214,8 +244,8 @@ class AttendanceController extends Controller
             $validated['status_reason'] = Attendance::REASON_MANUAL;
         }
 
-        $attendance->update($validated);
-        return $this->ok($attendance, 'Attendance updated successfully');
+        Attendance::recordingAs('manual', fn () => $attendance->update($validated), $reason);
+        return $this->ok($attendance->load('editor:id,name'), 'Attendance updated successfully');
     }
 
     public function destroy(Request $request, $id)
@@ -223,11 +253,12 @@ class AttendanceController extends Controller
         $this->authorizePermission($request, 'attendance:manage_settings');
         $attendance = Attendance::findOrFail($id);
         $this->assertEmployeeInCompany($request, (int) $attendance->employee_id);
+        $reason = $request->validate(['reason' => 'nullable|string|max:500'])['reason'] ?? null;
         // Leave rows belong to the leave; deleting one by hand would only be undone by the next sync.
         if ($attendance->leave_id && in_array($attendance->status, ['leave', Attendance::STATUS_HALF_DAY], true)) {
             return $this->fail('This day comes from an approved leave. Cancel or edit the leave instead.', 422);
         }
-        $attendance->delete();
+        Attendance::recordingAs('manual', fn () => $attendance->delete(), $reason);
         return $this->ok(null, 'Attendance deleted successfully');
     }
 
@@ -390,17 +421,23 @@ class AttendanceController extends Controller
                 }
             }
 
-            Attendance::create([
-                'employee_id'    => $employee->id,
-                'date'           => $date,
-                'check_in'       => $checkIn,
-                'check_out'      => $checkOut,
-                'status'         => $status,
-                'source'         => in_array(strtolower($row['source'] ?? ''), ['biometric', 'manual', 'mobile', 'web'], true)
-                    ? strtolower($row['source']) : 'manual',
-                'work_from_home' => in_array(strtolower($row['work_from_home'] ?? ''), ['1', 'yes', 'true', 'y'], true),
-                'notes'          => ($row['notes'] ?? '') ?: null,
-            ]);
+            try {
+                Attendance::recordingAs('import', fn () => Attendance::create([
+                    'employee_id'    => $employee->id,
+                    'date'           => $date,
+                    'check_in'       => $checkIn,
+                    'check_out'      => $checkOut,
+                    'status'         => $status,
+                    'source'         => in_array(strtolower($row['source'] ?? ''), ['biometric', 'manual', 'mobile', 'web'], true)
+                        ? strtolower($row['source']) : 'manual',
+                    'work_from_home' => in_array(strtolower($row['work_from_home'] ?? ''), ['1', 'yes', 'true', 'y'], true),
+                    'notes'          => ($row['notes'] ?? '') ?: null,
+                ]), 'CSV import');
+            } catch (AttendancePeriodLockedException $e) {
+                $errors[] = "Line {$line}: {$e->getMessage()}";
+                $skipped++;
+                continue;
+            }
             $imported++;
         }
         fclose($handle);
@@ -416,7 +453,7 @@ class AttendanceController extends Controller
         $this->authorizeAttendanceAccess($request, (int) $employeeId);
         $this->assertEmployeeInCompany($request, (int) $employeeId);
 
-        $query = Attendance::where('employee_id', $employeeId);
+        $query = Attendance::with('editor:id,name')->where('employee_id', $employeeId);
         $this->applyManagedEmployeeScope($request, $query, 'employee');
         if ($request->filled('month')) {
             $query->whereMonth('date', $request->month);
@@ -528,7 +565,7 @@ class AttendanceController extends Controller
 
         if (!$attendance) {
             $checkIn = $now->toDateTimeString();
-            $attendance = Attendance::create([
+            $attendance = Attendance::recordingAs('self_service', fn () => Attendance::create([
                 'employee_id' => $validated['employee_id'],
                 'date' => $today,
                 'check_in' => $checkIn,
@@ -538,7 +575,7 @@ class AttendanceController extends Controller
                     $checkIn,
                     'present'
                 ),
-            ]);
+            ]));
 
             return $this->ok($attendance, 'Check-in successful');
         }
@@ -551,7 +588,7 @@ class AttendanceController extends Controller
             return $this->fail('Attendance already completed for today.', 422);
         }
 
-        $attendance->update([
+        Attendance::recordingAs('self_service', fn () => $attendance->update([
             'check_in' => $now->toDateTimeString(),
             'status' => $this->attendanceCalculator()->statusForPunch(
                 $attendance,
@@ -560,7 +597,7 @@ class AttendanceController extends Controller
                 $now->toDateTimeString(),
                 $attendance->status ?? 'present'
             ),
-        ]);
+        ]));
 
         return $this->ok($attendance, 'Check-in successful');
     }
@@ -603,7 +640,7 @@ class AttendanceController extends Controller
             );
         }
 
-        $attendance->update($update);
+        Attendance::recordingAs('self_service', fn () => $attendance->update($update));
         return $this->ok($attendance, 'Check-out successful');
     }
 
@@ -893,7 +930,7 @@ class AttendanceController extends Controller
             return $this->fail('A correction request is already pending for this attendance.', 422);
         }
 
-        $attendance->update([
+        Attendance::recordingAs('self_service', fn () => $attendance->update([
             'correction_status' => 'pending',
             'correction_request_notes' => $validated['correction_request_notes'],
             'correction_proposed_check_in' => $validated['proposed_check_in'] ?? null,
@@ -901,7 +938,7 @@ class AttendanceController extends Controller
             'correction_requested_at' => Carbon::now(),
             'correction_response_notes' => null,
             'correction_reviewed_at' => null,
-        ]);
+        ]), 'Correction requested');
         app(AttendanceNotificationService::class)->correctionRequested($attendance);
 
         return $this->ok($attendance, 'Correction request submitted successfully');
@@ -969,7 +1006,8 @@ class AttendanceController extends Controller
             }
         }
 
-        $attendance->update($update);
+        $correctionLabel = 'Correction request ' . $validated['correction_status'];
+        Attendance::recordingAs('manual', fn () => $attendance->update($update), $correctionLabel);
         app(AttendanceNotificationService::class)->correctionReviewed($attendance, $request->user()?->id);
 
         return $this->ok($attendance, 'Correction request reviewed successfully');

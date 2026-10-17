@@ -362,6 +362,7 @@ class BiometricDeviceController extends Controller
 
         $matched   = 0;
         $unmatched = 0;
+        $locked    = 0;
 
         $punches = $validated['punches'];
         usort($punches, fn ($a, $b) => strcmp($a['timestamp'], $b['timestamp']));
@@ -382,8 +383,11 @@ class BiometricDeviceController extends Controller
                 continue;
             }
 
-            $this->syncService->applyPunchPublic($device, $mapping->employee_id, $punch);
-            $matched++;
+            if ($this->syncService->applyPunchPublic($device, $mapping->employee_id, $punch)) {
+                $matched++;
+            } else {
+                $locked++; // its month is closed: not applied, reported on the sync log
+            }
         }
 
         $device->update([
@@ -399,10 +403,12 @@ class BiometricDeviceController extends Controller
             'company_id'        => $device->company_id,
             'started_at'        => now(),
             'finished_at'       => now(),
-            'status'            => $unmatched > 0 && $matched === 0 ? 'failed' : ($unmatched > 0 ? 'partial' : 'success'),
+            'status'            => ($unmatched + $locked) > 0 && $matched === 0 ? 'failed' : (($unmatched + $locked) > 0 ? 'partial' : 'success'),
             'records_fetched'   => count($validated['punches']),
             'records_matched'   => $matched,
             'records_unmatched' => $unmatched,
+            'records_locked'    => $locked,
+            'error_message'     => $locked > 0 ? "{$locked} punch(es) were not applied because their month is closed (locked or payroll already run)." : null,
         ]);
 
         \App\Models\AuditLog::create([

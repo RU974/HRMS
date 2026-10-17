@@ -117,6 +117,7 @@ class BiometricSyncService
 
             $matched = 0;
             $unmatched = 0;
+            $locked = 0;
 
             foreach ($punches as $punch) {
                 $mapping = EmployeeDeviceMapping::where('device_id', $device->id)
@@ -128,14 +129,17 @@ class BiometricSyncService
                     continue;
                 }
 
-                $this->applyPunch($device, $mapping->employee_id, $punch);
-                $matched++;
+                if ($this->applyPunch($device, $mapping->employee_id, $punch)) {
+                    $matched++;
+                } else {
+                    $locked++;
+                }
             }
 
             $status = 'success';
-            if ($unmatched > 0 && $matched === 0) {
+            if (($unmatched + $locked) > 0 && $matched === 0) {
                 $status = 'failed';
-            } elseif ($unmatched > 0) {
+            } elseif (($unmatched + $locked) > 0) {
                 $status = 'partial';
             }
 
@@ -144,6 +148,8 @@ class BiometricSyncService
                 'records_fetched' => count($punches),
                 'records_matched' => $matched,
                 'records_unmatched' => $unmatched,
+                'records_locked' => $locked,
+                'error_message' => $locked > 0 ? "{$locked} punch(es) were not applied because their month is closed (locked or payroll already run)." : null,
                 'status' => $status,
             ]);
 
@@ -273,12 +279,31 @@ class BiometricSyncService
         }
     }
 
-    public function applyPunchPublic(BiometricDevice $device, int $employeeId, array $punch): void
+    /** @return bool false when the punch fell in a closed month and was not applied */
+    public function applyPunchPublic(BiometricDevice $device, int $employeeId, array $punch): bool
     {
-        $this->applyPunch($device, $employeeId, $punch);
+        return $this->applyPunch($device, $employeeId, $punch);
     }
 
-    protected function applyPunch(BiometricDevice $device, int $employeeId, array $punch): void
+    /** A punch for a closed month (locked, or payroll already run) is dropped and logged, never applied. */
+    protected function applyPunch(BiometricDevice $device, int $employeeId, array $punch): bool
+    {
+        try {
+            Attendance::recordingAs('biometric', fn () => $this->applyPunchToRecord($device, $employeeId, $punch));
+
+            return true;
+        } catch (\App\Exceptions\AttendancePeriodLockedException $e) {
+            \Illuminate\Support\Facades\Log::warning('Biometric punch ignored: period closed', [
+                'device_id' => $device->id,
+                'employee_id' => $employeeId,
+                'timestamp' => isset($punch['timestamp']) ? (string) $punch['timestamp'] : null,
+            ]);
+
+            return false;
+        }
+    }
+
+    protected function applyPunchToRecord(BiometricDevice $device, int $employeeId, array $punch): void
     {
         $timestamp = $punch['timestamp'];
         // Device punches are wall-clock times in the device's own timezone (the agent

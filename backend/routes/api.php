@@ -9,6 +9,7 @@ use App\Http\Controllers\EmployeePromotionController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DesignationController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendancePeriodController;
 use App\Http\Controllers\EmployeeDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HolidayController;
@@ -170,6 +171,7 @@ $registerRoutes = function (): void {
         Route::middleware('permission:reports:view|reports:view_own')->prefix('reports')->group(function () {
             Route::get('/employees', [ReportController::class, 'employees']);
             Route::get('/attendance', [ReportController::class, 'attendance']);
+            Route::get('/attendance/detail', [ReportController::class, 'attendanceDetail']);
             Route::get('/leave', [ReportController::class, 'leave']);
             Route::get('/payroll', [ReportController::class, 'payroll']);
             Route::get('/inventory', [ReportController::class, 'inventory']);
@@ -290,6 +292,14 @@ $registerRoutes = function (): void {
         Route::middleware('permission:attendance:manage_settings')->group(function () {
             Route::get('attendance/policy', [AttendanceController::class, 'getPolicy']);
             Route::put('attendance/policy', [AttendanceController::class, 'updatePolicy']);
+            // Month locks and the company-wide change log.
+            Route::get('attendance/period-locks', [AttendancePeriodController::class, 'index']);
+            Route::post('attendance/period-locks', [AttendancePeriodController::class, 'lock']);
+            Route::post('attendance/period-locks/unlock', [AttendancePeriodController::class, 'unlock']);
+            Route::get('attendance/period-reopenings', [AttendancePeriodController::class, 'reopenings']);
+            Route::post('attendance/period-reopenings', [AttendancePeriodController::class, 'reopen']);
+            Route::post('attendance/period-reopenings/{id}/close', [AttendancePeriodController::class, 'closeReopening'])->whereNumber('id');
+            Route::get('attendance/history', [AttendancePeriodController::class, 'history']);
         });
         Route::group([], function () {
             Route::get('attendance/employee/{employeeId}', [AttendanceController::class, 'getByEmployee']);
@@ -299,6 +309,7 @@ $registerRoutes = function (): void {
             Route::get('attendance/export', [AttendanceController::class, 'export']);
             Route::post('attendance/import', [AttendanceController::class, 'import']);
             Route::get('attendance/corrections',[AttendanceController::class, 'listCorrections']);
+            Route::get('attendance/{attendance}/history', [AttendanceController::class, 'history']);
             Route::post('attendance/{attendance}/request-correction', [AttendanceController::class, 'requestCorrection']);
             Route::post('attendance/{attendance}/review-correction', [AttendanceController::class, 'reviewCorrection']);
             Route::apiResource('attendance', AttendanceController::class);

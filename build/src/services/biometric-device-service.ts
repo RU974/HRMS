@@ -70,6 +70,8 @@ export interface SyncLog {
   records_fetched: number;
   records_matched: number;
   records_unmatched: number;
+  /** Punches not applied because their month is closed (locked or payroll already run). */
+  records_locked?: number;
   status: SyncLogStatus;
   error_message?: string | null;
 }

@@ -40,16 +40,34 @@ class LeaveAttendanceSync
 
         Attendance::query()->where('leave_id', $leave->id)->get()->each(function (Attendance $row) use ($targets, $employee, &$changed) {
             if (!in_array(Carbon::parse($row->date)->toDateString(), $targets, true)) {
-                $this->releaseRow($row, $employee);
-                $changed++;
+                $changed += $this->guarded(function () use ($row, $employee) {
+                    $this->releaseRow($row, $employee);
+
+                    return 1;
+                });
             }
         });
 
         foreach ($targets as $date) {
-            $changed += $this->applyDay($leave, $employee, $date);
+            $changed += $this->guarded(fn () => $this->applyDay($leave, $employee, $date));
         }
 
         return $changed;
+    }
+
+    /**
+     * Run one row's change as the leave sync. A day in a closed month (locked, or payroll already
+     * run) is left as it is: the leave still stands, payroll reads approved leaves directly.
+     */
+    private function guarded(callable $change): int
+    {
+        try {
+            return (int) Attendance::recordingAs('leave', $change, 'Approved leave sync');
+        } catch (\App\Exceptions\AttendancePeriodLockedException $e) {
+            \Illuminate\Support\Facades\Log::info('Leave attendance sync skipped: period closed', ['message' => $e->getMessage()]);
+
+            return 0;
+        }
     }
 
     /** Re-sync every approved leave of one employee (shift, joining date or status changed). */
@@ -94,8 +112,11 @@ class LeaveAttendanceSync
         $changed = 0;
 
         Attendance::query()->where('leave_id', $leave->id)->get()->each(function (Attendance $row) use ($employee, &$changed) {
-            $this->releaseRow($row, $employee);
-            $changed++;
+            $changed += $this->guarded(function () use ($row, $employee) {
+                $this->releaseRow($row, $employee);
+
+                return 1;
+            });
         });
 
         return $changed;

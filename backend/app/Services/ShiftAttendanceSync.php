@@ -80,8 +80,9 @@ class ShiftAttendanceSync
                 if (!$record->check_in && !$record->check_out && $record->status === 'absent'
                     && !$record->leave_id && str_starts_with((string) $record->notes, 'Auto-marked')
                     && !$schedule->isWorkingDay) {
-                    $record->delete();
-                    $result['removed']++;
+                    if ($record->deleteIfOpen('schedule')) {
+                        $result['removed']++;
+                    }
                     continue;
                 }
 
@@ -89,8 +90,9 @@ class ShiftAttendanceSync
                 $old = is_array($record->shift_snapshot) ? $record->shift_snapshot : [];
                 if (Arr::except($new, ['captured_at']) != Arr::except($old, ['captured_at'])) {
                     $record->captureShift($schedule);
-                    $record->save();
-                    $result['snapshots']++;
+                    if ($record->saveIfOpen('schedule')) {
+                        $result['snapshots']++;
+                    }
                 }
             }
         });

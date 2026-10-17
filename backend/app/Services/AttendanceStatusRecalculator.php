@@ -24,6 +24,7 @@ class AttendanceStatusRecalculator
     public function recalculate(CarbonInterface $from, ?CarbonInterface $to = null, ?int $shiftId = null, bool $apply = true, ?callable $onChange = null, ?string $companyId = null, bool $resnapshot = false, ?array $employeeIds = null): int
     {
         $calculator = new AttendanceCalculator();
+        $guard = app(AttendancePeriodGuard::class);
         $changed = 0;
 
         Attendance::query()
@@ -37,7 +38,7 @@ class AttendanceStatusRecalculator
                 ->orWhereHas('employee', fn ($e) => $e->where('shift_id', $shiftId))))
             ->when($employeeIds !== null, fn ($q) => $q->whereIn('employee_id', $employeeIds))
             ->when($companyId, fn ($q) => $q->whereHas('employee', fn ($e) => $e->where('company_id', $companyId)))
-            ->chunkById(200, function ($records) use ($calculator, $apply, $onChange, $resnapshot, &$changed) {
+            ->chunkById(200, function ($records) use ($calculator, $guard, $apply, $onChange, $resnapshot, &$changed) {
                 foreach ($records as $record) {
                     if ($resnapshot) {
                         $record->captureShift();
@@ -45,15 +46,19 @@ class AttendanceStatusRecalculator
                     $status = $calculator->recomputeStatus($record, AttendancePolicy::forEmployee($record->employee), $record->judgingShift());
                     if ($status === $record->status) {
                         if ($resnapshot && $apply && $record->isDirty('shift_snapshot')) {
-                            $record->save();
+                            $record->saveIfOpen('recalculation');
                         }
+                        continue;
+                    }
+                    // A closed month (locked, or payroll already run) keeps its status and is not counted.
+                    if ($apply && $guard->lockFor($record->employee_id, $record->date)) {
                         continue;
                     }
                     $onChange && $onChange($record, $status);
                     $changed++;
                     if ($apply) {
                         $record->status = $status;
-                        $record->save(); // the saving hook refreshes status_reason
+                        $record->saveIfOpen('recalculation'); // the saving hook refreshes status_reason
                     }
                 }
             });

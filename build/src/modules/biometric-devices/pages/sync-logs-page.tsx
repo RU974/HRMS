@@ -107,6 +107,7 @@ export function SyncLogsPage() {
                   <SortableTh label="Fetched" sortKey="records_fetched" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                   <SortableTh label="Matched" sortKey="records_matched" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                   <SortableTh label="Unmatched" sortKey="records_unmatched" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
+                  <SortableTh label="Closed month" sortKey="records_locked" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                   <SortableTh label="Status" sortKey="status" sort={sort} onSort={toggleSort} className="py-2 pr-4" />
                   <th className="py-2 pr-4 text-right">Actions</th>
                 </tr>
@@ -119,6 +120,7 @@ export function SyncLogsPage() {
                     <td className="py-3 pr-4" data-label="Fetched">{log.records_fetched}</td>
                     <td className="py-3 pr-4" data-label="Matched">{log.records_matched}</td>
                     <td className="py-3 pr-4" data-label="Unmatched">{log.records_unmatched}</td>
+                    <td className="py-3 pr-4" data-label="Closed month" title="Punches not applied because their month is closed">{log.records_locked ?? 0}</td>
                     <td className="py-3 pr-4" data-label="Status">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusStyles[log.status] ?? "bg-gray-50 text-gray-700"}`}>
                         {log.status.replace("_", " ")}

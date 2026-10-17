@@ -30,6 +30,8 @@ import {
 import { getEmployees, getEmployeeOptions } from "@/services/employee-service";
 import { useAuthStore } from "@/store/auth-store";
 import { AttendancePolicyPanel } from "../components/attendance-policy-panel";
+import { AttendancePeriodsPanel } from "../components/attendance-periods-panel";
+import { AttendanceHistoryModal, actorLabel, formatDateTime } from "../components/attendance-history";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function useLiveClock() {
@@ -453,6 +455,7 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
     status:      (editing?.status ?? "present") as AttendanceItem["status"],
     work_from_home: editing?.work_from_home ?? false,
     notes:       editing?.notes ?? "",
+    reason:      "",
   });
 
   const saveMutation = useMutation({
@@ -464,6 +467,7 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
         status:         form.status,
         work_from_home: form.work_from_home,
         notes:          form.notes || null,
+        reason:         form.reason.trim() || null,
       };
       if (editing) return updateAttendance(editing.id, payload);
       return createAttendance({ ...payload, employee_id: form.employee_id });
@@ -524,6 +528,11 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
             placeholder="Optional notes..." />
         </FormField>
 
+        <FormField label={editing ? "Reason for this change (kept in the history)" : "Reason (kept in the history)"}>
+          <FormInput value={form.reason} maxLength={500} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))}
+            placeholder="e.g. Forgot to punch out" />
+        </FormField>
+
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? "Saving..." : "Save"}</Button>
@@ -534,7 +543,7 @@ function AttendanceFormModal({ editing, today, employeeOptions, onClose, onSaved
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-type Tab = "records" | "calendar" | "team" | "policy";
+type Tab = "records" | "calendar" | "team" | "policy" | "periods";
 
 export function AttendancePage() {
   const queryClient = useQueryClient();
@@ -553,6 +562,7 @@ export function AttendancePage() {
   const [successMsg, setSuccessMsg]     = useState<string | null>(null);
   const [modalOpen, setModalOpen]       = useState(false);
   const [editing, setEditing]           = useState<AttendanceItem | null>(null);
+  const [historyFor, setHistoryFor]   = useState<AttendanceItem | null>(null);
   const [correctionModal, setCorrectionModal] = useState<AttendanceItem | null>(null);
   const [correctionNote, setCorrectionNote]   = useState("");
   const [proposedIn, setProposedIn]     = useState("");
@@ -661,7 +671,7 @@ export function AttendancePage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteAttendance,
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => deleteAttendance(id, reason),
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["attendance"] }); showSuccess("Record deleted."); },
     onError: (e: Error) => setGlobalError(e.message),
   });
@@ -738,6 +748,7 @@ export function AttendancePage() {
     { key: "calendar", label: "Calendar", show: employeeId > 0 || seesTeam },
     { key: "team",     label: "Team View", show: seesTeam },
     { key: "policy",   label: "Policy",    show: canManage },
+    { key: "periods",  label: "Periods & history", show: canManage },
   ];
 
   return (
@@ -996,7 +1007,16 @@ export function AttendancePage() {
                         <p className="mt-1 max-w-[200px] truncate text-xs text-[var(--muted)]" title={item.correction_response_notes}>Reply: {item.correction_response_notes}</p>
                       )}
                     </td>
-                    <td data-label="Source" className="p-3"><SourceBadge source={item.source} /></td>
+                    <td data-label="Source" className="p-3">
+                      <SourceBadge source={item.source} />
+                      {item.edited_at && (
+                        <p className="mt-1 text-[11px] leading-tight text-[var(--muted)]" title={formatDateTime(item.edited_at)}>
+                          Edited by {actorLabel({ actor: item.edited_by_name ? { id: item.edited_by ?? 0, name: item.edited_by_name } : null, source: item.edited_source ?? "system" })}
+                          <br />{formatDateTime(item.edited_at)}
+                        </p>
+                      )}
+                      <button type="button" className="mt-1 text-[11px] text-[var(--primary)] underline" onClick={() => setHistoryFor(item)}>History</button>
+                    </td>
                     {showActions && (
                       <td data-label="Actions" className="p-3">
                         <div className="flex justify-end gap-2">
@@ -1009,7 +1029,11 @@ export function AttendancePage() {
                             <>
                               <Button variant="outline" className="text-xs px-2 py-1" onClick={() => openEdit(item)}>Edit</Button>
                               <Button variant="outline" className="text-xs px-2 py-1 text-red-600 border-red-200 hover:bg-red-50"
-                                onClick={() => { if (window.confirm("Delete this record?")) void deleteMutation.mutateAsync(item.id); }}>
+                                onClick={() => {
+                                  // Cancel (null) stops the delete; the reason itself is optional.
+                                  const reason = window.prompt("Delete this record? You can say why (kept in the history):", "");
+                                  if (reason !== null) void deleteMutation.mutateAsync({ id: item.id, reason });
+                                }}>
                                 Delete
                               </Button>
                             </>
@@ -1041,6 +1065,15 @@ export function AttendancePage() {
       {/* Team tab */}
       {tab === "team" && seesTeam && <TeamView />}
       {tab === "policy" && canManage && <AttendancePolicyPanel />}
+      {tab === "periods" && canManage && <AttendancePeriodsPanel />}
+
+      {historyFor && (
+        <AttendanceHistoryModal
+          attendanceId={historyFor.id}
+          title={`${historyFor.employee?.name ?? `Employee #${historyFor.employee_id}`} · ${historyFor.date?.slice(0, 10)}`}
+          onClose={() => setHistoryFor(null)}
+        />
+      )}
 
       {/* CRUD modal */}
       {modalOpen && (

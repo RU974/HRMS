@@ -74,13 +74,15 @@ class AttendanceAbsenceService
             ->whereHas('employee', $employeeIds)
             ->get();
         foreach ($noCheckIn as $record) {
-            $record->update([
+            $record->fill([
                 'status' => Attendance::STATUS_MISSING_CHECK_IN,
                 'notes'  => ($record->notes && !str_starts_with($record->notes, 'Auto-marked'))
                     ? $record->notes
                     : 'Check-in missing: only a check-out punch (' . $record->check_out->format('H:i') . ') was recorded.',
             ]);
-            $marked++;
+            if ($record->saveIfOpen('auto_absent')) {
+                $marked++;
+            }
         }
 
         $noCheckOut = Attendance::query()
@@ -117,12 +119,14 @@ class AttendanceAbsenceService
                 continue;
             }
 
-            $record->update([
+            $record->fill([
                 'status' => Attendance::STATUS_MISSING_CHECK_OUT,
                 'notes'  => $record->notes
                     ?: 'Check-out missing: no check-out punch was recorded after the check-in at ' . $record->check_in->format('H:i') . '.',
             ]);
-            $marked++;
+            if ($record->saveIfOpen('auto_absent')) {
+                $marked++;
+            }
         }
 
         return $marked;
@@ -183,16 +187,25 @@ class AttendanceAbsenceService
                 if ($record->check_in || $record->check_out || in_array($record->status, Attendance::MANUAL_STATUSES, true)) {
                     continue;
                 }
-                $record->update(['status' => 'absent']);
+                $record->status = 'absent';
+                $saved = $record->saveIfOpen('auto_absent');
             } else {
-                Attendance::create([
-                    'employee_id' => $employee->id,
-                    'date'        => $date,
-                    'status'      => 'absent',
-                    'notes'       => 'Auto-marked absent: no check-in/check-out and no approved leave.',
-                ]);
+                // A closed month (locked, or payroll already run) is never back-filled with absences.
+                try {
+                    Attendance::recordingAs('auto_absent', fn () => Attendance::create([
+                        'employee_id' => $employee->id,
+                        'date'        => $date,
+                        'status'      => 'absent',
+                        'notes'       => 'Auto-marked absent: no check-in/check-out and no approved leave.',
+                    ]));
+                    $saved = true;
+                } catch (\App\Exceptions\AttendancePeriodLockedException) {
+                    $saved = false;
+                }
             }
-            $marked++;
+            if ($saved) {
+                $marked++;
+            }
         }
 
         return $marked;

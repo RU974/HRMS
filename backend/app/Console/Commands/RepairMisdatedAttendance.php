@@ -13,6 +13,11 @@ class RepairMisdatedAttendance extends Command
 
     public function handle(): int
     {
+        return Attendance::recordingAs('repair', fn () => $this->repair(), 'Attendance repair command');
+    }
+
+    private function repair(): int
+    {
         $apply = (bool) $this->option('apply');
         $fixed = 0;
 
@@ -26,6 +31,13 @@ class RepairMisdatedAttendance extends Command
                     ->whereDate('date', $correctDate)
                     ->where('id', '!=', $stale->id)
                     ->first();
+
+                $moved = $stale->replicate();
+                $moved->id = $stale->id;
+                $moved->date = $correctDate;
+                if ($this->closed($stale, $moved, $existing)) {
+                    return;
+                }
 
                 $this->line(sprintf('#%d employee %d: %s -> %s (%s)', $stale->id, $stale->employee_id,
                     $stale->date->toDateString(), $correctDate, $existing ? 'merge into #' . $existing->id : 'redate'));
@@ -59,6 +71,9 @@ class RepairMisdatedAttendance extends Command
             ->whereColumn('check_out', '<', 'check_in')
             ->get()
             ->each(function (Attendance $row) use ($apply, &$fixed) {
+                if ($this->closed($row)) {
+                    return;
+                }
                 $this->line(sprintf('#%d employee %d %s: clear check-out %s (before check-in)',
                     $row->id, $row->employee_id, $row->date->toDateString(), $row->check_out));
                 $fixed++;
@@ -71,5 +86,20 @@ class RepairMisdatedAttendance extends Command
         $this->info(($apply ? 'Repaired' : 'Would repair') . " {$fixed} record(s).");
 
         return self::SUCCESS;
+    }
+
+    /** True (and reported) when any of these rows sits in a closed month: a repair must not rewrite it. */
+    private function closed(?Attendance ...$rows): bool
+    {
+        $guard = app(\App\Services\AttendancePeriodGuard::class);
+        foreach ($rows as $row) {
+            if ($row && $guard->lockFor((int) $row->employee_id, $row->date)) {
+                $this->warn(sprintf('#%d employee %d %s: skipped (period closed)', $row->id, $row->employee_id, $row->date->toDateString()));
+
+                return true;
+            }
+        }
+
+        return false;
     }
 }

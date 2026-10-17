@@ -32,6 +32,14 @@ class FixShiftedBiometricDates extends Command
                 ->where('id', '!=', $row->id)
                 ->exists();
 
+            // This command writes with the query builder, which skips the model's lock check.
+            $guard = app(\App\Services\AttendancePeriodGuard::class);
+            if ($guard->lockFor((int) $row->employee_id, $row->date) || $guard->lockFor((int) $row->employee_id, $newDate)) {
+                $skipped++;
+                $this->warn("#{$row->id} employee {$row->employee_id}: skipped (period closed)");
+                continue;
+            }
+
             if ($clash) {
                 $skipped++;
                 $this->warn("#{$row->id} employee {$row->employee_id}: {$row->date} -> {$newDate} skipped (record already exists)");

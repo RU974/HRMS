@@ -228,6 +228,111 @@ class ReportController extends Controller
         return $this->ok($data);
     }
 
+    /**
+     * Detailed attendance for a month. `view` picks what an export contains
+     * (employees, departments, late, overtime or grid); the JSON response always carries everything.
+     */
+    public function attendanceDetail(Request $request)
+    {
+        $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);
+
+        $validated = $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2000',
+            'department_id' => 'nullable|integer',
+            'view' => 'nullable|in:employees,departments,late,overtime,grid',
+        ]);
+
+        $month = (int) $validated['month'];
+        $year = (int) $validated['year'];
+        $view = $validated['view'] ?? 'employees';
+
+        $data = (new ReportAnalyticsService())->attendanceDetail(
+            $request,
+            $month,
+            $year,
+            isset($validated['department_id']) ? (int) $validated['department_id'] : null
+        );
+
+        $format = $this->resolveExportFormat($request);
+        if (!$format) {
+            return $this->ok($data);
+        }
+
+        [$columns, $rows] = $this->attendanceDetailExport($data, $view);
+
+        return (new ReportExportService())->export(
+            "attendance-{$view}-{$year}-{$month}",
+            $columns,
+            $rows,
+            $format,
+            $this->exportContext($request)
+        );
+    }
+
+    private function attendanceDetailExport(array $data, string $view): array
+    {
+        $employees = collect($data['employees']);
+
+        switch ($view) {
+            case 'departments':
+                return [
+                    ['Department', 'Headcount', 'Present', 'Late', 'Absent', 'Leave', 'Half Day', 'Hours Worked', 'Avg Hours/Day', 'Overtime Hours', 'Attendance %'],
+                    collect($data['departments'])->map(fn ($d) => [
+                        'department' => $d['department'], 'headcount' => $d['headcount'], 'present' => $d['present'],
+                        'late' => $d['late'], 'absent' => $d['absent'], 'leave' => $d['leave'], 'half_day' => $d['half_day'],
+                        'hours_worked' => $d['hours_worked'], 'avg_hours' => $d['avg_hours'],
+                        'overtime_hours' => $d['overtime_hours'], 'attendance_rate' => $d['attendance_rate'],
+                    ])->all(),
+                ];
+
+            case 'late':
+                return [
+                    ['Employee', 'Department', 'Late Days', 'Total Late Minutes', 'Avg Late Minutes', 'Early Leaves'],
+                    $employees->filter(fn ($e) => $e['late_count'] > 0)->sortByDesc('late_count')->map(fn ($e) => [
+                        'name' => $e['name'], 'department' => $e['department'], 'late_count' => $e['late_count'],
+                        'late_minutes' => $e['late_minutes'], 'avg_late' => round($e['late_minutes'] / $e['late_count'], 1),
+                        'early_leave_count' => $e['early_leave_count'],
+                    ])->values()->all(),
+                ];
+
+            case 'overtime':
+                return [
+                    ['Employee', 'Department', 'Overtime Hours', 'Days With Overtime', 'Hours Worked'],
+                    $employees->filter(fn ($e) => $e['overtime_hours'] > 0)->sortByDesc('overtime_hours')->map(fn ($e) => [
+                        'name' => $e['name'], 'department' => $e['department'], 'overtime_hours' => $e['overtime_hours'],
+                        'overtime_days' => collect($e['days'])->where('overtime', '>', 0)->count(),
+                        'hours_worked' => $e['hours_worked'],
+                    ])->values()->all(),
+                ];
+
+            case 'grid':
+                $codes = ['present' => 'P', 'late' => 'L', 'absent' => 'A', 'leave' => 'LV', 'half_day' => 'HD', 'missing_check_in' => 'MI', 'missing_check_out' => 'MO'];
+                $days = range(1, (int) $data['days_in_month']);
+
+                return [
+                    array_merge(['Employee', 'Department'], array_map('strval', $days), ['Present', 'Late', 'Absent', 'Leave']),
+                    $employees->map(fn ($e) => array_merge(
+                        ['name' => $e['name'], 'department' => $e['department']],
+                        collect($days)->mapWithKeys(fn ($d) => ["d{$d}" => $codes[$e['days'][$d]['status'] ?? ''] ?? ''])->all(),
+                        ['present' => $e['present'], 'late' => $e['late'], 'absent' => $e['absent'], 'leave' => $e['leave']]
+                    ))->all(),
+                ];
+
+            default:
+                return [
+                    ['Employee', 'Department', 'Present', 'Late', 'Absent', 'Leave', 'Half Day', 'Hours Worked', 'Avg Hours/Day', 'Overtime Hours', 'Late Minutes', 'Attendance %'],
+                    $employees->map(fn ($e) => [
+                        'name' => $e['name'], 'department' => $e['department'], 'present' => $e['present'], 'late' => $e['late'],
+                        'absent' => $e['absent'], 'leave' => $e['leave'], 'half_day' => $e['half_day'],
+                        'hours_worked' => $e['hours_worked'], 'avg_hours' => $e['avg_hours'],
+                        'overtime_hours' => $e['overtime_hours'], 'late_minutes' => $e['late_minutes'],
+                        'attendance_rate' => $e['attendance_rate'],
+                    ])->all(),
+                ];
+        }
+    }
+
     public function leave(Request $request)
     {
         $this->authorizeAnyPermission($request, ['reports:view', 'reports:manage_settings', 'reports:view_own']);

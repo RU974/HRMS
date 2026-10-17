@@ -3,12 +3,14 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\AttendancePolicy;
 use App\Models\Employee;
 use App\Models\InventoryAssignment;
 use App\Models\InventoryItem;
 use App\Models\Leave;
 use App\Models\Payroll;
 use App\Models\Report;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -46,6 +48,180 @@ class ReportAnalyticsService
         }
 
         return $query->groupBy('status')->get();
+    }
+
+    /**
+     * Per-employee attendance for one month: counts, hours worked, lates, overtime and a day-by-day
+     * grid, plus the same rolled up per department. Every active employee in scope is listed, so
+     * someone with no punches shows as an empty row instead of vanishing from the grid.
+     *
+     * @return array{month:int,year:int,days_in_month:int,totals:array,employees:array,departments:array}
+     */
+    public function attendanceDetail(Request $request, int $month, int $year, ?int $departmentId = null): array
+    {
+        $daysInMonth = Carbon::create($year, $month, 1)->daysInMonth;
+
+        $employeeQuery = Employee::query()->with('department:id,name');
+        $this->scopeByCompany($request, $employeeQuery, 'user');
+        if ($this->isViewOwnOnly($request)) {
+            $this->scopeToOwnEmployee($request, $employeeQuery);
+        } else {
+            $this->applyManagedEmployeeScope($request, $employeeQuery);
+        }
+        if ($departmentId) {
+            $employeeQuery->where('department_id', $departmentId);
+        }
+
+        $recordQuery = Attendance::query()
+            ->with('employee')
+            ->whereMonth('date', $month)
+            ->whereYear('date', $year);
+        $this->scopeByCompany($request, $recordQuery, 'employee.user');
+        if ($this->isViewOwnOnly($request)) {
+            $this->scopeToOwnEmployee($request, $recordQuery, 'employee');
+        } else {
+            $this->applyManagedEmployeeScope($request, $recordQuery, 'employee');
+        }
+        if ($departmentId) {
+            $recordQuery->whereHas('employee', fn ($q) => $q->where('department_id', $departmentId));
+        }
+        $records = $recordQuery->orderBy('date')->get()->groupBy('employee_id');
+
+        // Active employees, plus anyone inactive who still has punches this month.
+        $employees = $employeeQuery
+            ->where(function ($q) use ($records): void {
+                $q->where('status', 'active')->orWhereIn('id', $records->keys()->all());
+            })
+            ->orderBy('name')
+            ->get();
+
+        $calculator = new AttendanceCalculator();
+        $rows = [];
+
+        foreach ($employees as $employee) {
+            $policy = AttendancePolicy::forEmployee($employee);
+            $row = [
+                'employee_id' => $employee->id,
+                'name' => $employee->name,
+                'employee_number' => $employee->employee_number,
+                'department_id' => $employee->department_id,
+                'department' => $employee->department?->name ?? 'No department',
+                'present' => 0, 'late' => 0, 'absent' => 0, 'leave' => 0, 'half_day' => 0, 'missing' => 0,
+                'days_recorded' => 0,
+                'late_count' => 0, 'late_minutes' => 0,
+                'early_leave_count' => 0,
+                'hours_worked' => 0.0, 'overtime_hours' => 0.0,
+                'days' => [],
+            ];
+
+            foreach ($records->get($employee->id, collect()) as $attendance) {
+                $shift = $attendance->judgingShift();
+                $status = (string) $attendance->status;
+                $hours = $calculator->getDurationHours($attendance);
+                $overtime = $calculator->calculateOvertimeHours($attendance, $shift);
+                $leaveLinkedOrAbsent = $attendance->isLeaveLinked() || in_array($status, ['absent', 'leave'], true);
+
+                $lateMinutes = 0;
+                $isLate = false;
+                if (!$leaveLinkedOrAbsent && $attendance->check_in && ($status === 'late' || ($policy && $calculator->isLateArrival($attendance, $policy, $shift)))) {
+                    $isLate = true;
+                    if ($policy) {
+                        $checkIn = Carbon::parse($attendance->check_in);
+                        $lateMinutes = max(0, (int) round(($checkIn->getTimestamp() - $calculator->getLateThreshold($checkIn, $policy, $shift)->getTimestamp()) / 60));
+                    }
+                }
+
+                match (true) {
+                    $status === 'present' => $row['present']++,
+                    $status === 'late' => $row['late']++,
+                    $status === 'absent' => $row['absent']++,
+                    $status === 'leave' => $row['leave']++,
+                    $status === Attendance::STATUS_HALF_DAY => $row['half_day']++,
+                    in_array($status, Attendance::MISSING_STATUSES, true) => $row['missing']++,
+                    default => null,
+                };
+
+                $row['days_recorded']++;
+                $row['late_count'] += $isLate ? 1 : 0;
+                $row['late_minutes'] += $lateMinutes;
+                $row['early_leave_count'] += $calculator->isEarlyLeave($attendance, $policy, $shift) ? 1 : 0;
+                $row['hours_worked'] += $hours;
+                $row['overtime_hours'] += $overtime;
+
+                $row['days'][(int) $attendance->date->day] = [
+                    'status' => $status,
+                    'hours' => $hours,
+                    'late' => $isLate,
+                    'late_minutes' => $lateMinutes,
+                    'overtime' => $overtime,
+                    'off' => $attendance->is_scheduled_off,
+                ];
+            }
+
+            $row['hours_worked'] = round($row['hours_worked'], 2);
+            $row['overtime_hours'] = round($row['overtime_hours'], 2);
+            $worked = $row['present'] + $row['late'] + $row['half_day'] + $row['missing'];
+            $row['days_worked'] = $worked;
+            $row['avg_hours'] = $worked > 0 ? round($row['hours_worked'] / $worked, 2) : 0.0;
+            $row['attendance_rate'] = $this->attendanceRate($worked, $row['absent']);
+            $rows[] = $row;
+        }
+
+        $sum = fn (iterable $items, string $key) => collect($items)->sum($key);
+        $departments = collect($rows)->groupBy('department')->map(function (Collection $group, string $name) use ($sum) {
+            $worked = $sum($group, 'days_worked');
+            $absent = $sum($group, 'absent');
+            $hours = round($sum($group, 'hours_worked'), 2);
+
+            return [
+                'department_id' => $group->first()['department_id'],
+                'department' => $name,
+                'headcount' => $group->count(),
+                'present' => $sum($group, 'present'),
+                'late' => $sum($group, 'late'),
+                'absent' => $absent,
+                'leave' => $sum($group, 'leave'),
+                'half_day' => $sum($group, 'half_day'),
+                'missing' => $sum($group, 'missing'),
+                'late_count' => $sum($group, 'late_count'),
+                'late_minutes' => $sum($group, 'late_minutes'),
+                'early_leave_count' => $sum($group, 'early_leave_count'),
+                'days_worked' => $worked,
+                'hours_worked' => $hours,
+                'overtime_hours' => round($sum($group, 'overtime_hours'), 2),
+                'avg_hours' => $worked > 0 ? round($hours / $worked, 2) : 0.0,
+                'attendance_rate' => $this->attendanceRate($worked, $absent),
+            ];
+        })->sortBy('department', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
+
+        $worked = $sum($rows, 'days_worked');
+        $absent = $sum($rows, 'absent');
+
+        return [
+            'month' => $month,
+            'year' => $year,
+            'days_in_month' => $daysInMonth,
+            'totals' => [
+                'employees' => count($rows),
+                'days_worked' => $worked,
+                'absent' => $absent,
+                'late_count' => $sum($rows, 'late_count'),
+                'late_minutes' => $sum($rows, 'late_minutes'),
+                'hours_worked' => round($sum($rows, 'hours_worked'), 2),
+                'overtime_hours' => round($sum($rows, 'overtime_hours'), 2),
+                'attendance_rate' => $this->attendanceRate($worked, $absent),
+            ],
+            'employees' => $rows,
+            'departments' => $departments,
+        ];
+    }
+
+    /** Share of recorded working days the person turned up (leave and rest days are not held against them). */
+    private function attendanceRate(int|float $worked, int|float $absent): ?float
+    {
+        $due = $worked + $absent;
+
+        return $due > 0 ? round($worked / $due * 100, 1) : null;
     }
 
     public function leaveSummary(Request $request, int $month, int $year): Collection
